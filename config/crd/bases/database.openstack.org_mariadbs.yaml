@@ -36,6 +36,8 @@ spec:
         spec:
           description: MariaDBSpec defines the desired state of MariaDB
           properties:
+            containerImage:
+              type: string
             rootPassword:
               type: string
             storageClass:

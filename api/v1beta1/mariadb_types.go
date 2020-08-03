@@ -30,6 +30,8 @@ type MariaDBSpec struct {
 	StorageClass string `json:"storageClass,omitempty"`
 
 	StorageRequest string `json:"storageRequest,omitempty"`
+
+	ContainerImage string `json:"containerImage,omitempty"`
 }
 
 // MariaDBStatus defines the observed state of MariaDB

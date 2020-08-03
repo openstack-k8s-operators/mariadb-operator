@@ -27,9 +27,11 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	util "github.com/openstack-k8s-operators/lib-common/pkg/util"
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	mariadb "github.com/openstack-k8s-operators/mariadb-operator/pkg"
 
+	"fmt"
 	"reflect"
 	"time"
 )
@@ -120,6 +122,32 @@ func (r *MariaDBReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{RequeueAfter: time.Second * 5}, err
 	}
 
+	configHash, err := util.ObjectHash(configMap)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("error getting configMap hash: %v", err)
+	}
+
+	// Pod
+	pod := mariadb.Pod(instance, r.Scheme, configHash)
+	// Check if this Pod already exists
+	foundPod := &corev1.Pod{}
+	err = r.Client.Get(context.TODO(), types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, foundPod)
+	if err != nil && k8s_errors.IsNotFound(err) {
+		r.Log.Info("Creating a new Pod", "Pod.Namespace", pod.Namespace, "Job.Name", pod.Name)
+		err = r.Client.Create(context.TODO(), pod)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+	} else if !reflect.DeepEqual(pod.Spec, foundPod.Spec) {
+		r.Log.Info("Updating Pod")
+		foundPod.Spec = pod.Spec
+		err = r.Client.Update(context.TODO(), foundPod)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: time.Second * 5}, err
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -129,5 +157,6 @@ func (r *MariaDBReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
+		Owns(&corev1.Pod{}).
 		Complete(r)
 }
