@@ -31,6 +31,7 @@ import (
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	mariadb "github.com/openstack-k8s-operators/mariadb-operator/pkg"
 
+	"reflect"
 	"time"
 )
 
@@ -43,7 +44,8 @@ type MariaDBReconciler struct {
 
 // +kubebuilder:rbac:groups=database.openstack.org,resources=mariadbs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=database.openstack.org,resources=mariadbs/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;
+// +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;create;update;delete;
+// +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;create;update;delete;
 func (r *MariaDBReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	_ = context.Background()
 	_ = r.Log.WithValues("mariadb", req.NamespacedName)
@@ -61,8 +63,6 @@ func (r *MariaDBReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		// Error reading the object - requeue the request.
 		return ctrl.Result{}, err
 	}
-
-	r.Log.Info("Instance", "RootPassword", instance.Spec.RootPassword)
 
 	service := mariadb.Service(instance, instance.Name)
 
@@ -87,6 +87,30 @@ func (r *MariaDBReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, err
 	}
 
+	// ConfigMap
+	configMap := mariadb.ConfigMap(instance, instance.Name)
+	// Check if this ConfigMap already exists
+	foundConfigMap := &corev1.ConfigMap{}
+	err = r.Client.Get(context.TODO(), types.NamespacedName{Name: configMap.Name, Namespace: configMap.Namespace}, foundConfigMap)
+	if err != nil && k8s_errors.IsNotFound(err) {
+		r.Log.Info("Creating a new ConfigMap", "ConfigMap.Namespace", configMap.Namespace, "Job.Name", configMap.Name)
+		if err := controllerutil.SetControllerReference(instance, configMap, r.Scheme); err != nil {
+			return ctrl.Result{}, err
+		}
+		err = r.Client.Create(context.TODO(), configMap)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+	} else if !reflect.DeepEqual(configMap.Data, foundConfigMap.Data) {
+		r.Log.Info("Updating ConfigMap")
+		foundConfigMap.Data = configMap.Data
+		err = r.Client.Update(context.TODO(), foundConfigMap)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: time.Second * 5}, err
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -94,5 +118,6 @@ func (r *MariaDBReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&databasev1beta1.MariaDB{}).
 		Owns(&corev1.Service{}).
+		Owns(&corev1.ConfigMap{}).
 		Complete(r)
 }
