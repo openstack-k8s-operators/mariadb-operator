@@ -36,9 +36,11 @@ spec:
         spec:
           description: MariaDBSpec defines the desired state of MariaDB
           properties:
-            dbMaxTimeout:
-              type: string
             rootPassword:
+              type: string
+            storageClass:
+              type: string
+            storageRequest:
               type: string
           type: object
         status:

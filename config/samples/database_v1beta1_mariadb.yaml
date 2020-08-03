@@ -3,4 +3,6 @@ kind: MariaDB
 metadata:
   name: mariadb-sample
 spec:
-  rootPassword: bar
+  rootPassword: foobar
+  storageClass: local-storage
+  storageRequest: 1G

@@ -1,30 +1,29 @@
 package mariadb
 
 import (
+	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // Service func
-func Service(cr *databasev1beta1.MariaDB, cmName string) *corev1.Service {
+func Service(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) *corev1.Service {
 
-	labels := map[string]string{
-		"app": "mariadb",
-	}
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cmName,
-			Namespace: cr.Namespace,
-			Labels:    labels,
+			Name:      db.Name,
+			Namespace: db.Namespace,
+			Labels:    GetLabels(db.Name),
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: labels,
+			Selector: map[string]string{"app": "mariadb"},
 			Ports: []corev1.ServicePort{
 				{Name: "database", Port: 3306, Protocol: corev1.ProtocolTCP},
 			},
 		},
 	}
+	controllerutil.SetControllerReference(db, svc, scheme)
 	return svc
 }

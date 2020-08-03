@@ -25,11 +25,11 @@ import (
 
 // MariaDBSpec defines the desired state of MariaDB
 type MariaDBSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
 	RootPassword string `json:"rootPassword,omitempty"`
-	DBMaxTimeout string `json:"dbMaxTimeout,omitempty"`
+
+	StorageClass string `json:"storageClass,omitempty"`
+
+	StorageRequest string `json:"storageRequest,omitempty"`
 }
 
 // MariaDBStatus defines the observed state of MariaDB

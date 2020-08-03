@@ -26,7 +26,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	mariadb "github.com/openstack-k8s-operators/mariadb-operator/pkg"
@@ -64,17 +63,30 @@ func (r *MariaDBReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, err
 	}
 
-	service := mariadb.Service(instance, instance.Name)
+	// PVC
+	pvc := mariadb.Pvc(instance, r.Scheme)
+
+	foundPvc := &corev1.PersistentVolumeClaim{}
+	err = r.Client.Get(context.TODO(), types.NamespacedName{Name: pvc.Name, Namespace: pvc.Namespace}, foundPvc)
+	if err != nil && k8s_errors.IsNotFound(err) {
+
+		r.Log.Info("Creating a new Pvc", "PersistentVolumeClaim.Namespace", pvc.Namespace, "Service.Name", pvc.Name)
+		err = r.Client.Create(context.TODO(), pvc)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		return ctrl.Result{RequeueAfter: time.Second * 5}, err
+	} else if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	service := mariadb.Service(instance, r.Scheme)
 
 	// Check if this Service already exists
 	foundService := &corev1.Service{}
 	err = r.Client.Get(context.TODO(), types.NamespacedName{Name: service.Name, Namespace: service.Namespace}, foundService)
 	if err != nil && k8s_errors.IsNotFound(err) {
-
-		// Set MariaDB instance as the owner and controller
-		if err := controllerutil.SetControllerReference(instance, service, r.Scheme); err != nil {
-			return ctrl.Result{}, err
-		}
 
 		r.Log.Info("Creating a new Service", "Service.Namespace", service.Namespace, "Service.Name", service.Name)
 		err = r.Client.Create(context.TODO(), service)
@@ -88,15 +100,12 @@ func (r *MariaDBReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	// ConfigMap
-	configMap := mariadb.ConfigMap(instance, instance.Name)
+	configMap := mariadb.ConfigMap(instance, r.Scheme)
 	// Check if this ConfigMap already exists
 	foundConfigMap := &corev1.ConfigMap{}
 	err = r.Client.Get(context.TODO(), types.NamespacedName{Name: configMap.Name, Namespace: configMap.Namespace}, foundConfigMap)
 	if err != nil && k8s_errors.IsNotFound(err) {
 		r.Log.Info("Creating a new ConfigMap", "ConfigMap.Namespace", configMap.Namespace, "Job.Name", configMap.Name)
-		if err := controllerutil.SetControllerReference(instance, configMap, r.Scheme); err != nil {
-			return ctrl.Result{}, err
-		}
 		err = r.Client.Create(context.TODO(), configMap)
 		if err != nil {
 			return ctrl.Result{}, err
@@ -119,5 +128,6 @@ func (r *MariaDBReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&databasev1beta1.MariaDB{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ConfigMap{}).
+		Owns(&corev1.PersistentVolumeClaim{}).
 		Complete(r)
 }

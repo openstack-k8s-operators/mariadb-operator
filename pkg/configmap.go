@@ -5,15 +5,17 @@ import (
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 type mariaDBConfigOptions struct {
 	RootPassword string
-	DBMaxTimeout string
+	DBMaxTimeout int32
 }
 
-func ConfigMap(cr *databasev1beta1.MariaDB, cmName string) *corev1.ConfigMap {
-	opts := mariaDBConfigOptions{cr.Spec.RootPassword, cr.Spec.DBMaxTimeout}
+func ConfigMap(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) *corev1.ConfigMap {
+	opts := mariaDBConfigOptions{db.Spec.RootPassword, 60}
 
 	cm := &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
@@ -21,8 +23,9 @@ func ConfigMap(cr *databasev1beta1.MariaDB, cmName string) *corev1.ConfigMap {
 			Kind:       "ConfigMap",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cmName,
-			Namespace: cr.Namespace,
+			Name:      db.Name,
+			Namespace: db.Namespace,
+			Labels:    GetLabels(db.Name),
 		},
 		Data: map[string]string{
 			"mariadb_init.sh":  util.ExecuteTemplateFile("mariadb_init.sh", &opts),
@@ -31,6 +34,6 @@ func ConfigMap(cr *databasev1beta1.MariaDB, cmName string) *corev1.ConfigMap {
 			"init_config.json": util.ExecuteTemplateFile("init_config.json", nil),
 		},
 	}
-
+	controllerutil.SetControllerReference(db, cm, scheme)
 	return cm
 }
