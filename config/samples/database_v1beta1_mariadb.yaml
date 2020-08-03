@@ -6,3 +6,4 @@ spec:
   rootPassword: foobar
   storageClass: local-storage
   storageRequest: 1G
+  containerImage: docker.io/tripleomaster/centos-binary-mariadb:current-tripleo

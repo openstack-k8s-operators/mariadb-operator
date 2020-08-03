@@ -48,6 +48,15 @@ func Pod(db *databasev1beta1.MariaDB, scheme *runtime.Scheme, configHash string)
 							Name:  "KOLLA_BOOTSTRAP",
 							Value: "true",
 						},
+
+						{
+							Name:  "DB_MAX_TIMEOUT",
+							Value: "30",
+						},
+						{
+							Name:  "DB_ROOT_PASSWORD",
+							Value: db.Spec.RootPassword,
+						},
 					},
 					VolumeMounts: getInitVolumeMounts(),
 				},

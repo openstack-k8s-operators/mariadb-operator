@@ -138,14 +138,16 @@ func (r *MariaDBReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-	} else if !reflect.DeepEqual(pod.Spec, foundPod.Spec) {
-		r.Log.Info("Updating Pod")
-		foundPod.Spec = pod.Spec
+		return ctrl.Result{RequeueAfter: time.Second * 60}, err
+	} else if instance.Spec.ContainerImage != foundPod.Spec.Containers[0].Image {
+		r.Log.Info("Updating Pod...")
+		foundPod.Spec.Containers[0].Image = instance.Spec.ContainerImage
+		foundPod.Spec.InitContainers[0].Image = instance.Spec.ContainerImage
 		err = r.Client.Update(context.TODO(), foundPod)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: time.Second * 5}, err
+		return ctrl.Result{RequeueAfter: time.Second * 60}, err
 	}
 
 	return ctrl.Result{}, nil
