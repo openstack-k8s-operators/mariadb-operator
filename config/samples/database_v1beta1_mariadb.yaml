@@ -3,5 +3,4 @@ kind: MariaDB
 metadata:
   name: mariadb-sample
 spec:
-  # Add fields here
-  foo: bar
+  rootPassword: bar

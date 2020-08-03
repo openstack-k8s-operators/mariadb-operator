@@ -35,7 +35,7 @@ manager: generate fmt vet
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests
-	go run ./main.go
+	WATCH_NAMESPACE=openstack go run ./main.go
 
 # Install CRDs into a cluster
 install: manifests kustomize
@@ -67,7 +67,8 @@ generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
 # Build the docker image
-docker-build: test
+#docker-build: test
+docker-build:
 	docker build . -t ${IMG}
 
 # Push the docker image

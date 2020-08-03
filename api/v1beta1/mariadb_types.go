@@ -28,8 +28,8 @@ type MariaDBSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of MariaDB. Edit MariaDB_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	RootPassword string `json:"rootPassword,omitempty"`
+	DBMaxTimeout string `json:"dbMaxTimeout,omitempty"`
 }
 
 // MariaDBStatus defines the observed state of MariaDB
