@@ -2,6 +2,8 @@ apiVersion: database.openstack.org/v1beta1
 kind: MariaDBSchema
 metadata:
   name: mariadbschema-sample
+  labels:
+    dbName: mariadb-sample
 spec:
-  # Add fields here
-  foo: bar
+  password: foobar123
+  name: keystone

@@ -1,0 +1,1 @@
+mysql -h {{.DatabaseHostname}} -u {{.DatabaseAdminUsername}} -P 3306 -e "CREATE DATABASE IF NOT EXISTS {{.SchemaName}}; GRANT ALL PRIVILEGES ON {{.SchemaName}}.* TO '{{.SchemaName}}'@'localhost' IDENTIFIED BY '{{.SchemaPassword}}';GRANT ALL PRIVILEGES ON {{.SchemaName}}.* TO '{{.SchemaName}}'@'%' IDENTIFIED BY '{{.SchemaPassword}}';"

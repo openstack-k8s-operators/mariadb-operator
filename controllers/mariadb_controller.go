@@ -20,7 +20,6 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -32,7 +31,6 @@ import (
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	mariadb "github.com/openstack-k8s-operators/mariadb-operator/pkg"
 
-	"errors"
 	"fmt"
 	"reflect"
 	"time"
@@ -40,7 +38,7 @@ import (
 
 // MariaDBReconciler reconciles a MariaDB object
 type MariaDBReconciler struct {
-	client.Client
+	Client client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 }
@@ -49,6 +47,8 @@ type MariaDBReconciler struct {
 // +kubebuilder:rbac:groups=database.openstack.org,resources=mariadbs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;create;update;delete;
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;create;update;delete;
+// +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;create;update;delete;
+// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;create;update;delete;
 func (r *MariaDBReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	_ = context.Background()
 	_ = r.Log.WithValues("mariadb", req.NamespacedName)
@@ -138,7 +138,7 @@ func (r *MariaDBReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	requeue := true
 	if instance.Status.DbInitHash != dbInitHash {
-		requeue, err = EnsureJob(job, r)
+		requeue, err = mariadb.EnsureJob(job, r.Client, r.Log)
 		r.Log.Info("Running DB init")
 		if err != nil {
 			return ctrl.Result{}, err
@@ -152,7 +152,7 @@ func (r *MariaDBReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, err
 	}
 	// delete the job
-	requeue, err = DeleteJob(job, r)
+	requeue, err = mariadb.DeleteJob(job, r.Client, r.Log)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -192,57 +192,6 @@ func (r *MariaDBReconciler) setDbInitHash(db *databasev1beta1.MariaDB, hashStr s
 		}
 	}
 	return nil
-}
-
-// DeleteJob func
-func DeleteJob(job *batchv1.Job, r *MariaDBReconciler) (bool, error) {
-
-	// Check if this Job already exists
-	foundJob := &batchv1.Job{}
-	err := r.Client.Get(context.TODO(), types.NamespacedName{Name: job.Name, Namespace: job.Namespace}, foundJob)
-	if err == nil {
-		r.Log.Info("Deleting Job", "Job.Namespace", job.Namespace, "Job.Name", job.Name)
-		err = r.Client.Delete(context.TODO(), foundJob)
-		if err != nil {
-			return false, err
-		}
-		return true, err
-	}
-	return false, nil
-}
-
-// EnsureJob func
-func EnsureJob(job *batchv1.Job, r *MariaDBReconciler) (bool, error) {
-	// Check if this Job already exists
-	foundJob := &batchv1.Job{}
-	err := r.Client.Get(context.TODO(), types.NamespacedName{Name: job.Name, Namespace: job.Namespace}, foundJob)
-	if err != nil && k8s_errors.IsNotFound(err) {
-		r.Log.Info("Creating a new Job", "Job.Namespace", job.Namespace, "Job.Name", job.Name)
-		err = r.Client.Create(context.TODO(), job)
-		if err != nil {
-			return false, err
-		}
-		return true, err
-	} else if err != nil {
-		r.Log.Info("EnsureJob err")
-		return true, err
-	} else if foundJob != nil {
-		r.Log.Info("EnsureJob foundJob")
-		if foundJob.Status.Active > 0 {
-			r.Log.Info("Job Status Active... requeuing")
-			return true, err
-		} else if foundJob.Status.Failed > 0 {
-			r.Log.Info("Job Status Failed")
-			return true, k8s_errors.NewInternalError(errors.New("Job Failed. Check job logs"))
-		} else if foundJob.Status.Succeeded > 0 {
-			r.Log.Info("Job Status Successful")
-		} else {
-			r.Log.Info("Job Status incomplete... requeuing")
-			return true, err
-		}
-	}
-	return false, nil
-
 }
 
 func (r *MariaDBReconciler) SetupWithManager(mgr ctrl.Manager) error {
