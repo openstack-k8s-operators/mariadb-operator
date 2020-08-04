@@ -15,15 +15,27 @@ COPY api/ api/
 COPY controllers/ controllers/
 COPY pkg/ pkg/
 COPY templates/ templates/
+COPY tools/ tools/
 
 # Build
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o manager main.go
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o csv-generator tools/csv-generator.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM gcr.io/distroless/static:nonroot
+ENV OPERATOR_TEMPLATES=/templates/ \
+    OPERATOR_BUNDLE=/bundle/
+
+# install our templates
+COPY templates ${OPERATOR_TEMPLATES}
+
+# install CRDs and required roles, services, etc
+COPY config/crd/bases/*.yaml ${OPERATOR_BUNDLE}
+
 WORKDIR /
 COPY --from=builder /workspace/manager .
+COPY --from=builder /workspace/csv-generator .
 USER nonroot:nonroot
 
 ENTRYPOINT ["/manager"]
