@@ -20,6 +20,7 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -31,6 +32,7 @@ import (
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	mariadb "github.com/openstack-k8s-operators/mariadb-operator/pkg"
 
+	"errors"
 	"fmt"
 	"reflect"
 	"time"
@@ -127,6 +129,34 @@ func (r *MariaDBReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, fmt.Errorf("error getting configMap hash: %v", err)
 	}
 
+	// Define a new Job object
+	job := mariadb.DbInitJob(instance, r.Scheme)
+	dbInitHash, err := util.ObjectHash(job)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("error calculating DB init hash: %v", err)
+	}
+
+	requeue := true
+	if instance.Status.DbInitHash != dbInitHash {
+		requeue, err = EnsureJob(job, r)
+		r.Log.Info("Running DB init")
+		if err != nil {
+			return ctrl.Result{}, err
+		} else if requeue {
+			r.Log.Info("Waiting on DB init")
+			return ctrl.Result{RequeueAfter: time.Second * 5}, err
+		}
+	}
+	// db init completed... okay to store the hash to disable it
+	if err := r.setDbInitHash(instance, dbInitHash); err != nil {
+		return ctrl.Result{}, err
+	}
+	// delete the job
+	requeue, err = DeleteJob(job, r)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	// Pod
 	pod := mariadb.Pod(instance, r.Scheme, configHash)
 	// Check if this Pod already exists
@@ -138,7 +168,7 @@ func (r *MariaDBReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: time.Second * 60}, err
+		return ctrl.Result{RequeueAfter: time.Second * 30}, err
 	} else if instance.Spec.ContainerImage != foundPod.Spec.Containers[0].Image {
 		r.Log.Info("Updating Pod...")
 		foundPod.Spec.Containers[0].Image = instance.Spec.ContainerImage
@@ -147,10 +177,72 @@ func (r *MariaDBReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: time.Second * 60}, err
+		return ctrl.Result{RequeueAfter: time.Second * 30}, err
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *MariaDBReconciler) setDbInitHash(db *databasev1beta1.MariaDB, hashStr string) error {
+
+	if hashStr != db.Status.DbInitHash {
+		db.Status.DbInitHash = hashStr
+		if err := r.Client.Status().Update(context.TODO(), db); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// DeleteJob func
+func DeleteJob(job *batchv1.Job, r *MariaDBReconciler) (bool, error) {
+
+	// Check if this Job already exists
+	foundJob := &batchv1.Job{}
+	err := r.Client.Get(context.TODO(), types.NamespacedName{Name: job.Name, Namespace: job.Namespace}, foundJob)
+	if err == nil {
+		r.Log.Info("Deleting Job", "Job.Namespace", job.Namespace, "Job.Name", job.Name)
+		err = r.Client.Delete(context.TODO(), foundJob)
+		if err != nil {
+			return false, err
+		}
+		return true, err
+	}
+	return false, nil
+}
+
+// EnsureJob func
+func EnsureJob(job *batchv1.Job, r *MariaDBReconciler) (bool, error) {
+	// Check if this Job already exists
+	foundJob := &batchv1.Job{}
+	err := r.Client.Get(context.TODO(), types.NamespacedName{Name: job.Name, Namespace: job.Namespace}, foundJob)
+	if err != nil && k8s_errors.IsNotFound(err) {
+		r.Log.Info("Creating a new Job", "Job.Namespace", job.Namespace, "Job.Name", job.Name)
+		err = r.Client.Create(context.TODO(), job)
+		if err != nil {
+			return false, err
+		}
+		return true, err
+	} else if err != nil {
+		r.Log.Info("EnsureJob err")
+		return true, err
+	} else if foundJob != nil {
+		r.Log.Info("EnsureJob foundJob")
+		if foundJob.Status.Active > 0 {
+			r.Log.Info("Job Status Active... requeuing")
+			return true, err
+		} else if foundJob.Status.Failed > 0 {
+			r.Log.Info("Job Status Failed")
+			return true, k8s_errors.NewInternalError(errors.New("Job Failed. Check job logs"))
+		} else if foundJob.Status.Succeeded > 0 {
+			r.Log.Info("Job Status Successful")
+		} else {
+			r.Log.Info("Job Status incomplete... requeuing")
+			return true, err
+		}
+	}
+	return false, nil
+
 }
 
 func (r *MariaDBReconciler) SetupWithManager(mgr ctrl.Manager) error {

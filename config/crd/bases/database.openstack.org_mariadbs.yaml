@@ -47,6 +47,12 @@ spec:
           type: object
         status:
           description: MariaDBStatus defines the observed state of MariaDB
+          properties:
+            dbInitHash:
+              description: db init completed
+              type: string
+          required:
+          - dbInitHash
           type: object
       type: object
   version: v1beta1

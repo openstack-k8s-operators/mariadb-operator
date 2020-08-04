@@ -4,6 +4,6 @@ metadata:
   name: mariadb-sample
 spec:
   rootPassword: foobar
-  storageClass: local-storage
-  storageRequest: 1G
+  storageClass: host-nfs-storageclass
+  storageRequest: 3G
   containerImage: docker.io/tripleomaster/centos-binary-mariadb:current-tripleo
