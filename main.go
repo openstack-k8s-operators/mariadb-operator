@@ -84,6 +84,14 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "MariaDB")
 		os.Exit(1)
 	}
+	if err = (&controllers.MariaDBSchemaReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("MariaDBSchema"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "MariaDBSchema")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")

@@ -5,6 +5,9 @@ resources:
 - group: database
   kind: MariaDB
   version: v1beta1
+- group: database
+  kind: MariaDBSchema
+  version: v1beta1
 version: 3-alpha
 plugins:
   go.operator-sdk.io/v2-alpha: {}

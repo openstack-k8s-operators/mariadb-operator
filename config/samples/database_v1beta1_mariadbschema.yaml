@@ -1,0 +1,7 @@
+apiVersion: database.openstack.org/v1beta1
+kind: MariaDBSchema
+metadata:
+  name: mariadbschema-sample
+spec:
+  # Add fields here
+  foo: bar
