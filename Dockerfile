@@ -34,6 +34,9 @@ RUN  mkdir -p ${OPERATOR_BUNDLE}
 COPY config/crd/bases/database.openstack.org_mariadbs.yaml ${OPERATOR_BUNDLE}/database.openstack.org_mariadbs_crd.yaml
 COPY config/crd/bases/database.openstack.org_mariadbschemas.yaml ${OPERATOR_BUNDLE}/database.openstack.org_mariadbschemas_crd.yaml
 
+# strip top 2 lines (this resolves parsing in opm which handles this badly)
+RUN sed -i -e 1,2d ${OPERATOR_BUNDLE}/*
+
 WORKDIR /
 COPY --from=builder /workspace/manager /usr/local/bin/manager
 COPY --from=builder /workspace/csv-generator /usr/local/bin/csv-generator
