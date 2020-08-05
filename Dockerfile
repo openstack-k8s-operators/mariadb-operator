@@ -14,28 +14,34 @@ COPY main.go main.go
 COPY api/ api/
 COPY controllers/ controllers/
 COPY pkg/ pkg/
-COPY templates/ templates/
 COPY tools/ tools/
 
 # Build
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o manager main.go
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o csv-generator tools/csv-generator.go
 
-# Use distroless as minimal base image to package the manager binary
-# Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static:nonroot
-ENV OPERATOR_TEMPLATES=/templates/ \
-    OPERATOR_BUNDLE=/bundle/
+FROM registry.access.redhat.com/ubi7/ubi-minimal:latest
+ENV USER_UID=1001 \
+    OPERATOR_TEMPLATES=/usr/share/mariadb-operator/templates/ \
+    OPERATOR_BUNDLE=/usr/share/mariadb-operator/bundle/
 
 # install our templates
+RUN  mkdir -p ${OPERATOR_TEMPLATES}
 COPY templates ${OPERATOR_TEMPLATES}
 
 # install CRDs and required roles, services, etc
-COPY config/crd/bases/*.yaml ${OPERATOR_BUNDLE}
+RUN  mkdir -p ${OPERATOR_BUNDLE}
+COPY config/crd/bases/database.openstack.org_mariadbs.yaml ${OPERATOR_BUNDLE}/database.openstack.org_mariadbs_crd.yaml
+COPY config/crd/bases/database.openstack.org_mariadbschemas.yaml ${OPERATOR_BUNDLE}/database.openstack.org_mariadbschemas_crd.yaml
 
 WORKDIR /
-COPY --from=builder /workspace/manager .
-COPY --from=builder /workspace/csv-generator .
-USER nonroot:nonroot
+COPY --from=builder /workspace/manager /usr/local/bin/manager
+COPY --from=builder /workspace/csv-generator /usr/local/bin/csv-generator
+COPY --from=builder /workspace/csv-generator /usr/local/bin/csv-generator
 
-ENTRYPOINT ["/manager"]
+# user setup
+COPY bin/user_setup /usr/local/bin/user_setup
+RUN  /usr/local/bin/user_setup
+USER ${USER_UID}
+
+ENTRYPOINT ["/usr/local/bin/manager"]
