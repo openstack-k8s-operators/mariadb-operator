@@ -3,7 +3,7 @@ kind: MariaDBSchema
 metadata:
   name: mariadbschema-sample
   labels:
-    dbName: mariadb-sample
+    dbName: mariadb
 spec:
-  password: foobar123
-  name: keystone
+  name: scott
+  password: tiger

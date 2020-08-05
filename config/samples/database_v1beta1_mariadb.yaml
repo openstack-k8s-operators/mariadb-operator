@@ -1,9 +1,9 @@
 apiVersion: database.openstack.org/v1beta1
 kind: MariaDB
 metadata:
-  name: mariadb-sample
+  name: mariadb
 spec:
-  rootPassword: foobar
+  rootPassword: foobar123
   storageClass: host-nfs-storageclass
-  storageRequest: 3G
+  storageRequest: 10G
   containerImage: docker.io/tripleomaster/centos-binary-mariadb:current-tripleo
