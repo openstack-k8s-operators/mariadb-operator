@@ -193,14 +193,14 @@ Install and configure MariaDB.
 
 				Owned: []csvv1.CRDDescription{
 					{
-						Name:        "database.openstack.org",
+						Name:        "mariadbs.database.openstack.org",
 						Version:     "v1beta1",
 						Kind:        "MariaDB",
 						DisplayName: "MariaDB",
 						Description: "MariaDB Instance",
 					},
 					{
-						Name:        "database.openstack.org",
+						Name:        "mariadbschemas.database.openstack.org",
 						Version:     "v1beta1",
 						Kind:        "MariaDBSchema",
 						DisplayName: "MariaDBSchema",
@@ -271,7 +271,7 @@ func getOperatorRules() *[]rbacv1.PolicyRule {
 		},
 		{
 			APIGroups: []string{
-				"mariadb.openstack.org",
+				"database.openstack.org",
 			},
 			Resources: []string{
 				"*",
