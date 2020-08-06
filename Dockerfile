@@ -40,7 +40,6 @@ RUN sed -i -e 1,2d ${OPERATOR_BUNDLE}/*
 WORKDIR /
 COPY --from=builder /workspace/manager /usr/local/bin/manager
 COPY --from=builder /workspace/csv-generator /usr/local/bin/csv-generator
-COPY --from=builder /workspace/csv-generator /usr/local/bin/csv-generator
 
 # user setup
 COPY bin/user_setup /usr/local/bin/user_setup
