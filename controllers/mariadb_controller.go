@@ -48,6 +48,7 @@ type MariaDBReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;create;update;delete;
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;create;update;delete;
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;create;update;delete;
+// +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;create;update;delete;
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;create;update;delete;
 func (r *MariaDBReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	_ = context.Background()
