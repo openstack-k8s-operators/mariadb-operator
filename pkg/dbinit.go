@@ -40,8 +40,15 @@ func DbInitJob(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) *batchv1.Job
 									Value: "60",
 								},
 								{
-									Name:  "DB_ROOT_PASSWORD",
-									Value: db.Spec.RootPassword,
+									Name: "DB_ROOT_PASSWORD",
+									ValueFrom: &corev1.EnvVarSource{
+										SecretKeyRef: &corev1.SecretKeySelector{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: db.Spec.Secret,
+											},
+											Key: "DbRootPassword",
+										},
+									},
 								},
 							},
 							VolumeMounts: getInitVolumeMounts(),

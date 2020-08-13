@@ -22,7 +22,8 @@ import (
 
 // MariaDBSpec defines the desired state of MariaDB
 type MariaDBSpec struct {
-	RootPassword string `json:"rootPassword,omitempty"`
+	// Secret containing a RootPassword
+	Secret string `json:"secret,omitempty"`
 
 	StorageClass string `json:"storageClass,omitempty"`
 

@@ -14,7 +14,7 @@ type dbCreateOptions struct {
 	DatabaseAdminUsername string
 }
 
-func DbSchemaJob(schema *databasev1beta1.MariaDBSchema, databaseHostName string, databaseAdminPassword string, containerImage string) *batchv1.Job {
+func DbSchemaJob(schema *databasev1beta1.MariaDBSchema, databaseHostName string, databaseSecret string, containerImage string) *batchv1.Job {
 
 	opts := dbCreateOptions{schema.Spec.Name, databaseHostName, "root"}
 	labels := map[string]string{
@@ -38,24 +38,27 @@ func DbSchemaJob(schema *databasev1beta1.MariaDBSchema, databaseHostName string,
 							Command: []string{"/bin/sh", "-c", util.ExecuteTemplateFile("db_schema.sh", &opts)},
 							Env: []corev1.EnvVar{
 								{
-									Name:  "MYSQL_PWD",
-									Value: databaseAdminPassword,
+									Name: "MYSQL_PWD",
+									ValueFrom: &corev1.EnvVarSource{
+										SecretKeyRef: &corev1.SecretKeySelector{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: databaseSecret,
+											},
+											Key: "DbRootPassword",
+										},
+									},
 								},
-							},
-							VolumeMounts: []corev1.VolumeMount{
 								{
-									MountPath: "/var/lib/schema-secrets/",
-									ReadOnly:  false,
-									Name:      "schema-secrets",
+									Name: "DatabasePassword",
+									ValueFrom: &corev1.EnvVarSource{
+										SecretKeyRef: &corev1.SecretKeySelector{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: schema.Spec.Secret,
+											},
+											Key: "DatabasePassword",
+										},
+									},
 								},
-							},
-						},
-					},
-					Volumes: []corev1.Volume{
-						{
-							Name: "schema-secrets",
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{SecretName: schema.Spec.Secret},
 							},
 						},
 					},

@@ -1,7 +1,7 @@
 apiVersion: database.openstack.org/v1beta1
 kind: MariaDBSchema
 metadata:
-  name: mariadbschema-sample
+  name: scott
   labels:
     dbName: mariadb
 spec:

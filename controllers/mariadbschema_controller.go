@@ -84,7 +84,7 @@ func (r *MariaDBSchemaReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	}
 
 	// Define a new Job object (hostname, password, containerImage)
-	job := mariadb.DbSchemaJob(instance, db.Name, db.Spec.RootPassword, db.Spec.ContainerImage)
+	job := mariadb.DbSchemaJob(instance, db.Name, db.Spec.Secret, db.Spec.ContainerImage)
 
 	requeue := true
 	if instance.Status.Completed {

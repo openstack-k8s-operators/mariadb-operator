@@ -9,13 +9,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-type mariaDBConfigOptions struct {
-	RootPassword string
-	DBMaxTimeout int32
-}
-
 func ConfigMap(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) *corev1.ConfigMap {
-	opts := mariaDBConfigOptions{db.Spec.RootPassword, 60}
 
 	cm := &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
@@ -28,7 +22,7 @@ func ConfigMap(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) *corev1.Conf
 			Labels:    GetLabels(db.Name),
 		},
 		Data: map[string]string{
-			"mariadb_init.sh":  util.ExecuteTemplateFile("mariadb_init.sh", &opts),
+			"mariadb_init.sh":  util.ExecuteTemplateFile("mariadb_init.sh", nil),
 			"galera.cnf":       util.ExecuteTemplateFile("galera.cnf", nil),
 			"config.json":      util.ExecuteTemplateFile("config.json", nil),
 			"init_config.json": util.ExecuteTemplateFile("init_config.json", nil),

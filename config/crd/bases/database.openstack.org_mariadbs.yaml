@@ -38,7 +38,8 @@ spec:
           properties:
             containerImage:
               type: string
-            rootPassword:
+            secret:
+              description: Secret containing a RootPassword
               type: string
             storageClass:
               type: string

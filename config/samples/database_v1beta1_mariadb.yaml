@@ -3,7 +3,7 @@ kind: MariaDB
 metadata:
   name: mariadb
 spec:
-  rootPassword: foobar123
+  secret: mariadb-secret
   storageClass: host-nfs-storageclass
   storageRequest: 10G
   containerImage: docker.io/tripleomaster/centos-binary-mariadb:current-tripleo
