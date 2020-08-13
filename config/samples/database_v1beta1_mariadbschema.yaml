@@ -6,4 +6,4 @@ metadata:
     dbName: mariadb
 spec:
   name: scott
-  password: tiger
+  secret: tiger #the name of a k8s secret containing DatabasePassword

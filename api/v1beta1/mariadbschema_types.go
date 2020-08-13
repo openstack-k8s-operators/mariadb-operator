@@ -22,12 +22,9 @@ import (
 
 // MariaDBSchemaSpec defines the desired state of MariaDBSchema
 type MariaDBSchemaSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	Password string `json:"password,omitempty"`
-
-	Name string `json:"name,omitempty"`
+	// Secret Name of secret which contains DatabasePassword
+	Secret string `json:"secret,omitempty"`
+	Name   string `json:"name,omitempty"`
 }
 
 // MariaDBSchemaStatus defines the observed state of MariaDBSchema

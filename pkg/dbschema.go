@@ -10,14 +10,13 @@ import (
 
 type dbCreateOptions struct {
 	SchemaName            string
-	SchemaPassword        string
 	DatabaseHostname      string
 	DatabaseAdminUsername string
 }
 
 func DbSchemaJob(schema *databasev1beta1.MariaDBSchema, databaseHostName string, databaseAdminPassword string, containerImage string) *batchv1.Job {
 
-	opts := dbCreateOptions{schema.Spec.Name, schema.Spec.Password, databaseHostName, "root"}
+	opts := dbCreateOptions{schema.Spec.Name, databaseHostName, "root"}
 	labels := map[string]string{
 		"owner": "mariadb-operator", "cr": schema.Spec.Name, "app": "mariadbschema",
 	}
@@ -43,11 +42,27 @@ func DbSchemaJob(schema *databasev1beta1.MariaDBSchema, databaseHostName string,
 									Value: databaseAdminPassword,
 								},
 							},
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									MountPath: "/var/lib/schema-secrets/",
+									ReadOnly:  false,
+									Name:      "schema-secrets",
+								},
+							},
+						},
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name: "schema-secrets",
+							VolumeSource: corev1.VolumeSource{
+								Secret: &corev1.SecretVolumeSource{SecretName: schema.Spec.Secret},
+							},
 						},
 					},
 				},
 			},
 		},
 	}
+
 	return job
 }

@@ -38,7 +38,8 @@ spec:
           properties:
             name:
               type: string
-            password:
+            secret:
+              description: Secret Name of secret which contains DatabasePassword
               type: string
           type: object
         status:
