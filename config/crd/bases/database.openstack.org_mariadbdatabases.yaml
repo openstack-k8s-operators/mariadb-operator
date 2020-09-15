@@ -6,20 +6,20 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.3.0
   creationTimestamp: null
-  name: mariadbschemas.database.openstack.org
+  name: mariadbdatabases.database.openstack.org
 spec:
   group: database.openstack.org
   names:
-    kind: MariaDBSchema
-    listKind: MariaDBSchemaList
-    plural: mariadbschemas
-    singular: mariadbschema
+    kind: MariaDBDatabase
+    listKind: MariaDBDatabaseList
+    plural: mariadbdatabases
+    singular: mariadbdatabase
   scope: Namespaced
   subresources:
     status: {}
   validation:
     openAPIV3Schema:
-      description: MariaDBSchema is the Schema for the mariadbschemas API
+      description: MariaDBDatabase is the Schema for the mariadbdatabases API
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
@@ -34,7 +34,7 @@ spec:
         metadata:
           type: object
         spec:
-          description: MariaDBSchemaSpec defines the desired state of MariaDBSchema
+          description: MariaDBDatabaseSpec defines the desired state of MariaDBDatabase
           properties:
             name:
               type: string
@@ -43,7 +43,7 @@ spec:
               type: string
           type: object
         status:
-          description: MariaDBSchemaStatus defines the observed state of MariaDBSchema
+          description: MariaDBDatabaseStatus defines the observed state of MariaDBDatabase
           properties:
             completed:
               type: boolean

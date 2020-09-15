@@ -26,7 +26,7 @@ RUN cp -r templates ${DEST_ROOT}/templates
 # prep the bundle
 RUN mkdir -p ${DEST_ROOT}/bundle
 RUN cp config/crd/bases/database.openstack.org_mariadbs.yaml ${DEST_ROOT}/bundle/database.openstack.org_mariadbs_crd.yaml
-RUN cp config/crd/bases/database.openstack.org_mariadbschemas.yaml ${DEST_ROOT}/bundle/database.openstack.org_mariadbschemas_crd.yaml
+RUN cp config/crd/bases/database.openstack.org_mariadbdatabases.yaml ${DEST_ROOT}/bundle/database.openstack.org_mariadbdatabases_crd.yaml
 
 # strip top 2 lines (this resolves parsing in opm which handles this badly)
 RUN sed -i -e 1,2d ${DEST_ROOT}/bundle/*

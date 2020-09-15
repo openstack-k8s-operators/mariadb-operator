@@ -20,39 +20,39 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// MariaDBSchemaSpec defines the desired state of MariaDBSchema
-type MariaDBSchemaSpec struct {
+// MariaDBDatabaseSpec defines the desired state of MariaDBDatabase
+type MariaDBDatabaseSpec struct {
 	// Secret Name of secret which contains DatabasePassword
 	Secret string `json:"secret,omitempty"`
 	Name   string `json:"name,omitempty"`
 }
 
-// MariaDBSchemaStatus defines the observed state of MariaDBSchema
-type MariaDBSchemaStatus struct {
+// MariaDBDatabaseStatus defines the observed state of MariaDBDatabase
+type MariaDBDatabaseStatus struct {
 	Completed bool `json:"completed,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// MariaDBSchema is the Schema for the mariadbschemas API
-type MariaDBSchema struct {
+// MariaDBDatabase is the Schema for the mariadbdatabases API
+type MariaDBDatabase struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   MariaDBSchemaSpec   `json:"spec,omitempty"`
-	Status MariaDBSchemaStatus `json:"status,omitempty"`
+	Spec   MariaDBDatabaseSpec   `json:"spec,omitempty"`
+	Status MariaDBDatabaseStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// MariaDBSchemaList contains a list of MariaDBSchema
-type MariaDBSchemaList struct {
+// MariaDBDatabaseList contains a list of MariaDBDatabase
+type MariaDBDatabaseList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []MariaDBSchema `json:"items"`
+	Items           []MariaDBDatabase `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&MariaDBSchema{}, &MariaDBSchemaList{})
+	SchemeBuilder.Register(&MariaDBDatabase{}, &MariaDBDatabaseList{})
 }

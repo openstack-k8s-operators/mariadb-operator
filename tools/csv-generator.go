@@ -200,11 +200,11 @@ Install and configure MariaDB.
 						Description: "MariaDB Instance",
 					},
 					{
-						Name:        "mariadbschemas.database.openstack.org",
+						Name:        "mariadbdatabases.database.openstack.org",
 						Version:     "v1beta1",
-						Kind:        "MariaDBSchema",
-						DisplayName: "MariaDBSchema",
-						Description: "MariaDB Schema",
+						Kind:        "MariaDBDatabase",
+						DisplayName: "MariaDBDatabase",
+						Description: "MariaDB Database",
 					},
 				},
 			},
@@ -276,7 +276,7 @@ func getOperatorRules() *[]rbacv1.PolicyRule {
 			Resources: []string{
 				"*",
 				"mariadbs",
-				"mariadbschemas",
+				"mariadbdatabases",
 			},
 			Verbs: []string{
 				"*",

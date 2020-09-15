@@ -9,21 +9,21 @@ import (
 )
 
 type dbCreateOptions struct {
-	SchemaName            string
+	DatabaseName          string
 	DatabaseHostname      string
 	DatabaseAdminUsername string
 }
 
-func DbSchemaJob(schema *databasev1beta1.MariaDBSchema, databaseHostName string, databaseSecret string, containerImage string) *batchv1.Job {
+func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName string, databaseSecret string, containerImage string) *batchv1.Job {
 
-	opts := dbCreateOptions{schema.Spec.Name, databaseHostName, "root"}
+	opts := dbCreateOptions{database.Spec.Name, databaseHostName, "root"}
 	labels := map[string]string{
-		"owner": "mariadb-operator", "cr": schema.Spec.Name, "app": "mariadbschema",
+		"owner": "mariadb-operator", "cr": database.Spec.Name, "app": "mariadbschema",
 	}
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      schema.Spec.Name + "-schema-sync",
-			Namespace: schema.Namespace,
+			Name:      database.Spec.Name + "-database-sync",
+			Namespace: database.Namespace,
 			Labels:    labels,
 		},
 		Spec: batchv1.JobSpec{
@@ -33,9 +33,9 @@ func DbSchemaJob(schema *databasev1beta1.MariaDBSchema, databaseHostName string,
 					ServiceAccountName: "mariadb",
 					Containers: []corev1.Container{
 						{
-							Name:    "mariadb-schema-create",
+							Name:    "mariadb-database-create",
 							Image:   containerImage,
-							Command: []string{"/bin/sh", "-c", util.ExecuteTemplateFile("db_schema.sh", &opts)},
+							Command: []string{"/bin/sh", "-c", util.ExecuteTemplateFile("database.sh", &opts)},
 							Env: []corev1.EnvVar{
 								{
 									Name: "MYSQL_PWD",
@@ -53,7 +53,7 @@ func DbSchemaJob(schema *databasev1beta1.MariaDBSchema, databaseHostName string,
 									ValueFrom: &corev1.EnvVarSource{
 										SecretKeyRef: &corev1.SecretKeySelector{
 											LocalObjectReference: corev1.LocalObjectReference{
-												Name: schema.Spec.Secret,
+												Name: database.Spec.Secret,
 											},
 											Key: "DatabasePassword",
 										},
