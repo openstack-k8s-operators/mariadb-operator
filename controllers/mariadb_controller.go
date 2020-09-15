@@ -18,6 +18,9 @@ package controllers
 
 import (
 	"context"
+	"fmt"
+	"reflect"
+	"time"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -30,17 +33,15 @@ import (
 	util "github.com/openstack-k8s-operators/lib-common/pkg/util"
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	mariadb "github.com/openstack-k8s-operators/mariadb-operator/pkg"
-
-	"fmt"
-	"reflect"
-	"time"
+	"k8s.io/client-go/kubernetes"
 )
 
 // MariaDBReconciler reconciles a MariaDB object
 type MariaDBReconciler struct {
-	Client client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Client  client.Client
+	Kclient kubernetes.Interface
+	Log     logr.Logger
+	Scheme  *runtime.Scheme
 }
 
 // +kubebuilder:rbac:groups=database.openstack.org,resources=mariadbs,verbs=get;list;watch;create;update;patch;delete
@@ -139,7 +140,7 @@ func (r *MariaDBReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	requeue := true
 	if instance.Status.DbInitHash != dbInitHash {
-		requeue, err = mariadb.EnsureJob(job, r.Client, r.Log)
+		requeue, err = util.EnsureJob(job, r.Client, r.Log)
 		r.Log.Info("Running DB init")
 		if err != nil {
 			return ctrl.Result{}, err
@@ -153,7 +154,7 @@ func (r *MariaDBReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, err
 	}
 	// delete the job
-	requeue, err = mariadb.DeleteJob(job, r.Client, r.Log)
+	requeue, err = util.DeleteJob(job, r.Kclient, r.Log)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
