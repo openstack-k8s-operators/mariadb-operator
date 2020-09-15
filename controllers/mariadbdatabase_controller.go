@@ -18,25 +18,27 @@ package controllers
 
 import (
 	"context"
+	"time"
 
 	"github.com/go-logr/logr"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	util "github.com/openstack-k8s-operators/lib-common/pkg/util"
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	mariadb "github.com/openstack-k8s-operators/mariadb-operator/pkg"
-
-	"time"
 )
 
 // MariaDBDatabaseReconciler reconciles a MariaDBDatabase object
 type MariaDBDatabaseReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Kclient kubernetes.Interface
+	Log     logr.Logger
+	Scheme  *runtime.Scheme
 }
 
 // +kubebuilder:rbac:groups=database.openstack.org,resources=mariadbdatabases,verbs=get;list;watch;create;update;patch;delete
@@ -88,7 +90,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 
 	requeue := true
 	if instance.Status.Completed {
-		requeue, err = mariadb.EnsureJob(job, r.Client, r.Log)
+		requeue, err = util.EnsureJob(job, r.Client, r.Log)
 		r.Log.Info("Creating database...")
 		if err != nil {
 			return ctrl.Result{}, err
@@ -102,7 +104,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 		return ctrl.Result{}, err
 	}
 	// delete the job
-	requeue, err = mariadb.DeleteJob(job, r.Client, r.Log)
+	requeue, err = util.DeleteJob(job, r.Kclient, r.Log)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
