@@ -1,13 +1,13 @@
-# permissions for end users to edit mariadbschemas.
+# permissions for end users to edit mariadbdatabases.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: mariadbschema-editor-role
+  name: mariadbdatabase-editor-role
 rules:
 - apiGroups:
   - database.openstack.org
   resources:
-  - mariadbschemas
+  - mariadbdatabases
   verbs:
   - create
   - delete
@@ -19,6 +19,6 @@ rules:
 - apiGroups:
   - database.openstack.org
   resources:
-  - mariadbschemas/status
+  - mariadbdatabases/status
   verbs:
   - get

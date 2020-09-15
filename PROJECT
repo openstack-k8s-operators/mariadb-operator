@@ -6,7 +6,7 @@ resources:
   kind: MariaDB
   version: v1beta1
 - group: database
-  kind: MariaDBSchema
+  kind: MariaDBDatabase
   version: v1beta1
 version: 3-alpha
 plugins:

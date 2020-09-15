@@ -32,24 +32,24 @@ import (
 	"time"
 )
 
-// MariaDBSchemaReconciler reconciles a MariaDBSchema object
-type MariaDBSchemaReconciler struct {
+// MariaDBDatabaseReconciler reconciles a MariaDBDatabase object
+type MariaDBDatabaseReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=database.openstack.org,resources=mariadbschemas,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=database.openstack.org,resources=mariadbschemas/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=database.openstack.org,resources=mariadbdatabases,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=database.openstack.org,resources=mariadbdatabases/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=database.openstack.org,resources=mariadbs/status,verbs=get;list
 // +kubebuilder:rbac:groups=database.openstack.org,resources=mariadbs/status,verbs=get;list
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;create;update;delete;
-func (r *MariaDBSchemaReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *MariaDBDatabaseReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	_ = context.Background()
-	_ = r.Log.WithValues("mariadbschema", req.NamespacedName)
+	_ = r.Log.WithValues("mariadbdatabase", req.NamespacedName)
 
-	// Fetch the MariaDBSchema instance
-	instance := &databasev1beta1.MariaDBSchema{}
+	// Fetch the MariaDBDatabase instance
+	instance := &databasev1beta1.MariaDBDatabase{}
 	err := r.Client.Get(context.TODO(), req.NamespacedName, instance)
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
@@ -84,20 +84,20 @@ func (r *MariaDBSchemaReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	}
 
 	// Define a new Job object (hostname, password, containerImage)
-	job := mariadb.DbSchemaJob(instance, db.Name, db.Spec.Secret, db.Spec.ContainerImage)
+	job := mariadb.DbDatabaseJob(instance, db.Name, db.Spec.Secret, db.Spec.ContainerImage)
 
 	requeue := true
 	if instance.Status.Completed {
 		requeue, err = mariadb.EnsureJob(job, r.Client, r.Log)
-		r.Log.Info("Creating DB schema...")
+		r.Log.Info("Creating database...")
 		if err != nil {
 			return ctrl.Result{}, err
 		} else if requeue {
-			r.Log.Info("Waiting on DB schema creation job...")
+			r.Log.Info("Waiting on database creation job...")
 			return ctrl.Result{RequeueAfter: time.Second * 5}, err
 		}
 	}
-	// db schema completed... okay to set to completed
+	// database creation finished... okay to set to completed
 	if err := r.setCompleted(instance); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -110,7 +110,7 @@ func (r *MariaDBSchemaReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	return ctrl.Result{}, nil
 }
 
-func (r *MariaDBSchemaReconciler) setCompleted(db *databasev1beta1.MariaDBSchema) error {
+func (r *MariaDBDatabaseReconciler) setCompleted(db *databasev1beta1.MariaDBDatabase) error {
 
 	if !db.Status.Completed {
 		db.Status.Completed = true
@@ -121,8 +121,8 @@ func (r *MariaDBSchemaReconciler) setCompleted(db *databasev1beta1.MariaDBSchema
 	return nil
 }
 
-func (r *MariaDBSchemaReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *MariaDBDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&databasev1beta1.MariaDBSchema{}).
+		For(&databasev1beta1.MariaDBDatabase{}).
 		Complete(r)
 }
