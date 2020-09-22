@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -27,6 +28,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	util "github.com/openstack-k8s-operators/lib-common/pkg/util"
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
@@ -54,14 +56,11 @@ func (r *MariaDBDatabaseReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 	instance := &databasev1beta1.MariaDBDatabase{}
 	err := r.Client.Get(context.TODO(), req.NamespacedName, instance)
 	if err != nil {
-		if k8s_errors.IsNotFound(err) {
-			// Request object not found, could have been deleted after reconcile request.
-			// Owned objects are automatically garbage collected.
-			// For additional cleanup logic use finalizers. Return and don't requeue.
-			return ctrl.Result{}, nil
-		}
 		// Error reading the object - requeue the request.
-		return ctrl.Result{}, err
+		// ignore not found errors, since they can't be fixed by an immediate
+		// requeue, and we can get them on deleted requests which we now
+		// handle using finalizer.
+		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
 	// Fetch the MariaDB instance from which we'll pull the credentials
@@ -76,8 +75,57 @@ func (r *MariaDBDatabaseReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
 			r.Log.Info("No DB found for label 'dbName'.")
+			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{RequeueAfter: time.Second * 10}, err
+	}
+
+	finalizerName := "mariadb-" + instance.Name
+	// if deletion timestamp is set on the instance object, the CR got deleted
+	if instance.ObjectMeta.DeletionTimestamp.IsZero() {
+		// if it is a new instance, add the finalizer
+		if !controllerutil.ContainsFinalizer(instance, finalizerName) {
+			controllerutil.AddFinalizer(instance, finalizerName)
+			err = r.Client.Update(context.TODO(), instance)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			r.Log.Info(fmt.Sprintf("Finalizer %s added to CR %s", finalizerName, instance.Name))
+		}
+
+	} else {
+		// 1. check if finalizer is there
+		// Reconcile if finalizer got already removed
+		if !controllerutil.ContainsFinalizer(instance, finalizerName) {
+			return ctrl.Result{}, nil
+		}
+
+		// 2. delete the database
+		r.Log.Info(fmt.Sprintf("CR %s delete, running DB delete job", instance.Name))
+		job := mariadb.DeleteDbDatabaseJob(instance, db.Name, db.Spec.Secret, db.Spec.ContainerImage)
+
+		requeue, err := util.EnsureJob(job, r.Client, r.Log)
+		if err != nil {
+			return ctrl.Result{}, err
+		} else if requeue {
+			r.Log.Info("Waiting on DB delete")
+			return ctrl.Result{RequeueAfter: time.Second * 5}, err
+		}
+
+		// delete the job
+		requeue, err = util.DeleteJob(job, r.Kclient, r.Log)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		// 3. as last step remove the finalizer on the operator CR to finish delete
+		controllerutil.RemoveFinalizer(instance, finalizerName)
+		err = r.Client.Update(context.TODO(), instance)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		r.Log.Info(fmt.Sprintf("CR %s deleted", instance.Name))
+		return ctrl.Result{}, nil
 	}
 
 	if db.Status.DbInitHash == "" {
