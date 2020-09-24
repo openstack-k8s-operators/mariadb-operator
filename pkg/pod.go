@@ -8,6 +8,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+// Pod -
 func Pod(db *databasev1beta1.MariaDB, scheme *runtime.Scheme, configHash string) *corev1.Pod {
 
 	pod := &corev1.Pod{

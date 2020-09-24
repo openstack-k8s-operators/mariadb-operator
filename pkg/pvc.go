@@ -9,7 +9,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-//Returns the deployment object for the Database
+// Pvc - Returns the deployment object for the Database
 func Pvc(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) *corev1.PersistentVolumeClaim {
 	pv := &corev1.PersistentVolumeClaim{
 		ObjectMeta: v1.ObjectMeta{

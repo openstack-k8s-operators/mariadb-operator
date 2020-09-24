@@ -9,6 +9,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+// DbInitJob -
 func DbInitJob(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) *batchv1.Job {
 
 	job := &batchv1.Job{

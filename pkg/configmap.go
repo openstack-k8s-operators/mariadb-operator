@@ -9,6 +9,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+// ConfigMap -
 func ConfigMap(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) *corev1.ConfigMap {
 
 	cm := &corev1.ConfigMap{

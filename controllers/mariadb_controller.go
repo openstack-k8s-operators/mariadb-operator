@@ -51,6 +51,8 @@ type MariaDBReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;create;update;delete;
 // +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;create;update;delete;
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;create;update;delete;
+
+// Reconcile reconcile mariadb API requests
 func (r *MariaDBReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	_ = context.Background()
 	_ = r.Log.WithValues("mariadb", req.NamespacedName)
@@ -196,6 +198,7 @@ func (r *MariaDBReconciler) setDbInitHash(db *databasev1beta1.MariaDB, hashStr s
 	return nil
 }
 
+// SetupWithManager -
 func (r *MariaDBReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&databasev1beta1.MariaDB{}).
