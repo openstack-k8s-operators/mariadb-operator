@@ -14,6 +14,7 @@ type dbCreateOptions struct {
 	DatabaseAdminUsername string
 }
 
+// DbDatabaseJob -
 func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName string, databaseSecret string, containerImage string) *batchv1.Job {
 
 	opts := dbCreateOptions{database.Spec.Name, databaseHostName, "root"}
@@ -70,6 +71,7 @@ func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName s
 	return job
 }
 
+// DeleteDbDatabaseJob -
 func DeleteDbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName string, databaseSecret string, containerImage string) *batchv1.Job {
 
 	opts := dbCreateOptions{database.Spec.Name, databaseHostName, "root"}

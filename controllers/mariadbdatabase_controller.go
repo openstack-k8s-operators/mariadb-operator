@@ -48,6 +48,8 @@ type MariaDBDatabaseReconciler struct {
 // +kubebuilder:rbac:groups=database.openstack.org,resources=mariadbs/status,verbs=get;list
 // +kubebuilder:rbac:groups=database.openstack.org,resources=mariadbs/status,verbs=get;list
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;create;update;delete;
+
+// Reconcile reconcile mariadbdatabase API requests
 func (r *MariaDBDatabaseReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	_ = context.Background()
 	_ = r.Log.WithValues("mariadbdatabase", req.NamespacedName)
@@ -171,6 +173,7 @@ func (r *MariaDBDatabaseReconciler) setCompleted(db *databasev1beta1.MariaDBData
 	return nil
 }
 
+// SetupWithManager -
 func (r *MariaDBDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&databasev1beta1.MariaDBDatabase{}).
