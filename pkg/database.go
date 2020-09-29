@@ -1,6 +1,8 @@
 package mariadb
 
 import (
+	"strings"
+
 	util "github.com/openstack-k8s-operators/lib-common/pkg/util"
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -23,7 +25,10 @@ func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName s
 	}
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      database.Spec.Name + "-database-sync",
+			// provided db name is used as metadata name where underscore is a not allowed
+			// character. lets remove all underscored that underscores in the db name are
+			// possible.
+			Name:      strings.Replace(database.Spec.Name, "_", "", -1) + "-database-sync",
 			Namespace: database.Namespace,
 			Labels:    labels,
 		},
@@ -80,7 +85,7 @@ func DeleteDbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHost
 	}
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      database.Spec.Name + "-database-delete",
+			Name:      strings.Replace(database.Spec.Name, "_", "", -1) + "-database-delete",
 			Namespace: database.Namespace,
 			Labels:    labels,
 		},
