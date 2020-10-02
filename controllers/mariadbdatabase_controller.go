@@ -75,11 +75,10 @@ func (r *MariaDBDatabaseReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 	objectKey, err := client.ObjectKeyFromObject(db)
 	err = r.Client.Get(context.TODO(), objectKey, db)
 	if err != nil {
-		if k8s_errors.IsNotFound(err) {
-			r.Log.Info("No DB found for label 'dbName'.")
-			return ctrl.Result{}, nil
+		if !k8s_errors.IsNotFound(err) {
+			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: time.Second * 10}, err
+		return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 	}
 
 	finalizerName := "mariadb-" + instance.Name
