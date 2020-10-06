@@ -34,8 +34,8 @@ FROM ${OPERATOR_BASE_IMAGE}
 ARG DEST_ROOT=/dest-root
 
 LABEL   com.redhat.component="mariadb-operator-container" \
-        name="mariadb-operator" \
-        version="1.0" \
+        name="cn-osp/mariadb-operator" \
+        version="0.0.1" \
         summary="Mariadb Operator" \
         io.k8s.name="mariadb-operator" \
         io.k8s.description="This image includes the mariadb-operator"
