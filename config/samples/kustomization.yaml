@@ -1,4 +1,0 @@
-## This file is auto-generated, do not modify ##
-resources:
-- database_v1beta1_mariadb.yaml
-- database_v1beta1_mariadbdatabase.yaml

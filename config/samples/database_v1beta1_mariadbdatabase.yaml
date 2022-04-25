@@ -1,9 +1,0 @@
-apiVersion: database.openstack.org/v1beta1
-kind: MariaDBDatabase
-metadata:
-  name: scott
-  labels:
-    dbName: mariadb
-spec:
-  name: scott
-  secret: tiger #the name of a k8s secret containing DatabasePassword
