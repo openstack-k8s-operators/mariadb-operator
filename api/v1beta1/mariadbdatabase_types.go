@@ -20,22 +20,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // MariaDBDatabaseSpec defines the desired state of MariaDBDatabase
 type MariaDBDatabaseSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of MariaDBDatabase. Edit mariadbdatabase_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+        // Secret Name of secret which contains DatabasePassword
+        Secret string `json:"secret,omitempty"`
+        Name   string `json:"name,omitempty"`
 }
 
 // MariaDBDatabaseStatus defines the observed state of MariaDBDatabase
 type MariaDBDatabaseStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+        Completed bool `json:"completed,omitempty"`
 }
 
 //+kubebuilder:object:root=true
