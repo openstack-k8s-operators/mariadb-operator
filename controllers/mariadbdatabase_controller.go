@@ -152,7 +152,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 	// delete the job
-	requeue, err = util.DeleteJob(job, r.Kclient, r.Log)
+	_, err = util.DeleteJob(job, r.Kclient, r.Log)
 	if err != nil {
 		return ctrl.Result{}, err
 	}

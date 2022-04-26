@@ -1,0 +1,56 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: '[]'
+    capabilities: Basic Install
+    operatorframework.io/suggested-namespace: openstack
+  name: mariadb-operator.v0.0.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: MariaDB is the Schema for the mariadbs API
+      displayName: MariaDB
+      kind: MaraiDB
+      name: mariadbs.mariadb.openstack.org
+      version: v1beta1
+    - description: MariaDBDatabase is the Schema for the mariadbdatabases API
+      displayName: Maria DBDatabase
+      kind: MariaDBDatabase
+      name: mariadbdatabases.mariadb.openstack.org
+      version: v1beta1
+    - description: MariaDB is the Schema for the mariadbs API
+      displayName: Maria DB
+      kind: MariaDB
+      name: mariadbs.mariadb.openstack.org
+      version: v1beta1
+  description: MariaDB Operator
+  displayName: MariaDB Operator
+  install:
+    spec:
+      deployments: null
+    strategy: ""
+  installModes:
+  - supported: true
+    type: OwnNamespace
+  - supported: true
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: false
+    type: AllNamespaces
+  keywords:
+  - OpenStack
+  - Identity
+  - MariaDB
+  links:
+  - name: MariaDB Operator
+    url: https://github.com/openstack-k8s-operators/mariadb-operator
+  maturity: beta
+  minKubeVersion: "1.21"
+  provider:
+    name: Red Hat Inc.
+    url: https://redhat.com/
+  version: 0.0.0
