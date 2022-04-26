@@ -22,20 +22,20 @@ import (
 
 // MariaDBSpec defines the desired state of MariaDB
 type MariaDBSpec struct {
-        // Secret containing a RootPassword
-        Secret string `json:"secret,omitempty"`
+	// Secret containing a RootPassword
+	Secret string `json:"secret,omitempty"`
 
-        StorageClass string `json:"storageClass,omitempty"`
+	StorageClass string `json:"storageClass,omitempty"`
 
-        StorageRequest string `json:"storageRequest,omitempty"`
+	StorageRequest string `json:"storageRequest,omitempty"`
 
-        ContainerImage string `json:"containerImage,omitempty"`
+	ContainerImage string `json:"containerImage,omitempty"`
 }
 
 // MariaDBStatus defines the observed state of MariaDB
 type MariaDBStatus struct {
-        // db init completed
-        DbInitHash string `json:"dbInitHash"`
+	// db init completed
+	DbInitHash string `json:"dbInitHash"`
 }
 
 //+kubebuilder:object:root=true
