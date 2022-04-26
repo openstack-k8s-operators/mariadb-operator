@@ -6,7 +6,57 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - mariadb.openstack.org
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumeclaims
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+- apiGroups:
+  - database.openstack.org
   resources:
   - mariadbdatabases
   verbs:
@@ -18,13 +68,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - mariadb.openstack.org
-  resources:
-  - mariadbdatabases/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - mariadb.openstack.org
+  - database.openstack.org
   resources:
   - mariadbdatabases/status
   verbs:
@@ -32,7 +76,7 @@ rules:
   - patch
   - update
 - apiGroups:
-  - mariadb.openstack.org
+  - database.openstack.org
   resources:
   - mariadbs
   verbs:
@@ -44,16 +88,11 @@ rules:
   - update
   - watch
 - apiGroups:
-  - mariadb.openstack.org
-  resources:
-  - mariadbs/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - mariadb.openstack.org
+  - database.openstack.org
   resources:
   - mariadbs/status
   verbs:
   - get
+  - list
   - patch
   - update
