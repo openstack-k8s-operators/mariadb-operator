@@ -1,0 +1,6 @@
+apiVersion: mariadb.openstack.org/v1beta1
+kind: MariaDBDatabase
+metadata:
+  name: mariadbdatabase-sample
+spec:
+  # TODO(user): Add fields here
