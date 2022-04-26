@@ -136,9 +136,8 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// Define a new Job object (hostname, password, containerImage)
 	job := mariadb.DbDatabaseJob(instance, db.Name, db.Spec.Secret, db.Spec.ContainerImage)
 
-	requeue := true
 	if instance.Status.Completed {
-		requeue, err = util.EnsureJob(job, r.Client, r.Log)
+		requeue, err := util.EnsureJob(job, r.Client, r.Log)
 		r.Log.Info("Creating database...")
 		if err != nil {
 			return ctrl.Result{}, err
@@ -148,7 +147,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 	// database creation finished... okay to set to completed
-	if err := r.setCompleted(instance, ctx); err != nil {
+	if err := r.setCompleted(ctx, instance); err != nil {
 		return ctrl.Result{}, err
 	}
 	// delete the job
@@ -160,7 +159,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	return ctrl.Result{}, nil
 }
 
-func (r *MariaDBDatabaseReconciler) setCompleted(db *databasev1beta1.MariaDBDatabase, ctx context.Context) error {
+func (r *MariaDBDatabaseReconciler) setCompleted(ctx context.Context, db *databasev1beta1.MariaDBDatabase) error {
 
 	if !db.Status.Completed {
 		db.Status.Completed = true

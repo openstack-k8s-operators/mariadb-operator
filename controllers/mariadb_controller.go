@@ -71,8 +71,10 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// PVC
-	pvc := mariadb.Pvc(instance, r.Scheme)
-
+	pvc, err := mariadb.Pvc(instance, r.Scheme)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 	foundPvc := &corev1.PersistentVolumeClaim{}
 	err = r.Client.Get(context.TODO(), types.NamespacedName{Name: pvc.Name, Namespace: pvc.Namespace}, foundPvc)
 	if err != nil && k8s_errors.IsNotFound(err) {
@@ -88,7 +90,10 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
-	service := mariadb.Service(instance, r.Scheme)
+	service, err := mariadb.Service(instance, r.Scheme)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
 	// Check if this Service already exists
 	foundService := &corev1.Service{}
@@ -107,7 +112,10 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// ConfigMap
-	configMap := mariadb.ConfigMap(instance, r.Scheme)
+	configMap, err := mariadb.ConfigMap(instance, r.Scheme)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 	// Check if this ConfigMap already exists
 	foundConfigMap := &corev1.ConfigMap{}
 	err = r.Client.Get(context.TODO(), types.NamespacedName{Name: configMap.Name, Namespace: configMap.Namespace}, foundConfigMap)
@@ -133,15 +141,17 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Define a new Job object
-	job := mariadb.DbInitJob(instance, r.Scheme)
+	job, err := mariadb.DbInitJob(instance, r.Scheme)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 	dbInitHash, err := util.ObjectHash(job)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error calculating DB init hash: %v", err)
 	}
 
-	requeue := true
 	if instance.Status.DbInitHash != dbInitHash {
-		requeue, err = util.EnsureJob(job, r.Client, r.Log)
+		requeue, err := util.EnsureJob(job, r.Client, r.Log)
 		r.Log.Info("Running DB init")
 		if err != nil {
 			return ctrl.Result{}, err
@@ -161,7 +171,10 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Pod
-	pod := mariadb.Pod(instance, r.Scheme, configHash)
+	pod, err := mariadb.Pod(instance, r.Scheme, configHash)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 	// Check if this Pod already exists
 	foundPod := &corev1.Pod{}
 	err = r.Client.Get(context.TODO(), types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, foundPod)

@@ -9,7 +9,7 @@ import (
 )
 
 // Pod -
-func Pod(db *databasev1beta1.MariaDB, scheme *runtime.Scheme, configHash string) *corev1.Pod {
+func Pod(db *databasev1beta1.MariaDB, scheme *runtime.Scheme, configHash string) (*corev1.Pod, error) {
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -39,6 +39,6 @@ func Pod(db *databasev1beta1.MariaDB, scheme *runtime.Scheme, configHash string)
 			Volumes: getVolumes(db.Name),
 		},
 	}
-	controllerutil.SetControllerReference(db, pod, scheme)
-	return pod
+	err := controllerutil.SetControllerReference(db, pod, scheme)
+	return pod, err
 }

@@ -10,7 +10,7 @@ import (
 )
 
 // DbInitJob -
-func DbInitJob(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) *batchv1.Job {
+func DbInitJob(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) (*batchv1.Job, error) {
 
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -60,6 +60,6 @@ func DbInitJob(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) *batchv1.Job
 			},
 		},
 	}
-	controllerutil.SetControllerReference(db, job, scheme)
-	return job
+	err := controllerutil.SetControllerReference(db, job, scheme)
+	return job, err
 }

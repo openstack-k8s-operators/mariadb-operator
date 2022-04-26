@@ -10,7 +10,7 @@ import (
 )
 
 // ConfigMap -
-func ConfigMap(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) *corev1.ConfigMap {
+func ConfigMap(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) (*corev1.ConfigMap, error) {
 
 	cm := &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
@@ -29,6 +29,6 @@ func ConfigMap(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) *corev1.Conf
 			"init_config.json": util.ExecuteTemplateFile("init_config.json", nil),
 		},
 	}
-	controllerutil.SetControllerReference(db, cm, scheme)
-	return cm
+	err := controllerutil.SetControllerReference(db, cm, scheme)
+	return cm, err
 }

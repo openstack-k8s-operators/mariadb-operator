@@ -49,7 +49,6 @@ spec:
   - name: MariaDB Operator
     url: https://github.com/openstack-k8s-operators/mariadb-operator
   maturity: beta
-  minKubeVersion: "1.21"
   provider:
     name: Red Hat Inc.
     url: https://redhat.com/

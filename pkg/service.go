@@ -9,7 +9,7 @@ import (
 )
 
 // Service func
-func Service(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) *corev1.Service {
+func Service(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) (*corev1.Service, error) {
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -24,6 +24,6 @@ func Service(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) *corev1.Servic
 			},
 		},
 	}
-	controllerutil.SetControllerReference(db, svc, scheme)
-	return svc
+	err := controllerutil.SetControllerReference(db, svc, scheme)
+	return svc, err
 }
