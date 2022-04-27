@@ -56,7 +56,7 @@ rules:
   - list
   - update
 - apiGroups:
-  - database.openstack.org
+  - mariadb.openstack.org
   resources:
   - mariadbdatabases
   verbs:
@@ -68,7 +68,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - database.openstack.org
+  - mariadb.openstack.org
   resources:
   - mariadbdatabases/status
   verbs:
@@ -76,7 +76,7 @@ rules:
   - patch
   - update
 - apiGroups:
-  - database.openstack.org
+  - mariadb.openstack.org
   resources:
   - mariadbs
   verbs:
@@ -88,7 +88,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - database.openstack.org
+  - mariadb.openstack.org
   resources:
   - mariadbs/status
   verbs:

@@ -43,10 +43,10 @@ type MariaDBDatabaseReconciler struct {
 	Scheme  *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=database.openstack.org,resources=mariadbdatabases,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=database.openstack.org,resources=mariadbdatabases/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=database.openstack.org,resources=mariadbs/status,verbs=get;list
-// +kubebuilder:rbac:groups=database.openstack.org,resources=mariadbs/status,verbs=get;list
+// +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbdatabases,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbdatabases/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbs/status,verbs=get;list
+// +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbs/status,verbs=get;list
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;create;update;delete;
 
 // Reconcile reconcile mariadbdatabase API requests
