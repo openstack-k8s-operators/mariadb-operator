@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	util "github.com/openstack-k8s-operators/lib-common/pkg/util"
+	common "github.com/openstack-k8s-operators/lib-common/pkg/common"
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	mariadb "github.com/openstack-k8s-operators/mariadb-operator/pkg"
 )
@@ -41,6 +41,26 @@ type MariaDBDatabaseReconciler struct {
 	Kclient kubernetes.Interface
 	Log     logr.Logger
 	Scheme  *runtime.Scheme
+}
+
+// GetClient -
+func (r *MariaDBDatabaseReconciler) GetClient() client.Client {
+	return r.Client
+}
+
+// GetKClient -
+func (r *MariaDBDatabaseReconciler) GetKClient() kubernetes.Interface {
+	return r.Kclient
+}
+
+// GetLogger -
+func (r *MariaDBDatabaseReconciler) GetLogger() logr.Logger {
+	return r.Log
+}
+
+// GetScheme -
+func (r *MariaDBDatabaseReconciler) GetScheme() *runtime.Scheme {
+	return r.Scheme
 }
 
 // +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbdatabases,verbs=get;list;watch;create;update;patch;delete
@@ -56,10 +76,6 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	instance := &databasev1beta1.MariaDBDatabase{}
 	err := r.Client.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
-		// Error reading the object - requeue the request.
-		// ignore not found errors, since they can't be fixed by an immediate
-		// requeue, and we can get them on deleted requests which we now
-		// handle using finalizer.
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
@@ -101,9 +117,12 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 		// 2. delete the database
 		r.Log.Info(fmt.Sprintf("CR %s delete, running DB delete job", instance.Name))
-		job := mariadb.DeleteDbDatabaseJob(instance, db.Name, db.Spec.Secret, db.Spec.ContainerImage)
+		job, err := mariadb.DeleteDbDatabaseJob(instance, db.Name, db.Spec.Secret, db.Spec.ContainerImage)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 
-		requeue, err := util.EnsureJob(job, r.Client, r.Log)
+		requeue, err := common.WaitOnJob(ctx, job, r.Client, r.Log)
 		if err != nil {
 			return ctrl.Result{}, err
 		} else if requeue {
@@ -112,7 +131,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 
 		// delete the job
-		_, err = util.DeleteJob(job, r.Kclient, r.Log)
+		_, err = common.DeleteJob(ctx, job, r.Kclient, r.Log)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -133,10 +152,13 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	// Define a new Job object (hostname, password, containerImage)
-	job := mariadb.DbDatabaseJob(instance, db.Name, db.Spec.Secret, db.Spec.ContainerImage)
+	job, err := mariadb.DbDatabaseJob(instance, db.Name, db.Spec.Secret, db.Spec.ContainerImage)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
 	if instance.Status.Completed {
-		requeue, err := util.EnsureJob(job, r.Client, r.Log)
+		requeue, err := common.WaitOnJob(ctx, job, r.Client, r.Log)
 		r.Log.Info("Creating database...")
 		if err != nil {
 			return ctrl.Result{}, err
@@ -150,7 +172,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 	// delete the job
-	_, err = util.DeleteJob(job, r.Kclient, r.Log)
+	_, err = common.DeleteJob(ctx, job, r.Kclient, r.Log)
 	if err != nil {
 		return ctrl.Result{}, err
 	}

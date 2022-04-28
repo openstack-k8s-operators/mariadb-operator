@@ -95,6 +95,12 @@ rules:
 - apiGroups:
   - mariadb.openstack.org
   resources:
+  - mariadbs/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - mariadb.openstack.org
+  resources:
   - mariadbs/status
   verbs:
   - get

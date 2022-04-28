@@ -1,6 +1,9 @@
 apiVersion: mariadb.openstack.org/v1beta1
 kind: MariaDB
 metadata:
-  name: mariadb-sample
+  name: openstack
 spec:
-  # TODO(user): Add fields here
+  secret: mariadb-secret
+  storageClass: local-storage
+  storageRequest: 500M
+  containerImage: docker.io/tripleomaster/centos-binary-mariadb:current-tripleo

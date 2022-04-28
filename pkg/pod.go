@@ -5,20 +5,19 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // Pod -
-func Pod(db *databasev1beta1.MariaDB, scheme *runtime.Scheme, configHash string) (*corev1.Pod, error) {
+func Pod(db *databasev1beta1.MariaDB, scheme *runtime.Scheme, configHash string) *corev1.Pod {
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      db.Name,
+			Name:      "mariadb-" + db.Name,
 			Namespace: db.Namespace,
 			Labels:    GetLabels(db.Name),
 		},
 		Spec: corev1.PodSpec{
-			ServiceAccountName: "mariadb",
+			ServiceAccountName: "mariadb-operator-mariadb",
 			Containers: []corev1.Container{
 				{
 					Name:  "mariadb",
@@ -39,6 +38,5 @@ func Pod(db *databasev1beta1.MariaDB, scheme *runtime.Scheme, configHash string)
 			Volumes: getVolumes(db.Name),
 		},
 	}
-	err := controllerutil.SetControllerReference(db, pod, scheme)
-	return pod, err
+	return pod
 }

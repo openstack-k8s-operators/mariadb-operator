@@ -3,7 +3,7 @@ package mariadb
 import (
 	"strings"
 
-	util "github.com/openstack-k8s-operators/lib-common/pkg/util"
+	common "github.com/openstack-k8s-operators/lib-common/pkg/common"
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -17,9 +17,13 @@ type dbCreateOptions struct {
 }
 
 // DbDatabaseJob -
-func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName string, databaseSecret string, containerImage string) *batchv1.Job {
+func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName string, databaseSecret string, containerImage string) (*batchv1.Job, error) {
 
 	opts := dbCreateOptions{database.Spec.Name, databaseHostName, "root"}
+	dbCmd, err := common.ExecuteTemplateFile("database.sh", &opts)
+	if err != nil {
+		return nil, err
+	}
 	labels := map[string]string{
 		"owner": "mariadb-operator", "cr": database.Spec.Name, "app": "mariadbschema",
 	}
@@ -36,12 +40,12 @@ func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName s
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					RestartPolicy:      "OnFailure",
-					ServiceAccountName: "mariadb",
+					ServiceAccountName: "mariadb-operator-mariadb",
 					Containers: []corev1.Container{
 						{
 							Name:    "mariadb-database-create",
 							Image:   containerImage,
-							Command: []string{"/bin/sh", "-c", util.ExecuteTemplateFile("database.sh", &opts)},
+							Command: []string{"/bin/sh", "-c", dbCmd},
 							Env: []corev1.EnvVar{
 								{
 									Name: "MYSQL_PWD",
@@ -73,13 +77,17 @@ func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName s
 		},
 	}
 
-	return job
+	return job, nil
 }
 
 // DeleteDbDatabaseJob -
-func DeleteDbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName string, databaseSecret string, containerImage string) *batchv1.Job {
+func DeleteDbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName string, databaseSecret string, containerImage string) (*batchv1.Job, error) {
 
 	opts := dbCreateOptions{database.Spec.Name, databaseHostName, "root"}
+	delCmd, err := common.ExecuteTemplateFile("delete_database.sh", &opts)
+	if err != nil {
+		return nil, err
+	}
 	labels := map[string]string{
 		"owner": "mariadb-operator", "cr": database.Spec.Name, "app": "mariadbschema",
 	}
@@ -98,7 +106,7 @@ func DeleteDbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHost
 						{
 							Name:    "mariadb-database-create",
 							Image:   containerImage,
-							Command: []string{"/bin/sh", "-c", util.ExecuteTemplateFile("delete_database.sh", &opts)},
+							Command: []string{"/bin/sh", "-c", delCmd},
 							Env: []corev1.EnvVar{
 								{
 									Name: "MYSQL_PWD",
@@ -119,5 +127,5 @@ func DeleteDbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHost
 		},
 	}
 
-	return job
+	return job, nil
 }
