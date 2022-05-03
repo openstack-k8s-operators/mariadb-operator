@@ -13,7 +13,7 @@ func getVolumes(name string) []corev1.Volume {
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: name,
+						Name: "mariadb-" + name,
 					},
 					Items: []corev1.KeyToPath{
 						{
@@ -29,7 +29,7 @@ func getVolumes(name string) []corev1.Volume {
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: name,
+						Name: "mariadb-" + name,
 					},
 					Items: []corev1.KeyToPath{
 						{
@@ -45,7 +45,7 @@ func getVolumes(name string) []corev1.Volume {
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: name,
+						Name: "mariadb-" + name,
 					},
 					Items: []corev1.KeyToPath{
 						{
@@ -64,7 +64,7 @@ func getVolumes(name string) []corev1.Volume {
 			Name: "lib-data",
 			VolumeSource: corev1.VolumeSource{
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: name,
+					ClaimName: "mariadb-" + name,
 				},
 			},
 		},

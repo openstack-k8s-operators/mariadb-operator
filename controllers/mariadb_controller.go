@@ -19,22 +19,42 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"time"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	util "github.com/openstack-k8s-operators/lib-common/pkg/util"
+	common "github.com/openstack-k8s-operators/lib-common/pkg/common"
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	mariadb "github.com/openstack-k8s-operators/mariadb-operator/pkg"
 	"k8s.io/client-go/kubernetes"
 )
+
+// GetClient -
+func (r *MariaDBReconciler) GetClient() client.Client {
+	return r.Client
+}
+
+// GetKClient -
+func (r *MariaDBReconciler) GetKClient() kubernetes.Interface {
+	return r.Kclient
+}
+
+// GetLogger -
+func (r *MariaDBReconciler) GetLogger() logr.Logger {
+	return r.Log
+}
+
+// GetScheme -
+func (r *MariaDBReconciler) GetScheme() *runtime.Scheme {
+	return r.Scheme
+}
 
 // MariaDBReconciler reconciles a MariaDB object
 type MariaDBReconciler struct {
@@ -46,6 +66,7 @@ type MariaDBReconciler struct {
 
 // +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbs/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbs/finalizers,verbs=update
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;delete;
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;delete;
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;delete;
@@ -61,97 +82,103 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	err := r.Client.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
-			// Request object not found, could have been deleted after reconcile request.
-			// Owned objects are automatically garbage collected.
-			// For additional cleanup logic use finalizers. Return and don't requeue.
 			return ctrl.Result{}, nil
 		}
-		// Error reading the object - requeue the request.
 		return ctrl.Result{}, err
 	}
 
 	// PVC
-	pvc, err := mariadb.Pvc(instance, r.Scheme)
+	pvc := mariadb.Pvc(instance, r.Scheme)
+	op, err := controllerutil.CreateOrPatch(ctx, r.Client, pvc, func() error {
+
+		pvc.Spec.Resources.Requests = corev1.ResourceList{
+			corev1.ResourceStorage: resource.MustParse(instance.Spec.StorageRequest),
+		}
+
+		pvc.Spec.StorageClassName = &instance.Spec.StorageClass
+		pvc.Spec.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
+
+		err := controllerutil.SetOwnerReference(instance, pvc, r.Client.Scheme())
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	foundPvc := &corev1.PersistentVolumeClaim{}
-	err = r.Client.Get(context.TODO(), types.NamespacedName{Name: pvc.Name, Namespace: pvc.Namespace}, foundPvc)
-	if err != nil && k8s_errors.IsNotFound(err) {
-
-		r.Log.Info("Creating a new Pvc", "PersistentVolumeClaim.Namespace", pvc.Namespace, "Service.Name", pvc.Name)
-		err = r.Client.Create(context.TODO(), pvc)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-
-		return ctrl.Result{RequeueAfter: time.Second * 5}, err
-	} else if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	service, err := mariadb.Service(instance, r.Scheme)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	// Check if this Service already exists
-	foundService := &corev1.Service{}
-	err = r.Client.Get(context.TODO(), types.NamespacedName{Name: service.Name, Namespace: service.Namespace}, foundService)
-	if err != nil && k8s_errors.IsNotFound(err) {
-
-		r.Log.Info("Creating a new Service", "Service.Namespace", service.Namespace, "Service.Name", service.Name)
-		err = r.Client.Create(context.TODO(), service)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-
-		return ctrl.Result{RequeueAfter: time.Second * 5}, err
-	} else if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	// ConfigMap
-	configMap, err := mariadb.ConfigMap(instance, r.Scheme)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	// Check if this ConfigMap already exists
-	foundConfigMap := &corev1.ConfigMap{}
-	err = r.Client.Get(context.TODO(), types.NamespacedName{Name: configMap.Name, Namespace: configMap.Namespace}, foundConfigMap)
-	if err != nil && k8s_errors.IsNotFound(err) {
-		r.Log.Info("Creating a new ConfigMap", "ConfigMap.Namespace", configMap.Namespace, "Job.Name", configMap.Name)
-		err = r.Client.Create(context.TODO(), configMap)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-	} else if !reflect.DeepEqual(configMap.Data, foundConfigMap.Data) {
-		r.Log.Info("Updating ConfigMap")
-		foundConfigMap.Data = configMap.Data
-		err = r.Client.Update(context.TODO(), foundConfigMap)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
+	if op != controllerutil.OperationResultNone {
+		r.Log.Info(fmt.Sprintf("%s %s database PVC %s - operation: %s", instance.Kind, instance.Name, pvc.Name, string(op)))
 		return ctrl.Result{RequeueAfter: time.Second * 5}, err
 	}
 
-	configHash, err := util.ObjectHash(configMap)
+	service := mariadb.Service(instance, r.Scheme)
+
+	op, err = controllerutil.CreateOrPatch(ctx, r.Client, service, func() error {
+		err := controllerutil.SetControllerReference(instance, service, r.Scheme)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("error getting configMap hash: %v", err)
+		// FIXME: add error condition
+		return ctrl.Result{}, err
+	}
+
+	if op != controllerutil.OperationResultNone {
+		common.LogForObject(
+			r,
+			fmt.Sprintf("Service %s successfully reconciled - operation: %s", service.Name, string(op)),
+			instance,
+		)
+	}
+
+	// Generate the config maps for the various services
+	configMapVars := make(map[string]common.EnvSetter)
+	err = r.generateServiceConfigMaps(ctx, instance, &configMapVars)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	mergedMapVars := common.MergeEnvs([]corev1.EnvVar{}, configMapVars)
+	configHash := ""
+	for _, hashEnv := range mergedMapVars {
+		configHash = configHash + hashEnv.Value
+	}
+
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("error calculating configmap hash: %v", err)
 	}
 
 	// Define a new Job object
-	job, err := mariadb.DbInitJob(instance, r.Scheme)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	dbInitHash, err := util.ObjectHash(job)
+	job := mariadb.DbInitJob(instance, r.Scheme)
+	dbInitHash, err := common.ObjectHash(job)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error calculating DB init hash: %v", err)
 	}
 
 	if instance.Status.DbInitHash != dbInitHash {
-		requeue, err := util.EnsureJob(job, r.Client, r.Log)
+
+		op, err = controllerutil.CreateOrPatch(ctx, r.Client, job, func() error {
+			err := controllerutil.SetControllerReference(instance, job, r.Scheme)
+			if err != nil {
+				// FIXME error conditions
+				return err
+
+			}
+
+			return nil
+		})
+		if err != nil && !k8s_errors.IsNotFound(err) {
+			return ctrl.Result{}, err
+		}
+		if op != controllerutil.OperationResultNone {
+			// FIXME: error conditions
+			return ctrl.Result{RequeueAfter: time.Second * 5}, nil
+		}
+
+		requeue, err := common.WaitOnJob(ctx, job, r.Client, r.Log)
 		r.Log.Info("Running DB init")
 		if err != nil {
 			return ctrl.Result{}, err
@@ -165,35 +192,34 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 	// delete the job
-	_, err = util.DeleteJob(job, r.Kclient, r.Log)
+	_, err = common.DeleteJob(ctx, job, r.Kclient, r.Log)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
 	// Pod
-	pod, err := mariadb.Pod(instance, r.Scheme, configHash)
+	pod := mariadb.Pod(instance, r.Scheme, configHash)
+
+	op, err = controllerutil.CreateOrPatch(ctx, r.Client, pod, func() error {
+		pod.Spec.Containers[0].Image = instance.Spec.ContainerImage
+		err := controllerutil.SetControllerReference(instance, pod, r.Scheme)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+
 	if err != nil {
+		//FIXME: error conditions
 		return ctrl.Result{}, err
 	}
-	// Check if this Pod already exists
-	foundPod := &corev1.Pod{}
-	err = r.Client.Get(context.TODO(), types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, foundPod)
-	if err != nil && k8s_errors.IsNotFound(err) {
-		r.Log.Info("Creating a new Pod", "Pod.Namespace", pod.Namespace, "Job.Name", pod.Name)
-		err = r.Client.Create(context.TODO(), pod)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{RequeueAfter: time.Second * 30}, err
-	} else if instance.Spec.ContainerImage != foundPod.Spec.Containers[0].Image {
-		r.Log.Info("Updating Pod...")
-		foundPod.Spec.Containers[0].Image = instance.Spec.ContainerImage
-		foundPod.Spec.InitContainers[0].Image = instance.Spec.ContainerImage
-		err = r.Client.Update(context.TODO(), foundPod)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{RequeueAfter: time.Second * 30}, err
+
+	if op != controllerutil.OperationResultNone {
+		common.LogForObject(
+			r,
+			fmt.Sprintf("Pod %s successfully reconciled - operation: %s", pod.Name, string(op)),
+			instance,
+		)
 	}
 
 	return ctrl.Result{}, nil
@@ -207,6 +233,39 @@ func (r *MariaDBReconciler) setDbInitHash(db *databasev1beta1.MariaDB, hashStr s
 			return err
 		}
 	}
+	return nil
+}
+
+func (r *MariaDBReconciler) generateServiceConfigMaps(
+	ctx context.Context,
+	instance *databasev1beta1.MariaDB,
+	envVars *map[string]common.EnvSetter,
+) error {
+	// FIXME: use common.GetLabels?
+	cmLabels := mariadb.GetLabels(instance.Name)
+	templateParameters := make(map[string]interface{})
+
+	// ConfigMaps for mariadb
+	cms := []common.Template{
+		// ScriptsConfigMap
+		{
+			Name:               "mariadb-" + instance.Name,
+			Namespace:          instance.Namespace,
+			Type:               common.TemplateTypeScripts,
+			InstanceType:       instance.Kind,
+			AdditionalTemplate: map[string]string{},
+			ConfigOptions:      templateParameters,
+			Labels:             cmLabels,
+		},
+	}
+
+	err := common.EnsureConfigMaps(ctx, r, instance, cms, envVars)
+
+	if err != nil {
+		// FIXME error conditions here
+		return err
+	}
+
 	return nil
 }
 

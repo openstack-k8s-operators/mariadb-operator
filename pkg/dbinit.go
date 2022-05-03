@@ -6,11 +6,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // DbInitJob -
-func DbInitJob(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) (*batchv1.Job, error) {
+func DbInitJob(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) *batchv1.Job {
 
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -22,7 +21,7 @@ func DbInitJob(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) (*batchv1.Jo
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					RestartPolicy:      "OnFailure",
-					ServiceAccountName: "mariadb",
+					ServiceAccountName: "mariadb-operator-mariadb",
 					Containers: []corev1.Container{
 						{
 							Name:  "mariadb-init",
@@ -60,6 +59,5 @@ func DbInitJob(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) (*batchv1.Jo
 			},
 		},
 	}
-	err := controllerutil.SetControllerReference(db, job, scheme)
-	return job, err
+	return job
 }
