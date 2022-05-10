@@ -157,7 +157,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
-	if instance.Status.Completed {
+	if !instance.Status.Completed {
 		requeue, err := common.WaitOnJob(ctx, job, r.Client, r.Log)
 		r.Log.Info("Creating database...")
 		if err != nil {
