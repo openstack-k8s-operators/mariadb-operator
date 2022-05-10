@@ -101,7 +101,7 @@ func DeleteDbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHost
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					RestartPolicy:      "OnFailure",
-					ServiceAccountName: "mariadb",
+					ServiceAccountName: "mariadb-operator-mariadb",
 					Containers: []corev1.Container{
 						{
 							Name:    "mariadb-database-create",

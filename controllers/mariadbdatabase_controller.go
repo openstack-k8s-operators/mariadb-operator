@@ -122,6 +122,24 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			return ctrl.Result{}, err
 		}
 
+		op, err := controllerutil.CreateOrPatch(ctx, r.Client, job, func() error {
+			err := controllerutil.SetControllerReference(instance, job, r.Scheme)
+			if err != nil {
+				// FIXME error conditions
+				return err
+
+			}
+
+			return nil
+		})
+		if err != nil && !k8s_errors.IsNotFound(err) {
+			return ctrl.Result{}, err
+		}
+		if op != controllerutil.OperationResultNone {
+			// FIXME: error conditions
+			return ctrl.Result{RequeueAfter: time.Second * 5}, nil
+		}
+
 		requeue, err := common.WaitOnJob(ctx, job, r.Client, r.Log)
 		if err != nil {
 			return ctrl.Result{}, err
