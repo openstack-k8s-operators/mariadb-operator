@@ -159,8 +159,32 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	if instance.Status.Completed {
 		requeue, err := common.WaitOnJob(ctx, job, r.Client, r.Log)
-		r.Log.Info("Creating database...")
+
+		r.Log.Info(fmt.Sprintf("Creating database... %s", job.Name))
 		if err != nil {
+			if k8s_errors.IsNotFound(err) {
+				op, err := controllerutil.CreateOrPatch(ctx, r.Client, job, func() error {
+					err := controllerutil.SetControllerReference(instance, job, r.Scheme)
+					if err != nil {
+						return err
+					}
+
+					return nil
+				})
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+
+				if op != controllerutil.OperationResultNone {
+					common.LogForObject(
+						r,
+						fmt.Sprintf("DbDatabaseJob %s successfully reconciled - operation: %s", job.Name, string(op)),
+						instance,
+					)
+				}
+				return ctrl.Result{RequeueAfter: time.Second * 5}, err
+			}
+
 			return ctrl.Result{}, err
 		} else if requeue {
 			r.Log.Info("Waiting on database creation job...")
@@ -173,7 +197,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 	// delete the job
 	_, err = common.DeleteJob(ctx, job, r.Kclient, r.Log)
-	if err != nil {
+	if err != nil && !k8s_errors.IsNotFound(err) {
 		return ctrl.Result{}, err
 	}
 
