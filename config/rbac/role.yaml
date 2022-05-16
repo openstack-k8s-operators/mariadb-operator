@@ -14,6 +14,7 @@ rules:
   - delete
   - get
   - list
+  - patch
   - update
   - watch
 - apiGroups:
@@ -72,6 +73,12 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - mariadb.openstack.org
+  resources:
+  - mariadbdatabases/finalizers
+  verbs:
+  - update
 - apiGroups:
   - mariadb.openstack.org
   resources:
