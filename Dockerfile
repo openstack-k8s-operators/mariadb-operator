@@ -33,7 +33,7 @@ RUN cp -r templates ${DEST_ROOT}/templates
 FROM $OPERATOR_BASE_IMAGE
 
 ARG DEST_ROOT=/dest-root
-ARG USER_ID=nonroot:nonroot
+ARG USER_ID=65532
 
 ARG IMAGE_COMPONENT="mariadb-operator-container"
 ARG IMAGE_NAME="mariadb-operator"
@@ -56,7 +56,7 @@ LABEL com.redhat.component="${IMAGE_COMPONENT}" \
       io.openshift.tags="${IMAGE_TAGS}"
 ### DO NOT EDIT LINES ABOVE
 
-ENV USER_UID=1001 \
+ENV USER_UID=$USER_ID \
     OPERATOR_TEMPLATES=/usr/share/mariadb-operator/templates/ \
     WATCH_NAMESPACE=openstack,openshift-machine-api,openshift-sriov-network-operator
 
