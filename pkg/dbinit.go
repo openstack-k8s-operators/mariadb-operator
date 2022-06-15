@@ -5,11 +5,10 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // DbInitJob -
-func DbInitJob(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) *batchv1.Job {
+func DbInitJob(db *databasev1beta1.MariaDB) *batchv1.Job {
 
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{

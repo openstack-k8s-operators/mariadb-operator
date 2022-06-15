@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	common "github.com/openstack-k8s-operators/lib-common/pkg/common"
+	helper "github.com/openstack-k8s-operators/lib-common/pkg/helper"
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	mariadb "github.com/openstack-k8s-operators/mariadb-operator/pkg"
 )
@@ -96,6 +97,17 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 	}
 
+	helper, err := helper.NewHelper(
+		instance,
+		r.Client,
+		r.Kclient,
+		r.Scheme,
+		r.Log,
+	)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	finalizerName := "mariadb-" + instance.Name
 	// if deletion timestamp is set on the instance object, the CR got deleted
 	if instance.ObjectMeta.DeletionTimestamp.IsZero() {
@@ -118,41 +130,38 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 		// 2. delete the database
 		r.Log.Info(fmt.Sprintf("CR %s delete, running DB delete job", instance.Name))
-		job, err := mariadb.DeleteDbDatabaseJob(instance, db.Name, db.Spec.Secret, db.Spec.ContainerImage)
+		jobDef, err := mariadb.DeleteDbDatabaseJob(instance, db.Name, db.Spec.Secret, db.Spec.ContainerImage)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 
-		op, err := controllerutil.CreateOrPatch(ctx, r.Client, job, func() error {
-			err := controllerutil.SetControllerReference(instance, job, r.Scheme)
-			if err != nil {
-				// FIXME error conditions
-				return err
-
+		dbDeleteHash := instance.Status.Hash[databasev1beta1.DbDeleteHash]
+		dbDeleteJob := common.NewJob(
+			jobDef,
+			"deleteDB_"+instance.Name,
+			false,
+			5,
+			dbDeleteHash,
+		)
+		ctrlResult, err := dbDeleteJob.DoJob(
+			ctx,
+			helper,
+		)
+		if (ctrlResult != ctrl.Result{}) {
+			return ctrlResult, nil
+		}
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if dbDeleteJob.HasChanged() {
+			if instance.Status.Hash == nil {
+				instance.Status.Hash = make(map[string]string)
 			}
-
-			return nil
-		})
-		if err != nil && !k8s_errors.IsNotFound(err) {
-			return ctrl.Result{}, err
-		}
-		if op != controllerutil.OperationResultNone {
-			// FIXME: error conditions
-			return ctrl.Result{RequeueAfter: time.Second * 5}, nil
-		}
-
-		requeue, err := common.WaitOnJob(ctx, job, r.Client, r.Log)
-		if err != nil {
-			return ctrl.Result{}, err
-		} else if requeue {
-			r.Log.Info("Waiting on DB delete")
-			return ctrl.Result{RequeueAfter: time.Second * 5}, err
-		}
-
-		// delete the job
-		_, err = common.DeleteJob(ctx, job, r.Kclient, r.Log)
-		if err != nil {
-			return ctrl.Result{}, err
+			instance.Status.Hash[databasev1beta1.DbDeleteHash] = dbDeleteJob.GetHash()
+			if err := r.Client.Status().Update(ctx, instance); err != nil {
+				return ctrl.Result{}, err
+			}
+			r.Log.Info(fmt.Sprintf("Job %s hash added - %s", jobDef.Name, instance.Status.Hash[databasev1beta1.DbDeleteHash]))
 		}
 
 		// 3. as last step remove the finalizer on the operator CR to finish delete
@@ -171,46 +180,41 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	// Define a new Job object (hostname, password, containerImage)
-	job, err := mariadb.DbDatabaseJob(instance, db.Name, db.Spec.Secret, db.Spec.ContainerImage)
+	jobDef, err := mariadb.DbDatabaseJob(instance, db.Name, db.Spec.Secret, db.Spec.ContainerImage)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-
-	op, err := controllerutil.CreateOrPatch(ctx, r.Client, job, func() error {
-		err := controllerutil.SetControllerReference(instance, job, r.Scheme)
-		if err != nil {
-			// FIXME error conditions
-			return err
-
-		}
-
-		return nil
-	})
-	if err != nil && !k8s_errors.IsNotFound(err) {
+	dbCreateHash := instance.Status.Hash[databasev1beta1.DbCreateHash]
+	dbCreateJob := common.NewJob(
+		jobDef,
+		databasev1beta1.DbCreateHash,
+		false,
+		5,
+		dbCreateHash,
+	)
+	ctrlResult, err := dbCreateJob.DoJob(
+		ctx,
+		helper,
+	)
+	if (ctrlResult != ctrl.Result{}) {
+		return ctrlResult, nil
+	}
+	if err != nil {
 		return ctrl.Result{}, err
 	}
-	if op != controllerutil.OperationResultNone {
-		// FIXME: error conditions
-		return ctrl.Result{RequeueAfter: time.Second * 5}, nil
+	if dbCreateJob.HasChanged() {
+		if instance.Status.Hash == nil {
+			instance.Status.Hash = make(map[string]string)
+		}
+		instance.Status.Hash[databasev1beta1.DbCreateHash] = dbCreateJob.GetHash()
+		if err := r.Client.Status().Update(ctx, instance); err != nil {
+			return ctrl.Result{}, err
+		}
+		r.Log.Info(fmt.Sprintf("Job %s hash added - %s", jobDef.Name, instance.Status.Hash[databasev1beta1.DbCreateHash]))
 	}
 
-	if !instance.Status.Completed {
-		requeue, err := common.WaitOnJob(ctx, job, r.Client, r.Log)
-		r.Log.Info("Creating database...")
-		if err != nil {
-			return ctrl.Result{}, err
-		} else if requeue {
-			r.Log.Info("Waiting on database creation job...")
-			return ctrl.Result{RequeueAfter: time.Second * 5}, err
-		}
-	}
 	// database creation finished... okay to set to completed
 	if err := r.setCompleted(ctx, instance); err != nil {
-		return ctrl.Result{}, err
-	}
-	// delete the job
-	_, err = common.DeleteJob(ctx, job, r.Kclient, r.Log)
-	if err != nil {
 		return ctrl.Result{}, err
 	}
 
