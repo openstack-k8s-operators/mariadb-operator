@@ -20,6 +20,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	// DbCreateHash hash
+	DbCreateHash = "dbcreate"
+
+	// DbDeleteHash hash
+	DbDeleteHash = "dbdelete"
+)
+
 // MariaDBDatabaseSpec defines the desired state of MariaDBDatabase
 type MariaDBDatabaseSpec struct {
 	// Secret Name of secret which contains DatabasePassword
@@ -30,6 +38,8 @@ type MariaDBDatabaseSpec struct {
 // MariaDBDatabaseStatus defines the observed state of MariaDBDatabase
 type MariaDBDatabaseStatus struct {
 	Completed bool `json:"completed,omitempty"`
+	// Map of hashes to track e.g. job status
+	Hash map[string]string `json:"hash,omitempty"`
 }
 
 //+kubebuilder:object:root=true

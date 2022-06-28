@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	common "github.com/openstack-k8s-operators/lib-common/pkg/common"
+	helper "github.com/openstack-k8s-operators/lib-common/pkg/helper"
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	mariadb "github.com/openstack-k8s-operators/mariadb-operator/pkg"
 	"k8s.io/client-go/kubernetes"
@@ -151,50 +152,44 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, fmt.Errorf("error calculating configmap hash: %v", err)
 	}
 
+	helper, err := helper.NewHelper(
+		instance,
+		r.Client,
+		r.Kclient,
+		r.Scheme,
+		r.Log,
+	)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	// Define a new Job object
-	job := mariadb.DbInitJob(instance, r.Scheme)
-	dbInitHash, err := common.ObjectHash(job)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("error calculating DB init hash: %v", err)
+	jobDef := mariadb.DbInitJob(instance)
+
+	job := common.NewJob(
+		jobDef,
+		"dbinit",
+		false,
+		5,
+		instance.Status.DbInitHash,
+	)
+
+	ctrlResult, err := job.DoJob(
+		ctx,
+		helper,
+	)
+	if (ctrlResult != ctrl.Result{}) {
+		return ctrlResult, nil
 	}
-
-	if instance.Status.DbInitHash != dbInitHash {
-
-		op, err = controllerutil.CreateOrPatch(ctx, r.Client, job, func() error {
-			err := controllerutil.SetControllerReference(instance, job, r.Scheme)
-			if err != nil {
-				// FIXME error conditions
-				return err
-
-			}
-
-			return nil
-		})
-		if err != nil && !k8s_errors.IsNotFound(err) {
-			return ctrl.Result{}, err
-		}
-		if op != controllerutil.OperationResultNone {
-			// FIXME: error conditions
-			return ctrl.Result{RequeueAfter: time.Second * 5}, nil
-		}
-
-		requeue, err := common.WaitOnJob(ctx, job, r.Client, r.Log)
-		r.Log.Info("Running DB init")
-		if err != nil {
-			return ctrl.Result{}, err
-		} else if requeue {
-			r.Log.Info("Waiting on DB init")
-			return ctrl.Result{RequeueAfter: time.Second * 5}, err
-		}
-	}
-	// db init completed... okay to store the hash to disable it
-	if err := r.setDbInitHash(instance, dbInitHash); err != nil {
-		return ctrl.Result{}, err
-	}
-	// delete the job
-	_, err = common.DeleteJob(ctx, job, r.Kclient, r.Log)
 	if err != nil {
 		return ctrl.Result{}, err
+	}
+	if job.HasChanged() {
+		instance.Status.DbInitHash = job.GetHash()
+		if err := r.Client.Status().Update(ctx, instance); err != nil {
+			return ctrl.Result{}, err
+		}
+		r.Log.Info(fmt.Sprintf("Job %s hash added - %s", jobDef.Name, instance.Status.DbInitHash))
 	}
 
 	// Pod
@@ -223,17 +218,6 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	return ctrl.Result{}, nil
-}
-
-func (r *MariaDBReconciler) setDbInitHash(db *databasev1beta1.MariaDB, hashStr string) error {
-
-	if hashStr != db.Status.DbInitHash {
-		db.Status.DbInitHash = hashStr
-		if err := r.Client.Status().Update(context.TODO(), db); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (r *MariaDBReconciler) generateServiceConfigMaps(
