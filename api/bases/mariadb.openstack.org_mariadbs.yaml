@@ -63,6 +63,18 @@ spec:
                 type: string
               storageRequest:
                 type: string
+              tls:
+                description: TLSSpec defines the TLS options
+                properties:
+                  caSecretName:
+                    description: Secret in the same namespace containing the CA cert
+                      (ca.crt) for client certificate validation
+                    type: string
+                  secretName:
+                    description: Secret in the same namespace containing the server
+                      private key (tls.key) and public cert (tls.crt) for TLS
+                    type: string
+                type: object
             required:
             - containerImage
             type: object

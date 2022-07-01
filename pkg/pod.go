@@ -31,10 +31,10 @@ func Pod(db *databasev1beta1.MariaDB, configHash string) *corev1.Pod {
 							Value: configHash,
 						},
 					},
-					VolumeMounts: getVolumeMounts(),
+					VolumeMounts: getVolumeMounts(db),
 				},
 			},
-			Volumes: getVolumes(db.Name),
+			Volumes: getVolumes(db),
 		},
 	}
 	return pod

@@ -7,7 +7,7 @@ key_buffer_size = 16M
 
 [mysqld]
 basedir = /usr
-bind-address = 127.0.0.1
+bind-address = *
 datadir = /var/lib/mysql
 expire_logs_days = 10
 innodb_file_per_table = ON
@@ -22,7 +22,10 @@ query_cache_limit = 1M
 query_cache_size = 16M
 skip-external-locking
 socket = /var/lib/mysql/mysql.sock
-ssl = false
+ssl-cert = /etc/pki/tls/certs/mariadb.crt
+ssl-cipher = !SSLv2:kEECDH:kRSA:kEDH:kPSK:+3DES:!aNULL:!eNULL:!MD5:!EXP:!RC4:!SEED:!IDEA:!DES:!SSLv3:!TLSv1
+ssl-key = /etc/pki/tls/private/mariadb.key
+ssl-ca = /etc/pki/tls/certs/mariadbca.crt
 thread_cache_size = 8
 thread_stack = 256K
 tmpdir = /tmp

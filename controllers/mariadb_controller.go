@@ -26,10 +26,15 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
+	k8s_labels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	configmap "github.com/openstack-k8s-operators/lib-common/modules/common/configmap"
@@ -38,11 +43,14 @@ import (
 	job "github.com/openstack-k8s-operators/lib-common/modules/common/job"
 	labels "github.com/openstack-k8s-operators/lib-common/modules/common/labels"
 	common_rbac "github.com/openstack-k8s-operators/lib-common/modules/common/rbac"
+	secret "github.com/openstack-k8s-operators/lib-common/modules/common/secret"
 	util "github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	mariadb "github.com/openstack-k8s-operators/mariadb-operator/pkg"
 	"k8s.io/client-go/kubernetes"
 )
+
+const mariaDBReconcileLabel = "mariadb-ref"
 
 // MariaDBReconciler reconciles a MariaDB object
 type MariaDBReconciler struct {
@@ -55,17 +63,19 @@ type MariaDBReconciler struct {
 // +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbs/finalizers,verbs=update
-// +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;delete;
+// +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete;
 // +kubebuilder:rbac:groups=core,resources=endpoints,verbs=get;list;watch;create;update;delete;
-// +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;delete;
+// +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete;
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete;
-// +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;delete;
-// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;delete;
+// +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete;
+// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete;
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete;
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update
 // +kubebuilder:rbac:groups="rbac.authorization.k8s.io",resources=roles,verbs=get;list;watch;create;update
 // +kubebuilder:rbac:groups="rbac.authorization.k8s.io",resources=rolebindings,verbs=get;list;watch;create;update
 // +kubebuilder:rbac:groups="security.openshift.io",resourceNames=anyuid,resources=securitycontextconstraints,verbs=use
 // +kubebuilder:rbac:groups="",resources=pods,verbs=create;delete;get;list;patch;update;watch
+// +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete;
 
 // Reconcile reconcile mariadb API requests
 func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -250,7 +260,72 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			err.Error()))
 		return ctrl.Result{}, fmt.Errorf("error calculating configmap hash: %w", err)
 	}
+
+	//
+	// check for TLS secrets
+	//
+	if instance.Spec.TLS.SecretName != "" {
+		tlsSecret, tlsHash, err := secret.GetSecret(ctx, h, instance.Spec.TLS.SecretName, instance.Namespace)
+		if err != nil {
+			if k8s_errors.IsNotFound(err) {
+				return ctrl.Result{RequeueAfter: time.Second * 10}, fmt.Errorf("TLS secret %s not found", instance.Spec.TLS.SecretName)
+			}
+			return ctrl.Result{}, err
+		}
+
+		if value, ok := tlsSecret.Labels[mariaDBReconcileLabel]; !ok || value != instance.Name {
+			tlsSecret.GetObjectMeta().SetLabels(
+				k8s_labels.Merge(
+					tlsSecret.GetObjectMeta().GetLabels(),
+					map[string]string{
+						mariaDBReconcileLabel: instance.Name,
+					},
+				),
+			)
+			err = r.Client.Update(ctx, tlsSecret)
+			if err != nil {
+				if k8s_errors.IsConflict(err) || k8s_errors.IsNotFound(err) {
+					return ctrl.Result{Requeue: true}, err
+				}
+				return ctrl.Result{}, err
+			}
+		}
+
+		configMapVars[tlsSecret.Name] = env.SetValue(tlsHash)
+	}
+
+	if instance.Spec.TLS.CaSecretName != "" {
+		caSecret, caHash, err := secret.GetSecret(ctx, h, instance.Spec.TLS.CaSecretName, instance.Namespace)
+		if err != nil {
+			if k8s_errors.IsNotFound(err) {
+				return ctrl.Result{RequeueAfter: time.Second * 10}, fmt.Errorf("TLS CA secret %s not found", instance.Spec.TLS.CaSecretName)
+			}
+			return ctrl.Result{}, err
+		}
+
+		if value, ok := caSecret.Labels[mariaDBReconcileLabel]; !ok || value != instance.Name {
+			caSecret.GetObjectMeta().SetLabels(
+				k8s_labels.Merge(
+					caSecret.GetObjectMeta().GetLabels(),
+					map[string]string{
+						mariaDBReconcileLabel: instance.Name,
+					},
+				),
+			)
+			err = r.Client.Update(ctx, caSecret)
+			if err != nil {
+				if k8s_errors.IsConflict(err) || k8s_errors.IsNotFound(err) {
+					return ctrl.Result{Requeue: true}, err
+				}
+				return ctrl.Result{}, err
+			}
+		}
+
+		configMapVars[caSecret.Name] = env.SetValue(caHash)
+	}
+
 	mergedMapVars := env.MergeEnvs([]corev1.EnvVar{}, configMapVars)
+
 	configHash := ""
 	for _, hashEnv := range mergedMapVars {
 		configHash = configHash + hashEnv.Value
@@ -305,6 +380,16 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	op, err = controllerutil.CreateOrPatch(ctx, r.Client, pod, func() error {
 		pod.Spec.Containers[0].Image = instance.Spec.ContainerImage
+		pod.Spec.Containers[0].Env = []corev1.EnvVar{
+			{
+				Name:  "KOLLA_CONFIG_STRATEGY",
+				Value: "COPY_ALWAYS",
+			},
+			{
+				Name:  "CONFIG_HASH",
+				Value: configHash,
+			},
+		}
 		err := controllerutil.SetControllerReference(instance, pod, r.Scheme)
 		if err != nil {
 			return err
@@ -386,5 +471,22 @@ func (r *MariaDBReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
 		Owns(&corev1.Pod{}).
+		Watches(&source.Kind{Type: &corev1.Secret{}}, handler.EnqueueRequestsFromMapFunc(
+			func(o client.Object) []reconcile.Request {
+				labels := o.GetLabels()
+
+				reconcileCR, hasLabel := labels[mariaDBReconcileLabel]
+				if !hasLabel {
+					return []reconcile.Request{}
+				}
+
+				return []reconcile.Request{
+					{NamespacedName: types.NamespacedName{
+						Name:      reconcileCR,
+						Namespace: o.GetNamespace(),
+					}},
+				}
+			},
+		)).
 		Complete(r)
 }

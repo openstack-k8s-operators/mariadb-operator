@@ -21,6 +21,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// TLSSpec defines the TLS options
+type TLSSpec struct {
+	// Secret in the same namespace containing the server private key (tls.key) and public cert (tls.crt) for TLS
+	SecretName string `json:"secretName,omitempty"`
+	// Secret in the same namespace containing the CA cert (ca.crt) for client certificate validation
+	CaSecretName string `json:"caSecretName,omitempty"`
+}
+
 // MariaDBSpec defines the desired state of MariaDB
 type MariaDBSpec struct {
 	// Secret containing a RootPassword
@@ -34,6 +42,8 @@ type MariaDBSpec struct {
 	ContainerImage string `json:"containerImage"`
 
 	AdoptionRedirect AdoptionRedirectSpec `json:"adoptionRedirect,omitempty"`
+
+	TLS TLSSpec `json:"tls,omitempty"`
 }
 
 // AdoptionRedirectSpec defines redirection to a different DB instance during Adoption

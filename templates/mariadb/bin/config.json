@@ -4,8 +4,29 @@
         {
             "source": "/var/lib/config-data/galera.cnf",
             "dest": "/etc/my.cnf.d/galera.cnf",
-            "owner": "root",
+            "owner": "mysql",
             "perm": "0600"
+        },
+        {
+            "source": "/var/lib/tls-data/tls.key",
+            "dest": "/etc/pki/tls/private/mariadb.key",
+            "owner": "mysql",
+            "perm": "0600",
+            "optional": true
+        },
+        {
+            "source": "/var/lib/tls-data/tls.crt",
+            "dest": "/etc/pki/tls/certs/mariadb.crt",
+            "owner": "mysql",
+            "perm": "0600",
+            "optional": true
+        },
+        {
+            "source": "/var/lib/tlsca-data/ca.crt",
+            "dest": "/etc/pki/tls/certs/mariadbca.crt",
+            "owner": "mysql",
+            "perm": "0600",
+            "optional": true
         }
     ]
 }
