@@ -30,8 +30,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	common "github.com/openstack-k8s-operators/lib-common/pkg/common"
-	helper "github.com/openstack-k8s-operators/lib-common/pkg/helper"
+	configmap "github.com/openstack-k8s-operators/lib-common/modules/common/configmap"
+	env "github.com/openstack-k8s-operators/lib-common/modules/common/env"
+	helper "github.com/openstack-k8s-operators/lib-common/modules/common/helper"
+	job "github.com/openstack-k8s-operators/lib-common/modules/common/job"
+	labels "github.com/openstack-k8s-operators/lib-common/modules/common/labels"
+	util "github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	mariadb "github.com/openstack-k8s-operators/mariadb-operator/pkg"
 	"k8s.io/client-go/kubernetes"
@@ -88,6 +92,17 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
+	h, err := helper.NewHelper(
+		instance,
+		r.Client,
+		r.Kclient,
+		r.Scheme,
+		r.Log,
+	)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	// PVC
 	pvc := mariadb.Pvc(instance, r.Scheme)
 	op, err := controllerutil.CreateOrPatch(ctx, r.Client, pvc, func() error {
@@ -129,20 +144,20 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	if op != controllerutil.OperationResultNone {
-		common.LogForObject(
-			r,
+		util.LogForObject(
+			h,
 			fmt.Sprintf("Service %s successfully reconciled - operation: %s", service.Name, string(op)),
 			instance,
 		)
 	}
 
 	// Generate the config maps for the various services
-	configMapVars := make(map[string]common.EnvSetter)
-	err = r.generateServiceConfigMaps(ctx, instance, &configMapVars)
+	configMapVars := make(map[string]env.Setter)
+	err = r.generateServiceConfigMaps(ctx, h, instance, &configMapVars)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	mergedMapVars := common.MergeEnvs([]corev1.EnvVar{}, configMapVars)
+	mergedMapVars := env.MergeEnvs([]corev1.EnvVar{}, configMapVars)
 	configHash := ""
 	for _, hashEnv := range mergedMapVars {
 		configHash = configHash + hashEnv.Value
@@ -152,21 +167,10 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, fmt.Errorf("error calculating configmap hash: %v", err)
 	}
 
-	helper, err := helper.NewHelper(
-		instance,
-		r.Client,
-		r.Kclient,
-		r.Scheme,
-		r.Log,
-	)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
 	// Define a new Job object
 	jobDef := mariadb.DbInitJob(instance)
 
-	job := common.NewJob(
+	job := job.NewJob(
 		jobDef,
 		"dbinit",
 		false,
@@ -176,7 +180,7 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	ctrlResult, err := job.DoJob(
 		ctx,
-		helper,
+		h,
 	)
 	if (ctrlResult != ctrl.Result{}) {
 		return ctrlResult, nil
@@ -210,8 +214,8 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	if op != controllerutil.OperationResultNone {
-		common.LogForObject(
-			r,
+		util.LogForObject(
+			h,
 			fmt.Sprintf("Pod %s successfully reconciled - operation: %s", pod.Name, string(op)),
 			instance,
 		)
@@ -222,20 +226,20 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 func (r *MariaDBReconciler) generateServiceConfigMaps(
 	ctx context.Context,
+	h *helper.Helper,
 	instance *databasev1beta1.MariaDB,
-	envVars *map[string]common.EnvSetter,
+	envVars *map[string]env.Setter,
 ) error {
-	// FIXME: use common.GetLabels?
-	cmLabels := mariadb.GetLabels(instance.Name)
+	cmLabels := labels.GetLabels(instance, labels.GetGroupLabel(mariadb.ServiceName), map[string]string{})
 	templateParameters := make(map[string]interface{})
 
 	// ConfigMaps for mariadb
-	cms := []common.Template{
+	cms := []util.Template{
 		// ScriptsConfigMap
 		{
 			Name:               "mariadb-" + instance.Name,
 			Namespace:          instance.Namespace,
-			Type:               common.TemplateTypeScripts,
+			Type:               util.TemplateTypeScripts,
 			InstanceType:       instance.Kind,
 			AdditionalTemplate: map[string]string{},
 			ConfigOptions:      templateParameters,
@@ -243,7 +247,7 @@ func (r *MariaDBReconciler) generateServiceConfigMaps(
 		},
 	}
 
-	err := common.EnsureConfigMaps(ctx, r, instance, cms, envVars)
+	err := configmap.EnsureConfigMaps(ctx, h, instance, cms, envVars)
 
 	if err != nil {
 		// FIXME error conditions here
