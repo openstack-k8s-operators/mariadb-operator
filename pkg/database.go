@@ -3,7 +3,7 @@ package mariadb
 import (
 	"strings"
 
-	common "github.com/openstack-k8s-operators/lib-common/pkg/common"
+	util "github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -20,7 +20,7 @@ type dbCreateOptions struct {
 func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName string, databaseSecret string, containerImage string) (*batchv1.Job, error) {
 
 	opts := dbCreateOptions{database.Spec.Name, databaseHostName, "root"}
-	dbCmd, err := common.ExecuteTemplateFile("database.sh", &opts)
+	dbCmd, err := util.ExecuteTemplateFile("database.sh", &opts)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName s
 func DeleteDbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName string, databaseSecret string, containerImage string) (*batchv1.Job, error) {
 
 	opts := dbCreateOptions{database.Spec.Name, databaseHostName, "root"}
-	delCmd, err := common.ExecuteTemplateFile("delete_database.sh", &opts)
+	delCmd, err := util.ExecuteTemplateFile("delete_database.sh", &opts)
 	if err != nil {
 		return nil, err
 	}
