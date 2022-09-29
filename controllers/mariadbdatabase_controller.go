@@ -28,7 +28,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	helper "github.com/openstack-k8s-operators/lib-common/modules/common/helper"
 	job "github.com/openstack-k8s-operators/lib-common/modules/common/job"
@@ -106,72 +105,6 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	)
 	if err != nil {
 		return ctrl.Result{}, err
-	}
-
-	finalizerName := "mariadb-" + instance.Name
-	// if deletion timestamp is set on the instance object, the CR got deleted
-	if instance.ObjectMeta.DeletionTimestamp.IsZero() {
-		// if it is a new instance, add the finalizer
-		if !controllerutil.ContainsFinalizer(instance, finalizerName) {
-			controllerutil.AddFinalizer(instance, finalizerName)
-			err = r.Client.Update(ctx, instance)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-			r.Log.Info(fmt.Sprintf("Finalizer %s added to CR %s", finalizerName, instance.Name))
-		}
-
-	} else {
-		// 1. check if finalizer is there
-		// Reconcile if finalizer got already removed
-		if !controllerutil.ContainsFinalizer(instance, finalizerName) {
-			return ctrl.Result{}, nil
-		}
-
-		// 2. delete the database
-		r.Log.Info(fmt.Sprintf("CR %s delete, running DB delete job", instance.Name))
-		jobDef, err := mariadb.DeleteDbDatabaseJob(instance, db.Name, db.Spec.Secret, db.Spec.ContainerImage)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-
-		dbDeleteHash := instance.Status.Hash[databasev1beta1.DbDeleteHash]
-		dbDeleteJob := job.NewJob(
-			jobDef,
-			"deleteDB_"+instance.Name,
-			false,
-			5,
-			dbDeleteHash,
-		)
-		ctrlResult, err := dbDeleteJob.DoJob(
-			ctx,
-			helper,
-		)
-		if (ctrlResult != ctrl.Result{}) {
-			return ctrlResult, nil
-		}
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		if dbDeleteJob.HasChanged() {
-			if instance.Status.Hash == nil {
-				instance.Status.Hash = make(map[string]string)
-			}
-			instance.Status.Hash[databasev1beta1.DbDeleteHash] = dbDeleteJob.GetHash()
-			if err := r.Client.Status().Update(ctx, instance); err != nil {
-				return ctrl.Result{}, err
-			}
-			r.Log.Info(fmt.Sprintf("Job %s hash added - %s", jobDef.Name, instance.Status.Hash[databasev1beta1.DbDeleteHash]))
-		}
-
-		// 3. as last step remove the finalizer on the operator CR to finish delete
-		controllerutil.RemoveFinalizer(instance, finalizerName)
-		err = r.Client.Update(ctx, instance)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		r.Log.Info(fmt.Sprintf("CR %s deleted", instance.Name))
-		return ctrl.Result{}, nil
 	}
 
 	if db.Status.DbInitHash == "" {
