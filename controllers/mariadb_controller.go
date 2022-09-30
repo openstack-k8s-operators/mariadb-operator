@@ -128,8 +128,8 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{RequeueAfter: time.Second * 5}, err
 	}
 
+	// Service
 	service := mariadb.Service(instance, r.Scheme)
-
 	op, err = controllerutil.CreateOrPatch(ctx, r.Client, service, func() error {
 		err := controllerutil.SetControllerReference(instance, service, r.Scheme)
 		if err != nil {
@@ -137,18 +137,38 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 		return nil
 	})
-
 	if err != nil {
 		// FIXME: add error condition
 		return ctrl.Result{}, err
 	}
-
 	if op != controllerutil.OperationResultNone {
 		util.LogForObject(
 			h,
 			fmt.Sprintf("Service %s successfully reconciled - operation: %s", service.Name, string(op)),
 			instance,
 		)
+	}
+
+	// Endpoints
+	endpoints := mariadb.Endpoints(instance, r.Scheme)
+	if endpoints != nil {
+		op, err = controllerutil.CreateOrPatch(ctx, r.Client, endpoints, func() error {
+			err := controllerutil.SetControllerReference(instance, endpoints, r.Scheme)
+			if err != nil {
+				return err
+			}
+			return nil
+		})
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if op != controllerutil.OperationResultNone {
+			util.LogForObject(
+				h,
+				fmt.Sprintf("Endpoints %s successfully reconciled - operation: %s", endpoints.Name, string(op)),
+				instance,
+			)
+		}
 	}
 
 	// Generate the config maps for the various services

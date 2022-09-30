@@ -35,6 +35,14 @@ spec:
           spec:
             description: MariaDBSpec defines the desired state of MariaDB
             properties:
+              adoptionRedirect:
+                description: AdoptionRedirectSpec defines redirection to a different
+                  DB instance during Adoption
+                properties:
+                  host:
+                    description: MariaDB host to redirect to (IP or name)
+                    type: string
+                type: object
               containerImage:
                 type: string
               secret:
