@@ -104,7 +104,7 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// PVC
-	pvc := mariadb.Pvc(instance, r.Scheme)
+	pvc := mariadb.Pvc(instance)
 	op, err := controllerutil.CreateOrPatch(ctx, r.Client, pvc, func() error {
 
 		pvc.Spec.Resources.Requests = corev1.ResourceList{
@@ -129,7 +129,7 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Service
-	service := mariadb.Service(instance, r.Scheme)
+	service := mariadb.Service(instance)
 	op, err = controllerutil.CreateOrPatch(ctx, r.Client, service, func() error {
 		err := controllerutil.SetControllerReference(instance, service, r.Scheme)
 		if err != nil {
@@ -150,7 +150,7 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Endpoints
-	endpoints := mariadb.Endpoints(instance, r.Scheme)
+	endpoints := mariadb.Endpoints(instance)
 	if endpoints != nil {
 		op, err = controllerutil.CreateOrPatch(ctx, r.Client, endpoints, func() error {
 			err := controllerutil.SetControllerReference(instance, endpoints, r.Scheme)
@@ -217,7 +217,7 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Pod
-	pod := mariadb.Pod(instance, r.Scheme, configHash)
+	pod := mariadb.Pod(instance, configHash)
 
 	op, err = controllerutil.CreateOrPatch(ctx, r.Client, pod, func() error {
 		pod.Spec.Containers[0].Image = instance.Spec.ContainerImage

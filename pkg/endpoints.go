@@ -6,11 +6,10 @@ import (
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // Endpoints func
-func Endpoints(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) *corev1.Endpoints {
+func Endpoints(db *databasev1beta1.MariaDB) *corev1.Endpoints {
 	adoptionHost := db.Spec.AdoptionRedirect.Host
 	// We only create Endpoints directly if the adoption host is
 	// defined and it has an IP format (not FQDN format).

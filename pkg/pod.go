@@ -4,11 +4,10 @@ import (
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // Pod -
-func Pod(db *databasev1beta1.MariaDB, scheme *runtime.Scheme, configHash string) *corev1.Pod {
+func Pod(db *databasev1beta1.MariaDB, configHash string) *corev1.Pod {
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{

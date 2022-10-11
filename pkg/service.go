@@ -4,25 +4,24 @@ import (
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"net"
 )
 
 // Service func
-func Service(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) *corev1.Service {
+func Service(db *databasev1beta1.MariaDB) *corev1.Service {
 	adoptionHost := db.Spec.AdoptionRedirect.Host
 	adoptionHostIsIP := adoptionHost == "" || net.ParseIP(adoptionHost) != nil
 
 	if adoptionHost != "" {
 		if adoptionHostIsIP {
-			return externalServiceFromIP(db, scheme)
+			return externalServiceFromIP(db)
 		}
-		return externalServiceFromName(db, scheme)
+		return externalServiceFromName(db)
 	}
-	return internalService(db, scheme)
+	return internalService(db)
 }
 
-func internalService(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) *corev1.Service {
+func internalService(db *databasev1beta1.MariaDB) *corev1.Service {
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      db.Name,
@@ -39,7 +38,7 @@ func internalService(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) *corev
 	return svc
 }
 
-func externalServiceFromIP(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) *corev1.Service {
+func externalServiceFromIP(db *databasev1beta1.MariaDB) *corev1.Service {
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      db.Name,
@@ -54,7 +53,7 @@ func externalServiceFromIP(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) 
 	return svc
 }
 
-func externalServiceFromName(db *databasev1beta1.MariaDB, scheme *runtime.Scheme) *corev1.Service {
+func externalServiceFromName(db *databasev1beta1.MariaDB) *corev1.Service {
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      db.Name,
