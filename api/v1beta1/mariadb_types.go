@@ -30,6 +30,14 @@ type MariaDBSpec struct {
 	StorageRequest string `json:"storageRequest,omitempty"`
 
 	ContainerImage string `json:"containerImage,omitempty"`
+
+	AdoptionRedirect AdoptionRedirectSpec `json:"adoptionRedirect,omitempty"`
+}
+
+// AdoptionRedirectSpec defines redirection to a different DB instance during Adoption
+type AdoptionRedirectSpec struct {
+	// MariaDB host to redirect to (IP or name)
+	Host string `json:"host,omitempty"`
 }
 
 // MariaDBStatus defines the observed state of MariaDB
