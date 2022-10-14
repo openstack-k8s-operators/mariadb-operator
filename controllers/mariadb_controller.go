@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
+	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	configmap "github.com/openstack-k8s-operators/lib-common/modules/common/configmap"
 	env "github.com/openstack-k8s-operators/lib-common/modules/common/env"
 	helper "github.com/openstack-k8s-operators/lib-common/modules/common/helper"
@@ -92,6 +93,27 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
+	//
+	// initialize status
+	//
+	if instance.Status.Conditions == nil {
+		instance.Status.Conditions = condition.Conditions{}
+		// initialize conditions used later as Status=Unknown
+		cl := condition.CreateList(
+			condition.UnknownCondition(condition.ExposeServiceReadyCondition, condition.InitReason, condition.ExposeServiceReadyInitMessage),
+			condition.UnknownCondition(condition.ServiceConfigReadyCondition, condition.InitReason, condition.ServiceConfigReadyInitMessage),
+			condition.UnknownCondition(databasev1beta1.MariaDBInitializedCondition, condition.InitReason, databasev1beta1.MariaDBInitializedInitMessage),
+			condition.UnknownCondition(condition.DeploymentReadyCondition, condition.InitReason, condition.DeploymentReadyInitMessage),
+		)
+
+		instance.Status.Conditions.Init(&cl)
+
+		// Register overall status immediately to have an early feedback e.g. in the cli
+		if err := r.Client.Status().Update(ctx, instance); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
 	h, err := helper.NewHelper(
 		instance,
 		r.Client,
@@ -103,7 +125,28 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
+	// Always patch the instance status when exiting this function so we can persist any changes.
+	defer func() {
+		// update the overall status condition if service is ready
+		if instance.IsReady() {
+			instance.Status.Conditions.MarkTrue(condition.ReadyCondition, condition.ReadyMessage)
+		}
+
+		if err := h.SetAfter(instance); err != nil {
+			util.LogErrorForObject(h, err, "Set after and calc patch/diff", instance)
+		}
+
+		if changed := h.GetChanges()["status"]; changed {
+			patch := client.MergeFrom(h.GetBeforeObject())
+
+			if err := r.Client.Status().Patch(ctx, instance, patch); err != nil && !k8s_errors.IsNotFound(err) {
+				util.LogErrorForObject(h, err, "Update status", instance)
+			}
+		}
+	}()
+
 	// PVC
+	// TODO: Add PVC condition handling?  We don't currently in other operators that have PVC concerns, though
 	pvc := mariadb.Pvc(instance)
 	op, err := controllerutil.CreateOrPatch(ctx, r.Client, pvc, func() error {
 
@@ -138,7 +181,12 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return nil
 	})
 	if err != nil {
-		// FIXME: add error condition
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.ExposeServiceReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			condition.ExposeServiceReadyErrorMessage,
+			err.Error()))
 		return ctrl.Result{}, err
 	}
 	if op != controllerutil.OperationResultNone {
@@ -160,6 +208,12 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return nil
 		})
 		if err != nil {
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.ExposeServiceReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityWarning,
+				condition.ExposeServiceReadyErrorMessage,
+				err.Error()))
 			return ctrl.Result{}, err
 		}
 		if op != controllerutil.OperationResultNone {
@@ -171,11 +225,19 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	}
 
+	instance.Status.Conditions.MarkTrue(condition.ExposeServiceReadyCondition, condition.ExposeServiceReadyMessage)
+
 	// Generate the config maps for the various services
 	configMapVars := make(map[string]env.Setter)
 	err = r.generateServiceConfigMaps(ctx, h, instance, &configMapVars)
 	if err != nil {
-		return ctrl.Result{}, err
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.ServiceConfigReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			condition.ServiceConfigReadyErrorMessage,
+			err.Error()))
+		return ctrl.Result{}, fmt.Errorf("error calculating configmap hash: %v", err)
 	}
 	mergedMapVars := env.MergeEnvs([]corev1.EnvVar{}, configMapVars)
 	configHash := ""
@@ -183,9 +245,7 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		configHash = configHash + hashEnv.Value
 	}
 
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("error calculating configmap hash: %v", err)
-	}
+	instance.Status.Conditions.MarkTrue(condition.ServiceConfigReadyCondition, condition.ServiceConfigReadyMessage)
 
 	// Define a new Job object
 	jobDef := mariadb.DbInitJob(instance)
@@ -203,9 +263,20 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		h,
 	)
 	if (ctrlResult != ctrl.Result{}) {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			databasev1beta1.MariaDBInitializedCondition,
+			condition.RequestedReason,
+			condition.SeverityInfo,
+			databasev1beta1.MariaDBInitializedRunningMessage))
 		return ctrlResult, nil
 	}
 	if err != nil {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			databasev1beta1.MariaDBInitializedCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			databasev1beta1.MariaDBInitializedErrorMessage,
+			err.Error()))
 		return ctrl.Result{}, err
 	}
 	if job.HasChanged() {
@@ -215,6 +286,8 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 		r.Log.Info(fmt.Sprintf("Job %s hash added - %s", jobDef.Name, instance.Status.DbInitHash))
 	}
+
+	instance.Status.Conditions.MarkTrue(databasev1beta1.MariaDBInitializedCondition, databasev1beta1.MariaDBInitializedReadyMessage)
 
 	// Pod
 	pod := mariadb.Pod(instance, configHash)
@@ -229,16 +302,31 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	})
 
 	if err != nil {
-		//FIXME: error conditions
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.DeploymentReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			condition.DeploymentReadyErrorMessage,
+			err.Error()))
 		return ctrl.Result{}, err
 	}
 
 	if op != controllerutil.OperationResultNone {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.DeploymentReadyCondition,
+			condition.RequestedReason,
+			condition.SeverityInfo,
+			condition.DeploymentReadyRunningMessage))
+
 		util.LogForObject(
 			h,
 			fmt.Sprintf("Pod %s successfully reconciled - operation: %s", pod.Name, string(op)),
 			instance,
 		)
+	}
+
+	if pod.Status.Phase == corev1.PodRunning {
+		instance.Status.Conditions.MarkTrue(condition.DeploymentReadyCondition, condition.DeploymentReadyMessage)
 	}
 
 	return ctrl.Result{}, nil

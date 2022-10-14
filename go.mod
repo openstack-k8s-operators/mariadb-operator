@@ -6,7 +6,7 @@ require (
 	github.com/go-logr/logr v1.2.3
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.19.0
-	github.com/openstack-k8s-operators/lib-common/modules/common v0.0.0-20220923094431-9fca0c85a9dc
+	github.com/openstack-k8s-operators/lib-common/modules/common v0.0.0-20221014085528-1bd40eedfb90
 	github.com/openstack-k8s-operators/mariadb-operator/api v0.0.0-20220707171728-88a190b24296
 	k8s.io/api v0.24.3
 	k8s.io/apimachinery v0.24.3
