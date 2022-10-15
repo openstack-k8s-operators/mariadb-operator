@@ -250,15 +250,14 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// Define a new Job object
 	jobDef := mariadb.DbInitJob(instance)
 
-	job := job.NewJob(
+	DBInitJob := job.NewJob(
 		jobDef,
 		"dbinit",
-		false,
-		5,
+		time.Duration(5)*time.Second,
 		instance.Status.DbInitHash,
 	)
 
-	ctrlResult, err := job.DoJob(
+	ctrlResult, err := DBInitJob.DoJob(
 		ctx,
 		h,
 	)
@@ -279,14 +278,17 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			err.Error()))
 		return ctrl.Result{}, err
 	}
-	if job.HasChanged() {
-		instance.Status.DbInitHash = job.GetHash()
+	if DBInitJob.HasChanged() {
+		instance.Status.DbInitHash = DBInitJob.GetHash()
 		if err := r.Client.Status().Update(ctx, instance); err != nil {
 			return ctrl.Result{}, err
 		}
 		r.Log.Info(fmt.Sprintf("Job %s hash added - %s", jobDef.Name, instance.Status.DbInitHash))
 	}
-
+	err = job.DeleteAllSucceededJobs(ctx, h, []string{instance.Status.DbInitHash})
+	if err != nil {
+		return ctrlResult, err
+	}
 	instance.Status.Conditions.MarkTrue(databasev1beta1.MariaDBInitializedCondition, databasev1beta1.MariaDBInitializedReadyMessage)
 
 	// Pod

@@ -121,8 +121,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	dbCreateJob := job.NewJob(
 		jobDef,
 		databasev1beta1.DbCreateHash,
-		false,
-		5,
+		time.Duration(5)*time.Second,
 		dbCreateHash,
 	)
 	ctrlResult, err := dbCreateJob.DoJob(
@@ -144,6 +143,10 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			return ctrl.Result{}, err
 		}
 		r.Log.Info(fmt.Sprintf("Job %s hash added - %s", jobDef.Name, instance.Status.Hash[databasev1beta1.DbCreateHash]))
+	}
+	err = job.DeleteAllSucceededJobs(ctx, helper, []string{instance.Status.Hash[databasev1beta1.DbCreateHash]})
+	if err != nil {
+		return ctrlResult, err
 	}
 
 	// database creation finished... okay to set to completed
