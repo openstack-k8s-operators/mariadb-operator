@@ -74,6 +74,7 @@ type MariaDBReconciler struct {
 // +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbs/finalizers,verbs=update
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;delete;
+// +kubebuilder:rbac:groups=core,resources=endpoints,verbs=get;list;watch;create;update;delete;
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;delete;
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;delete;
 // +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;delete;
