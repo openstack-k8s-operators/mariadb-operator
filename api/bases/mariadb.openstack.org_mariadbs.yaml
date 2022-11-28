@@ -53,6 +53,7 @@ spec:
                     type: string
                 type: object
               containerImage:
+                default: quay.io/tripleozedcentos9/openstack-mariadb:current-tripleo
                 type: string
               secret:
                 description: Secret containing a RootPassword
