@@ -6,4 +6,4 @@ spec:
   secret: mariadb-secret
   storageClass: local-storage
   storageRequest: 500M
-  containerImage: quay.io/tripleowallabycentos9/openstack-mariadb:current-tripleo
+  containerImage: quay.io/tripleozedcentos9/openstack-mariadb:current-tripleo
