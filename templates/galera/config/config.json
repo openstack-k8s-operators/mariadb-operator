@@ -1,0 +1,25 @@
+{
+    "command": "/usr/local/bin/detect_gcomm_and_start.sh",
+    "config_files": [
+        {
+            "source": "/var/lib/pod-config-data/galera.cnf",
+            "dest": "/etc/my.cnf.d/galera.cnf",
+            "owner": "root",
+            "perm": "0600"
+        },
+        {
+            "source": "/var/lib/operator-scripts",
+            "dest": "/usr/local/bin",
+            "owner": "root",
+            "perm": "0755",
+            "merge": "true"
+        }
+    ],
+    "permissions": [
+        {
+            "path": "/var/lib/mysql",
+            "owner": "mysql:mysql",
+            "recurse": "true"
+        }
+    ]
+}

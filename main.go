@@ -91,6 +91,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = (&controllers.GaleraReconciler{
+		Client:  mgr.GetClient(),
+		Kclient: kclient,
+		Log:     ctrl.Log.WithName("controllers").WithName("Galera"),
+		Scheme:  mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Galera")
+		os.Exit(1)
+	}
 	if err = (&controllers.MariaDBReconciler{
 		Client:  mgr.GetClient(),
 		Kclient: kclient,

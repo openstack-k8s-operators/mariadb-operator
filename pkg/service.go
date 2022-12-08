@@ -9,27 +9,33 @@ import (
 
 // Service func
 func Service(db *databasev1beta1.MariaDB) *corev1.Service {
-	adoptionHost := db.Spec.AdoptionRedirect.Host
+	adoption := &db.Spec.AdoptionRedirect
+	return ServiceForAdoption(db, adoption, "mariadb")
+}
+
+// ServiceForAdoption - create a service based on the adoption configuration
+func ServiceForAdoption(db metav1.Object, adoption *databasev1beta1.AdoptionRedirectSpec, appSelector string) *corev1.Service {
+	adoptionHost := adoption.Host
 	adoptionHostIsIP := adoptionHost == "" || net.ParseIP(adoptionHost) != nil
 
 	if adoptionHost != "" {
 		if adoptionHostIsIP {
-			return externalServiceFromIP(db)
+			return externalServiceFromIP(db, adoption)
 		}
-		return externalServiceFromName(db)
+		return externalServiceFromName(db, adoption)
 	}
-	return internalService(db)
+	return internalService(db, adoption, appSelector)
 }
 
-func internalService(db *databasev1beta1.MariaDB) *corev1.Service {
+func internalService(db metav1.Object, adoption *databasev1beta1.AdoptionRedirectSpec, appSelector string) *corev1.Service {
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      db.Name,
-			Namespace: db.Namespace,
-			Labels:    GetLabels(db.Name),
+			Name:      db.GetName(),
+			Namespace: db.GetNamespace(),
+			Labels:    ServiceLabels(db),
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{"app": "mariadb"},
+			Selector: map[string]string{"app": appSelector},
 			Ports: []corev1.ServicePort{
 				{Name: "database", Port: 3306, Protocol: corev1.ProtocolTCP},
 			},
@@ -38,12 +44,12 @@ func internalService(db *databasev1beta1.MariaDB) *corev1.Service {
 	return svc
 }
 
-func externalServiceFromIP(db *databasev1beta1.MariaDB) *corev1.Service {
+func externalServiceFromIP(db metav1.Object, adoption *databasev1beta1.AdoptionRedirectSpec) *corev1.Service {
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      db.Name,
-			Namespace: db.Namespace,
-			Labels:    GetLabels(db.Name),
+			Name:      db.GetName(),
+			Namespace: db.GetNamespace(),
+			Labels:    ServiceLabels(db),
 		},
 		Spec: corev1.ServiceSpec{
 			ClusterIP: "None",
@@ -53,17 +59,42 @@ func externalServiceFromIP(db *databasev1beta1.MariaDB) *corev1.Service {
 	return svc
 }
 
-func externalServiceFromName(db *databasev1beta1.MariaDB) *corev1.Service {
+func externalServiceFromName(db metav1.Object, adoption *databasev1beta1.AdoptionRedirectSpec) *corev1.Service {
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      db.Name,
-			Namespace: db.Namespace,
-			Labels:    GetLabels(db.Name),
+			Name:      db.GetName(),
+			Namespace: db.GetNamespace(),
+			Labels:    ServiceLabels(db),
 		},
 		Spec: corev1.ServiceSpec{
-			ExternalName: db.Spec.AdoptionRedirect.Host,
+			ExternalName: adoption.Host,
 			Type:         corev1.ServiceTypeExternalName,
 		},
 	}
 	return svc
+}
+
+// HeadlessService - service to give galera pods connectivity via DNS
+func HeadlessService(db metav1.Object, appSelector string) *corev1.Service {
+	name := ResourceName(db.GetName())
+	dep := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: db.GetNamespace(),
+		},
+		Spec: corev1.ServiceSpec{
+			Type:      "ClusterIP",
+			ClusterIP: "None",
+			Ports: []corev1.ServicePort{
+				{Name: "mysql", Protocol: "TCP", Port: 3306},
+			},
+			Selector: map[string]string{
+				"app": appSelector,
+			},
+			// This is required to let pod communicate when
+			// they are still in Starting state
+			PublishNotReadyAddresses: true,
+		},
+	}
+	return dep
 }
