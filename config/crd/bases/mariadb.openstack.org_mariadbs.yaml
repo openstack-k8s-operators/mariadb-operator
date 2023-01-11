@@ -16,6 +16,10 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - description: Networks
+      jsonPath: .status.networks
+      name: Networks
+      type: string
     - description: Status
       jsonPath: .status.conditions[0].status
       name: Status
@@ -55,6 +59,12 @@ spec:
               containerImage:
                 default: quay.io/tripleozedcentos9/openstack-mariadb:current-tripleo
                 type: string
+              networkAttachmentDefinitions:
+                description: NetworkAttachmentDefinitions list of network attachment
+                  definitions the service pod gets attached to
+                items:
+                  type: string
+                type: array
               secret:
                 description: Secret containing a RootPassword
                 type: string
@@ -112,6 +122,12 @@ spec:
               dbInitHash:
                 description: db init completed
                 type: string
+              networks:
+                description: Networks in addtion to the cluster network, the service
+                  is attached to
+                items:
+                  type: string
+                type: array
             required:
             - dbInitHash
             type: object

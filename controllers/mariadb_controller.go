@@ -291,7 +291,10 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	instance.Status.Conditions.MarkTrue(databasev1beta1.MariaDBInitializedCondition, databasev1beta1.MariaDBInitializedReadyMessage)
 
 	// Pod
-	pod := mariadb.Pod(instance, configHash)
+	pod, err := mariadb.Pod(instance, configHash)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
 	op, err = controllerutil.CreateOrPatch(ctx, r.Client, pod, func() error {
 		pod.Spec.Containers[0].Image = instance.Spec.ContainerImage
@@ -326,6 +329,7 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		)
 	}
 
+	instance.Status.Networks = instance.Spec.NetworkAttachmentDefinitions
 	if pod.Status.Phase == corev1.PodRunning {
 		instance.Status.Conditions.MarkTrue(condition.DeploymentReadyCondition, condition.DeploymentReadyMessage)
 	}

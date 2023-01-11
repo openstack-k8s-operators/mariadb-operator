@@ -31,6 +31,10 @@ type MariaDBSpec struct {
 	StorageRequest string `json:"storageRequest,omitempty"`
 
 	// +kubebuilder:validation:Optional
+	// NetworkAttachmentDefinitions list of network attachment definitions the service pod gets attached to
+	NetworkAttachmentDefinitions []string `json:"networkAttachmentDefinitions"`
+
+	// +kubebuilder:validation:Optional
 	// +kubebuilder:default="quay.io/tripleozedcentos9/openstack-mariadb:current-tripleo"
 	ContainerImage string `json:"containerImage,omitempty"`
 
@@ -50,10 +54,14 @@ type MariaDBStatus struct {
 
 	// Conditions
 	Conditions condition.Conditions `json:"conditions,omitempty" optional:"true"`
+
+	// Networks in addtion to the cluster network, the service is attached to
+	Networks []string `json:"networks,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+kubebuilder:printcolumn:name="Networks",type="string",JSONPath=".status.networks",description="Networks"
 //+kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[0].status",description="Status"
 //+kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.conditions[0].message",description="Message"
 
