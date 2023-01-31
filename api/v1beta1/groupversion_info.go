@@ -15,8 +15,8 @@ limitations under the License.
 */
 
 // Package v1beta1 contains API Schema definitions for the mariadb v1beta1 API group
-//+kubebuilder:object:generate=true
-//+groupName=mariadb.openstack.org
+// +kubebuilder:object:generate=true
+// +groupName=mariadb.openstack.org
 package v1beta1
 
 import (
