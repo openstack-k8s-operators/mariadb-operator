@@ -341,6 +341,8 @@ func (r *MariaDBReconciler) generateServiceConfigMaps(
 ) error {
 	cmLabels := labels.GetLabels(instance, labels.GetGroupLabel(mariadb.ServiceName), map[string]string{})
 	templateParameters := make(map[string]interface{})
+	// TODO: We probably need to make this configurable.
+	templateParameters["DbMaxTimeout"] = 60
 
 	// ConfigMaps for mariadb
 	cms := []util.Template{
