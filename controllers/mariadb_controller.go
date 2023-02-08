@@ -169,7 +169,7 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	if op != controllerutil.OperationResultNone {
 		r.Log.Info(fmt.Sprintf("%s %s database PVC %s - operation: %s", instance.Kind, instance.Name, pvc.Name, string(op)))
-		return ctrl.Result{RequeueAfter: time.Second * 5}, err
+		return ctrl.Result{RequeueAfter: time.Duration(5) * time.Second}, err
 	}
 
 	// Service
@@ -255,7 +255,7 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		jobDef,
 		"dbinit",
 		false,
-		5,
+		time.Duration(5)*time.Second,
 		instance.Status.DbInitHash,
 	)
 

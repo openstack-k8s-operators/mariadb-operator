@@ -93,7 +93,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		if !k8s_errors.IsNotFound(err) {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: time.Second * 10}, nil
+		return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
 	}
 
 	helper, err := helper.NewHelper(
@@ -109,7 +109,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	if db.Status.DbInitHash == "" {
 		r.Log.Info("DB initialization not complete. Requeue...")
-		return ctrl.Result{RequeueAfter: time.Second * 10}, err
+		return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, err
 	}
 
 	// Define a new Job object (hostname, password, containerImage)
@@ -122,7 +122,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		jobDef,
 		databasev1beta1.DbCreateHash,
 		false,
-		5,
+		time.Duration(5)*time.Second,
 		dbCreateHash,
 	)
 	ctrlResult, err := dbCreateJob.DoJob(
