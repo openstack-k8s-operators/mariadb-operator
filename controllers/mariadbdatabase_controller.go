@@ -28,6 +28,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	helper "github.com/openstack-k8s-operators/lib-common/modules/common/helper"
 	job "github.com/openstack-k8s-operators/lib-common/modules/common/job"
@@ -71,7 +72,7 @@ func (r *MariaDBDatabaseReconciler) GetScheme() *runtime.Scheme {
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;delete;patch
 
 // Reconcile reconcile mariadbdatabase API requests
-func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, _err error) {
 	_ = r.Log.WithValues("mariadbdatabase", req.NamespacedName)
 
 	// Fetch the MariaDBDatabase instance
@@ -81,9 +82,35 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	helper, err := helper.NewHelper(
+		instance,
+		r.Client,
+		r.Kclient,
+		r.Scheme,
+		r.Log,
+	)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Always patch the instance status when exiting this function so we can persist any changes.
+	defer func() {
+		err := helper.PatchInstance(ctx, instance)
+		if err != nil {
+			_err = err
+			return
+		}
+	}()
+
+	// If we're not deleting this and the service object doesn't have our finalizer, add it.
+	if instance.DeletionTimestamp.IsZero() && controllerutil.AddFinalizer(instance, helper.GetFinalizer()) {
+		return ctrl.Result{}, nil
+	}
+
 	// Fetch the Galera or MariaDB instance from which we'll pull the credentials
 	// Note: this will go away when we transition to galera as the db
 	var isGalera bool
+	var db client.Object
 	var dbgalera *databasev1beta1.Galera
 	var dbmariadb *databasev1beta1.MariaDB
 	var dbName string
@@ -102,6 +129,8 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
+	db = dbgalera
+
 	isGalera = err == nil
 	if !isGalera {
 		// Try to fetch MariaDB when Galera is not used
@@ -116,9 +145,15 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		if err != nil && !k8s_errors.IsNotFound(err) {
 			return ctrl.Result{}, err
 		}
+		db = dbmariadb
 	}
 
 	if k8s_errors.IsNotFound(err) {
+		// Handle special case for removing service finalizer in the context of this MariaDBDatabase
+		// being deleted but Galera/MariaDB is not found
+		if !instance.DeletionTimestamp.IsZero() {
+			controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
+		}
 		return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
 	}
 
@@ -128,16 +163,32 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		dbName, dbSecret, dbContainerImage = dbmariadb.Name, dbmariadb.Spec.Secret, dbmariadb.Spec.ContainerImage
 	}
 
-	helper, err := helper.NewHelper(
-		instance,
-		r.Client,
-		r.Kclient,
-		r.Scheme,
-		r.Log,
-	)
-	if err != nil {
-		return ctrl.Result{}, err
+	// Either add or remove the MariaDBDatabase finalizer for this instance to/from the associated Galera/MariaDB
+	// instance based on whether this MariaDBDatabase is being deleted or not
+	if instance.DeletionTimestamp.IsZero() && controllerutil.AddFinalizer(db, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
+		err := r.Update(ctx, db)
+
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+	} else if !instance.DeletionTimestamp.IsZero() && controllerutil.RemoveFinalizer(db, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
+		err := r.Update(ctx, db)
+
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 	}
+
+	// If this MariaDBDatabase is being deleted, there's no reason to continue beyond making
+	// sure the service finalizer has been removed
+	if !instance.DeletionTimestamp.IsZero() {
+		controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
+		return ctrl.Result{}, nil
+	}
+
+	//
+	// Non-deletion (normal) flow follows
+	//
 
 	if isGalera {
 		if !dbgalera.Status.Bootstrapped {
@@ -177,29 +228,13 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			instance.Status.Hash = make(map[string]string)
 		}
 		instance.Status.Hash[databasev1beta1.DbCreateHash] = dbCreateJob.GetHash()
-		if err := r.Client.Status().Update(ctx, instance); err != nil {
-			return ctrl.Result{}, err
-		}
 		r.Log.Info(fmt.Sprintf("Job %s hash added - %s", jobDef.Name, instance.Status.Hash[databasev1beta1.DbCreateHash]))
 	}
 
 	// database creation finished... okay to set to completed
-	if err := r.setCompleted(ctx, instance); err != nil {
-		return ctrl.Result{}, err
-	}
+	instance.Status.Completed = true
 
 	return ctrl.Result{}, nil
-}
-
-func (r *MariaDBDatabaseReconciler) setCompleted(ctx context.Context, db *databasev1beta1.MariaDBDatabase) error {
-
-	if !db.Status.Completed {
-		db.Status.Completed = true
-		if err := r.Client.Status().Update(ctx, db); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // SetupWithManager -
