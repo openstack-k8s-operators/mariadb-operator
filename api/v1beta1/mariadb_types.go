@@ -32,7 +32,7 @@ type MariaDBSpec struct {
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default="quay.io/tripleozedcentos9/openstack-mariadb:current-tripleo"
-	ContainerImage string `json:"containerImage,omitempty"`
+	ContainerImage string `json:"containerImage"`
 
 	AdoptionRedirect AdoptionRedirectSpec `json:"adoptionRedirect,omitempty"`
 }
