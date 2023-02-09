@@ -288,3 +288,15 @@ golangci: get-ci-tools
 # Run go lint against code
 golint: get-ci-tools
 	PATH=$(GOBIN):$(PATH); $(CI_TOOLS_REPO_DIR)/test-runner/golint.sh
+
+.PHONY: operator-lint
+operator-lint: $(LOCALBIN) gowork ## Runs operator-lint
+	#TODO(gibi): bump this to v0.2.2 as soon as that version is tagged
+	GOBIN=$(LOCALBIN) go install github.com/gibizer/operator-lint@2ffa25b7f1c13fb2bdae5444a3dd1b5bbad529b1
+	go vet -vettool=$(LOCALBIN)/operator-lint ./... ./api/...
+
+.PHONY: gowork
+gowork: ## Generate go.work file
+	test -f go.work || go work init
+	go work use .
+	go work use ./api
