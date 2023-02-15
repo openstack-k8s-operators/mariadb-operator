@@ -13,7 +13,6 @@ metadata:
 spec:
   containerImage: quay.io/tripleozedcentos9/openstack-mariadb:current-tripleo
   secret: osp-secret
-  storageClass: local-storage
   storageRequest: 500M
 status:
   conditions:
