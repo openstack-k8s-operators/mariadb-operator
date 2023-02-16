@@ -6,7 +6,11 @@ repos:
       exclude: ^vendor
     - id: go-vet
     - id: go-mod-tidy
-    - id: go-lint
+
+- repo: https://github.com/golangci/golangci-lint
+  rev: v1.50.1
+  hooks:
+    - id: golangci-lint
 
 - repo: local
   hooks:
@@ -30,7 +34,7 @@ repos:
       pass_filenames: false
 
 - repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v4.3.0
+  rev: v4.4.0
   hooks:
     - id: check-added-large-files
     - id: fix-byte-order-marker
@@ -51,3 +55,9 @@ repos:
     - id: no-commit-to-branch
     - id: trailing-whitespace
       exclude: ^vendor
+
+- repo: https://github.com/openstack/bashate.git
+  rev: 2.1.1
+  hooks:
+    - id: bashate
+      entry: bashate --error . --ignore=E006,E040,E043
