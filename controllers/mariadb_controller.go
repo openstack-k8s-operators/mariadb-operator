@@ -295,6 +295,16 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	op, err = controllerutil.CreateOrPatch(ctx, r.Client, pod, func() error {
 		pod.Spec.Containers[0].Image = instance.Spec.ContainerImage
+		pod.Spec.Containers[0].Env = []corev1.EnvVar{
+			{
+				Name:  "KOLLA_CONFIG_STRATEGY",
+				Value: "COPY_ALWAYS",
+			},
+			{
+				Name:  "CONFIG_HASH",
+				Value: configHash,
+			},
+		}
 		err := controllerutil.SetControllerReference(instance, pod, r.Scheme)
 		if err != nil {
 			return err

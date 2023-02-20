@@ -4,7 +4,7 @@
         {
             "source": "/var/lib/config-data/galera.cnf",
             "dest": "/etc/my.cnf.d/galera.cnf",
-            "owner": "root",
+            "owner": "mysql",
             "perm": "0600"
         }
     ]
