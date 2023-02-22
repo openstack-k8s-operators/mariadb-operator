@@ -4,9 +4,9 @@ set -eu
 
 # Adapted from clusterlab's galera resource agent
 recover_args="--datadir=/var/lib/mysql \
-              --user=mysql \
-              --skip-networking \
-              --wsrep-cluster-address=gcomm://localhost"
+                --user=mysql \
+                --skip-networking \
+                --wsrep-cluster-address=gcomm://localhost"
 recovery_file_regex='s/.*WSREP\:.*position\s*recovery.*--log_error='\''\([^'\'']*\)'\''.*/\1/p'
 recovered_position_regex='s/.*WSREP\:\s*[R|r]ecovered\s*position.*\:\(.*\)\s*$/\1/p'
 
