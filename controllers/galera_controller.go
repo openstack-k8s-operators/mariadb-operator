@@ -246,8 +246,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 
 	// the headless service provides DNS entries for pods
 	// the name of the resource must match the name of the app selector
-	adoptionSelector := mariadb.ResourceName(instance.Name)
-	pkghl := mariadb.HeadlessService(instance, adoptionSelector)
+	pkghl := mariadb.HeadlessService(instance)
 	headless := &corev1.Service{ObjectMeta: pkghl.ObjectMeta}
 	op, err := controllerutil.CreateOrPatch(ctx, r.Client, headless, func() error {
 		headless.Spec = pkghl.Spec
@@ -264,7 +263,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		r.Log.Info(fmt.Sprintf("%s %s database headless service %s - operation: %s", instance.Kind, instance.Name, headless.Name, string(op)))
 	}
 
-	pkgsvc := mariadb.ServiceForAdoption(instance, adoption, adoptionSelector)
+	pkgsvc := mariadb.ServiceForAdoption(instance, "galera", adoption)
 	service := &corev1.Service{ObjectMeta: pkgsvc.ObjectMeta}
 	op, err = controllerutil.CreateOrPatch(ctx, r.Client, service, func() error {
 		service.Spec = pkgsvc.Spec
