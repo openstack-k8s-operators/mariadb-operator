@@ -10,11 +10,11 @@ import (
 // Service func
 func Service(db *databasev1beta1.MariaDB) *corev1.Service {
 	adoption := &db.Spec.AdoptionRedirect
-	return ServiceForAdoption(db, adoption, "mariadb")
+	return ServiceForAdoption(db, "mariadb", adoption)
 }
 
 // ServiceForAdoption - create a service based on the adoption configuration
-func ServiceForAdoption(db metav1.Object, adoption *databasev1beta1.AdoptionRedirectSpec, appSelector string) *corev1.Service {
+func ServiceForAdoption(db metav1.Object, dbType string, adoption *databasev1beta1.AdoptionRedirectSpec) *corev1.Service {
 	adoptionHost := adoption.Host
 	adoptionHostIsIP := adoptionHost == "" || net.ParseIP(adoptionHost) != nil
 
@@ -24,10 +24,10 @@ func ServiceForAdoption(db metav1.Object, adoption *databasev1beta1.AdoptionRedi
 		}
 		return externalServiceFromName(db, adoption)
 	}
-	return internalService(db, adoption, appSelector)
+	return internalService(db, dbType, adoption)
 }
 
-func internalService(db metav1.Object, adoption *databasev1beta1.AdoptionRedirectSpec, appSelector string) *corev1.Service {
+func internalService(db metav1.Object, dbType string, adoption *databasev1beta1.AdoptionRedirectSpec) *corev1.Service {
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      db.GetName(),
@@ -35,7 +35,7 @@ func internalService(db metav1.Object, adoption *databasev1beta1.AdoptionRedirec
 			Labels:    ServiceLabels(db),
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{"app": appSelector},
+			Selector: LabelSelectors(db, dbType),
 			Ports: []corev1.ServicePort{
 				{Name: "database", Port: 3306, Protocol: corev1.ProtocolTCP},
 			},
@@ -75,7 +75,7 @@ func externalServiceFromName(db metav1.Object, adoption *databasev1beta1.Adoptio
 }
 
 // HeadlessService - service to give galera pods connectivity via DNS
-func HeadlessService(db metav1.Object, appSelector string) *corev1.Service {
+func HeadlessService(db metav1.Object) *corev1.Service {
 	name := ResourceName(db.GetName())
 	dep := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -88,9 +88,7 @@ func HeadlessService(db metav1.Object, appSelector string) *corev1.Service {
 			Ports: []corev1.ServicePort{
 				{Name: "mysql", Protocol: "TCP", Port: 3306},
 			},
-			Selector: map[string]string{
-				"app": appSelector,
-			},
+			Selector: LabelSelectors(db, "galera"),
 			// This is required to let pod communicate when
 			// they are still in Starting state
 			PublishNotReadyAddresses: true,

@@ -19,14 +19,21 @@ func ServiceLabels(database metav1.Object) map[string]string {
 	})
 }
 
+// LabelSelectors - labels for service, match statefulset and service should match
+func LabelSelectors(database metav1.Object, dbType string) map[string]string {
+	return map[string]string{
+		"app": dbType,
+		"cr":  dbType + "-" + database.GetName(),
+	}
+}
+
 // StatefulSetLabels - labels for statefulset, match service labels
 func StatefulSetLabels(database metav1.Object) map[string]string {
 	name := database.GetName()
-	return labels.GetLabels(database, "mariadb", map[string]string{
-		"owner":     "mariadb-operator",
-		"app":       StatefulSetName(name),
-		"cr":        "mariadb-" + name,
-		"galera_cr": name,
+	return labels.GetLabels(database, "galera", map[string]string{
+		"owner": "mariadb-operator",
+		"app":   "galera",
+		"cr":    "galera-" + name,
 	})
 }
 
