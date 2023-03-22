@@ -55,6 +55,12 @@ spec:
                 default: quay.io/tripleozedcentos9/openstack-mariadb:current-tripleo
                 description: Name of the galera container image to run
                 type: string
+              nodeSelector:
+                additionalProperties:
+                  type: string
+                description: NodeSelector to target subset of worker nodes running
+                  this service
+                type: object
               replicas:
                 default: 1
                 description: Size of the galera cluster deployment
