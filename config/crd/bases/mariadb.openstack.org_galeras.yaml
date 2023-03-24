@@ -55,6 +55,11 @@ spec:
                 default: quay.io/tripleozedcentos9/openstack-mariadb:current-tripleo
                 description: Name of the galera container image to run
                 type: string
+              customServiceConfig:
+                description: Customize config using this parameter to change service
+                  defaults, or overwrite rendered information using raw MariaDB config
+                  format. The content gets added to /etc/my.cnf.d/galera_custom.cnf
+                type: string
               nodeSelector:
                 additionalProperties:
                   type: string
@@ -153,11 +158,16 @@ spec:
                   - type
                   type: object
                 type: array
+              configHash:
+                default: ""
+                description: Hash of the configuration files
+                type: string
               safeToBootstrap:
                 description: Name of the node that can safely bootstrap a cluster
                 type: string
             required:
             - bootstrapped
+            - configHash
             type: object
         type: object
     served: true

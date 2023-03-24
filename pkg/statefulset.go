@@ -18,6 +18,7 @@ func StatefulSet(g *mariadbv1.Galera) *appsv1.StatefulSet {
 	runAsUser := int64(0)
 	storage := g.Spec.StorageClass
 	storageRequest := resource.MustParse(g.Spec.StorageRequest)
+	configHash := g.Status.ConfigHash
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -86,6 +87,9 @@ func StatefulSet(g *mariadbv1.Galera) *appsv1.StatefulSet {
 						Name:    "galera",
 						Command: []string{"/usr/bin/dumb-init", "--", "/usr/local/bin/kolla_start"},
 						Env: []corev1.EnvVar{{
+							Name:  "CR_CONFIG_HASH",
+							Value: configHash,
+						}, {
 							Name:  "KOLLA_CONFIG_STRATEGY",
 							Value: "COPY_ALWAYS",
 						}, {
@@ -204,6 +208,10 @@ func StatefulSet(g *mariadbv1.Galera) *appsv1.StatefulSet {
 										{
 											Key:  "galera.cnf.in",
 											Path: "galera.cnf.in",
+										},
+										{
+											Key:  mariadbv1.CustomServiceConfigFile,
+											Path: mariadbv1.CustomServiceConfigFile,
 										},
 									},
 								},
