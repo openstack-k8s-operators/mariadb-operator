@@ -41,6 +41,9 @@ type GaleraSpec struct {
 	// Size of the galera cluster deployment
 	Replicas int32 `json:"replicas"`
 	// +kubebuilder:validation:Optional
+	// NodeSelector to target subset of worker nodes running this service
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	// +kubebuilder:validation:Optional
 	// Adoption configuration
 	AdoptionRedirect AdoptionRedirectSpec `json:"adoptionRedirect"`
 }

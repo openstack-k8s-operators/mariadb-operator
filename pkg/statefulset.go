@@ -1,6 +1,8 @@
 package mariadb
 
 import (
+	common "github.com/openstack-k8s-operators/lib-common/modules/common"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/affinity"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -16,7 +18,7 @@ func StatefulSet(g *mariadbv1.Galera) *appsv1.StatefulSet {
 	runAsUser := int64(0)
 	storage := g.Spec.StorageClass
 	storageRequest := resource.MustParse(g.Spec.StorageRequest)
-	dep := &appsv1.StatefulSet{
+	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: g.Namespace,
@@ -259,5 +261,20 @@ func StatefulSet(g *mariadbv1.Galera) *appsv1.StatefulSet {
 			},
 		},
 	}
-	return dep
+
+	// If possible two pods of the same service should not
+	// run on the same worker node. If this is not possible
+	// the get still created on the same worker node.
+	sts.Spec.Template.Spec.Affinity = affinity.DistributePods(
+		common.AppSelector,
+		[]string{
+			name,
+		},
+		corev1.LabelHostname,
+	)
+	if g.Spec.NodeSelector != nil && len(g.Spec.NodeSelector) > 0 {
+		sts.Spec.Template.Spec.NodeSelector = g.Spec.NodeSelector
+	}
+
+	return sts
 }
