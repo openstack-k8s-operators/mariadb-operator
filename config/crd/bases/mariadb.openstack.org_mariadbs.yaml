@@ -53,7 +53,8 @@ spec:
                     type: string
                 type: object
               containerImage:
-                default: quay.io/tripleozedcentos9/openstack-mariadb:current-tripleo
+                description: ContainerImage - Container Image URL (will be set to
+                  environmental default if empty)
                 type: string
               secret:
                 description: Secret containing a RootPassword
@@ -62,6 +63,8 @@ spec:
                 type: string
               storageRequest:
                 type: string
+            required:
+            - containerImage
             type: object
           status:
             description: MariaDBStatus defines the observed state of MariaDB

@@ -30,8 +30,7 @@ type MariaDBSpec struct {
 
 	StorageRequest string `json:"storageRequest,omitempty"`
 
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:default="quay.io/tripleozedcentos9/openstack-mariadb:current-tripleo"
+	// ContainerImage - Container Image URL (will be set to environmental default if empty)
 	ContainerImage string `json:"containerImage"`
 
 	AdoptionRedirect AdoptionRedirectSpec `json:"adoptionRedirect,omitempty"`

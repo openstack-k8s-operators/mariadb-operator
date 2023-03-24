@@ -52,8 +52,8 @@ spec:
                     type: string
                 type: object
               containerImage:
-                default: quay.io/tripleozedcentos9/openstack-mariadb:current-tripleo
-                description: Name of the galera container image to run
+                description: Name of the galera container image to run (will be set
+                  to environmental default if empty)
                 type: string
               nodeSelector:
                 additionalProperties:

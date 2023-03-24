@@ -32,8 +32,7 @@ type GaleraSpec struct {
 	// Storage size allocated for the mariadb databases
 	// +kubebuilder:validation:Required
 	StorageRequest string `json:"storageRequest"`
-	// Name of the galera container image to run
-	// +kubebuilder:default="quay.io/tripleozedcentos9/openstack-mariadb:current-tripleo"
+	// Name of the galera container image to run (will be set to environmental default if empty)
 	ContainerImage string `json:"containerImage"`
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:default=1
