@@ -13,12 +13,12 @@ fi
 
 case "$1" in
     readiness)
-	# If the node is e.g. a donor, it cannot serve traffic
-	mysql -sNe "show status like 'wsrep_local_state_comment';" | grep -w -e Synced;;
+        # If the node is e.g. a donor, it cannot serve traffic
+        mysql -sNe "show status like 'wsrep_local_state_comment';" | grep -w -e Synced;;
     liveness)
-	# If the node is not in the primary partition, restart it
-	mysql -sNe "show status like 'wsrep_cluster_status';" | grep -w -e Primary;;
+        # If the node is not in the primary partition, restart it
+        mysql -sNe "show status like 'wsrep_cluster_status';" | grep -w -e Primary;;
     *)
-	echo "Invalid probe option '$1'"
-	exit 1;;
+        echo "Invalid probe option '$1'"
+        exit 1;;
 esac
