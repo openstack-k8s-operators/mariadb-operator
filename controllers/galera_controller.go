@@ -237,13 +237,6 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 
 	instance.Status.Conditions.MarkTrue(condition.ExposeServiceReadyCondition, condition.ExposeServiceReadyMessage)
 
-	commonstatefulset := commonstatefulset.NewStatefulSet(mariadb.StatefulSet(instance), 5)
-	sfres, sferr := commonstatefulset.CreateOrPatch(ctx, helper)
-	if sferr != nil {
-		return sfres, sferr
-	}
-	statefulset := commonstatefulset.GetStatefulSet()
-
 	// the headless service provides DNS entries for pods
 	// the name of the resource must match the name of the app selector
 	pkghl := mariadb.HeadlessService(instance)
@@ -292,7 +285,19 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 			err.Error()))
 		return ctrl.Result{}, fmt.Errorf("error calculating configmap hash: %v", err)
 	}
+	// From hereon, configMapVars holds a hash of the config generated for this instance
+	// This is used in an envvar in the statefulset to restart it on config change
+	envHash := &corev1.EnvVar{}
+	configMapVars[configMapNameForConfig(instance)](envHash)
+	instance.Status.ConfigHash = envHash.Value
 	instance.Status.Conditions.MarkTrue(condition.ServiceConfigReadyCondition, condition.ServiceConfigReadyMessage)
+
+	commonstatefulset := commonstatefulset.NewStatefulSet(mariadb.StatefulSet(instance), 5)
+	sfres, sferr := commonstatefulset.CreateOrPatch(ctx, helper)
+	if sferr != nil {
+		return sfres, sferr
+	}
+	statefulset := commonstatefulset.GetStatefulSet()
 
 	// Retrieve pods managed by the associated statefulset
 	podList := &corev1.PodList{}
@@ -394,6 +399,18 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	return ctrl.Result{}, err
 }
 
+// configMapNameForScripts - name of the configmap that holds the
+// used by the statefulset associated to a galera CR
+func configMapNameForScripts(instance *mariadbv1.Galera) string {
+	return fmt.Sprintf("%s-scripts", instance.Name)
+}
+
+// configMapNameForConfig - name of the configmap that holds configuration
+// files injected into pods associated to a galera CR
+func configMapNameForConfig(instance *mariadbv1.Galera) string {
+	return fmt.Sprintf("%s-config-data", instance.Name)
+}
+
 // generateConfigMaps returns the config map resource for a galera instance
 func (r *GaleraReconciler) generateConfigMaps(
 	ctx context.Context,
@@ -403,11 +420,12 @@ func (r *GaleraReconciler) generateConfigMaps(
 ) error {
 	templateParameters := make(map[string]interface{})
 	customData := make(map[string]string)
+	customData[mariadbv1.CustomServiceConfigFile] = instance.Spec.CustomServiceConfig
 
 	cms := []util.Template{
 		// ScriptsConfigMap
 		{
-			Name:         fmt.Sprintf("%s-scripts", instance.Name),
+			Name:         configMapNameForScripts(instance),
 			Namespace:    instance.Namespace,
 			Type:         util.TemplateTypeScripts,
 			InstanceType: instance.Kind,
@@ -415,7 +433,7 @@ func (r *GaleraReconciler) generateConfigMaps(
 		},
 		// ConfigMap
 		{
-			Name:          fmt.Sprintf("%s-config-data", instance.Name),
+			Name:          configMapNameForConfig(instance),
 			Namespace:     instance.Namespace,
 			Type:          util.TemplateTypeConfig,
 			InstanceType:  instance.Kind,

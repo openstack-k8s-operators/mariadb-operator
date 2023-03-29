@@ -21,6 +21,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	// CustomServiceConfigFile name of the additional mariadb config file
+	CustomServiceConfigFile = "galera_custom.cnf.in"
+)
+
 // GaleraSpec defines the desired state of Galera
 type GaleraSpec struct {
 	// Name of the secret to look for password keys
@@ -44,6 +49,11 @@ type GaleraSpec struct {
 	// NodeSelector to target subset of worker nodes running this service
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 	// +kubebuilder:validation:Optional
+	// Customize config using this parameter to change service defaults,
+	// or overwrite rendered information using raw MariaDB config format.
+	// The content gets added to /etc/my.cnf.d/galera_custom.cnf
+	CustomServiceConfig string `json:"customServiceConfig,omitempty"`
+	// +kubebuilder:validation:Optional
 	// Adoption configuration
 	AdoptionRedirect AdoptionRedirectSpec `json:"adoptionRedirect"`
 }
@@ -65,6 +75,9 @@ type GaleraStatus struct {
 	// Is the galera cluster currently running
 	// +kubebuilder:default=false
 	Bootstrapped bool `json:"bootstrapped"`
+	// Hash of the configuration files
+	// +kubebuilder:default=""
+	ConfigHash string `json:"configHash"`
 	// Deployment Conditions
 	Conditions condition.Conditions `json:"conditions,omitempty" optional:"true"`
 }

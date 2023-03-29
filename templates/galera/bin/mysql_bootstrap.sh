@@ -2,7 +2,14 @@
 set +eux
 PODNAME=$(hostname -f | cut -d. -f1,2)
 PODIP=$(grep "${PODNAME}" /etc/hosts | cut -d$'\t' -f1)
-sed -e "s/{ PODNAME }/${PODNAME}/" -e "s/{ PODIP }/${PODIP}/" /var/lib/config-data/galera.cnf.in > /var/lib/pod-config-data/galera.cnf
+pushd /var/lib/config-data
+for cfg in *.cnf.in; do
+    if [ -s "${cfg}" ]; then
+	echo "Generating config file from template ${cfg}"
+	sed -e "s/{ PODNAME }/${PODNAME}/" -e "s/{ PODIP }/${PODIP}/" "/var/lib/config-data/${cfg}" > "/var/lib/pod-config-data/${cfg%.in}"
+    fi
+done
+popd
 if [ -e /var/lib/mysql/mysql ]; then
     echo -e "Database already bootstrapped"
     exit 0
