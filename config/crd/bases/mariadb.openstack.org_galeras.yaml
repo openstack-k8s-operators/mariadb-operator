@@ -99,8 +99,12 @@ spec:
                   description: GaleraAttributes holds startup information for a Galera
                     host
                   properties:
+                    containerID:
+                      description: Identifier of the container at the time the gcomm
+                        URI was injected
+                      type: string
                     gcomm:
-                      description: URI used to connect to the galera cluster
+                      description: Gcomm URI used to connect to the galera cluster
                       type: string
                     seqno:
                       description: Last recorded replication sequence number in the

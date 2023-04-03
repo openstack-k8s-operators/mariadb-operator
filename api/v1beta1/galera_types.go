@@ -61,8 +61,10 @@ type GaleraSpec struct {
 type GaleraAttributes struct {
 	// Last recorded replication sequence number in the DB
 	Seqno string `json:"seqno"`
-	// URI used to connect to the galera cluster
+	// Gcomm URI used to connect to the galera cluster
 	Gcomm string `json:"gcomm,omitempty"`
+	// Identifier of the container at the time the gcomm URI was injected
+	ContainerID string `json:"containerID,omitempty"`
 }
 
 // GaleraStatus defines the observed state of Galera

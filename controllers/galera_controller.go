@@ -59,6 +59,10 @@ type GaleraReconciler struct {
 	Scheme  *runtime.Scheme
 }
 
+///
+// General Galera helper functions
+//
+
 // findBestCandidate returns the node with the lowest seqno
 func findBestCandidate(status *mariadbv1.GaleraStatus) string {
 	sortednodes := maps.Keys(status.Attributes)
@@ -90,32 +94,170 @@ func buildGcommURI(instance *mariadbv1.Galera) string {
 	return uri
 }
 
+// isBootstrapInProgress checks whether a node is currently starting a galera cluster
+func isBootstrapInProgress(instance *mariadbv1.Galera) bool {
+	for _, attr := range instance.Status.Attributes {
+		if attr.Gcomm == "gcomm://" {
+			return true
+		}
+	}
+	return false
+}
+
+///
+// Reconcile logics helper functions
+//
+
+// getPodFromName returns the pod object from a pod name
+func getPodFromName(pods []corev1.Pod, name string) *corev1.Pod {
+	for _, pod := range pods {
+		if pod.Name == name {
+			return &pod
+		}
+	}
+	return nil
+}
+
+// getReadyPods returns all the pods in Running phase, filtered by Ready state
+func getReadyPods(pods []corev1.Pod) (ret []corev1.Pod) {
+	for _, pod := range pods {
+		if pod.Status.Phase == corev1.PodRunning && podutils.IsPodReady(&pod) {
+			ret = append(ret, pod)
+		}
+	}
+	return
+}
+
+// getRunningPodsMissingAttributes returns all the pods for which the operator
+// has no seqno information, and which are ready for being inspected.
+// Note: a pod is considered 'ready for inspection' when its main container is
+// started and its inner process is currently waiting for a gcomm URI
+// (i.e. it is not running mysqld)
+func getRunningPodsMissingAttributes(pods []corev1.Pod, instance *mariadbv1.Galera, h *helper.Helper, config *rest.Config) (ret []corev1.Pod) {
+	for _, pod := range pods {
+		if pod.Status.Phase == corev1.PodRunning && !podutils.IsPodReady(&pod) {
+			_, attrFound := instance.Status.Attributes[pod.Name]
+			if !attrFound && isGaleraContainerStartedAndWaiting(&pod, instance, h, config) {
+				ret = append(ret, pod)
+			}
+		}
+	}
+	return
+}
+
+// getRunningPodsMissingGcomm returns all the pods which are not running galera
+// yet but are ready to join the cluster.
+// Note: a pod is considered 'ready to join' when its main container is
+// started and its inner process is currently waiting for a gcomm URI
+// (i.e. it is not running mysqld)
+func getRunningPodsMissingGcomm(pods []corev1.Pod, instance *mariadbv1.Galera, h *helper.Helper, config *rest.Config) (ret []corev1.Pod) {
+	for _, pod := range pods {
+		if pod.Status.Phase == corev1.PodRunning && !podutils.IsPodReady(&pod) &&
+			isGaleraContainerStartedAndWaiting(&pod, instance, h, config) {
+			if _, attrFound := instance.Status.Attributes[pod.Name]; attrFound {
+				if instance.Status.Attributes[pod.Name].Gcomm == "" {
+					ret = append(ret, pod)
+				}
+			} else {
+				ret = append(ret, pod)
+			}
+		}
+	}
+	return
+}
+
+// isGaleraContainerStartedAndWaiting checks whether the galera container is waiting for a gcomm_uri file
+func isGaleraContainerStartedAndWaiting(pod *corev1.Pod, instance *mariadbv1.Galera, h *helper.Helper, config *rest.Config) bool {
+	waiting := false
+	err := mariadb.ExecInPod(h, config, instance.Namespace, pod.Name, "galera",
+		[]string{"/bin/bash", "-c", "test ! -f /var/lib/mysql/gcomm_uri && pgrep -aP1 | grep -o detect_gcomm_and_start.sh"},
+		func(stdout *bytes.Buffer, stderr *bytes.Buffer) error {
+			predicate := strings.TrimSuffix(stdout.String(), "\n")
+			waiting = (predicate == "detect_gcomm_and_start.sh")
+			return nil
+		})
+	return err == nil && waiting
+}
+
+///
+// Status management helper functions
+// These functions have side effect and modify the galera CR's status
+//
+
 // injectGcommURI configures a pod to start galera with a given URI
-func injectGcommURI(h *helper.Helper, config *rest.Config, instance *mariadbv1.Galera, pod string, uri string) error {
-	err := mariadb.ExecInPod(h, config, instance.Namespace, pod, "galera",
+func injectGcommURI(h *helper.Helper, config *rest.Config, instance *mariadbv1.Galera, pod *corev1.Pod, uri string) error {
+	err := mariadb.ExecInPod(h, config, instance.Namespace, pod.Name, "galera",
 		[]string{"/bin/bash", "-c", "echo '" + uri + "' > /var/lib/mysql/gcomm_uri"},
 		func(stdout *bytes.Buffer, stderr *bytes.Buffer) error {
-			attr := instance.Status.Attributes[pod]
+			attr := instance.Status.Attributes[pod.Name]
 			attr.Gcomm = uri
-			instance.Status.Attributes[pod] = attr
+			attr.ContainerID = pod.Status.ContainerStatuses[0].ContainerID
+			instance.Status.Attributes[pod.Name] = attr
 			return nil
 		})
 	return err
 }
 
 // retrieveSequenceNumber probes a pod's galera instance for sequence number
-func retrieveSequenceNumber(helper *helper.Helper, config *rest.Config, instance *mariadbv1.Galera, pod string) error {
-	err := mariadb.ExecInPod(helper, config, instance.Namespace, pod, "galera",
+func retrieveSequenceNumber(helper *helper.Helper, config *rest.Config, instance *mariadbv1.Galera, pod *corev1.Pod) error {
+	err := mariadb.ExecInPod(helper, config, instance.Namespace, pod.Name, "galera",
 		[]string{"/bin/bash", "/var/lib/operator-scripts/detect_last_commit.sh"},
 		func(stdout *bytes.Buffer, stderr *bytes.Buffer) error {
 			seqno := strings.TrimSuffix(stdout.String(), "\n")
 			attr := mariadbv1.GaleraAttributes{
 				Seqno: seqno,
 			}
-			instance.Status.Attributes[pod] = attr
+			instance.Status.Attributes[pod.Name] = attr
 			return nil
 		})
 	return err
+}
+
+// clearPodAttributes clears information known by the operator about a pod
+func clearPodAttributes(instance *mariadbv1.Galera, podName string) {
+	delete(instance.Status.Attributes, podName)
+	// If the pod was deemed safeToBootstrap, this state has to be reassessed
+	if instance.Status.SafeToBootstrap == podName {
+		instance.Status.SafeToBootstrap = ""
+	}
+}
+
+// clearOldPodsAttributesOnScaleDown removes known information from old pods
+// that no longer exist after a scale down of the galera CR
+func clearOldPodsAttributesOnScaleDown(helper *helper.Helper, instance *mariadbv1.Galera) {
+	replicas := int(instance.Spec.Replicas)
+
+	// a pod's name is built as 'statefulsetname-n'
+	for node := range instance.Status.Attributes {
+		parts := strings.Split(node, "-")
+		index, _ := strconv.Atoi(parts[len(parts)-1])
+		if index >= replicas {
+			clearPodAttributes(instance, node)
+			util.LogForObject(helper, "Remove old pod from status after scale-down", instance, "pod", node)
+		}
+	}
+}
+
+// assertPodsAttributesValidity compares the current state of the pods that are starting galera
+// against their known state in the CR's attributes. If a pod's attributes don't match its actual
+// state (i.e. it failed to start galera), the attributes are cleared from the CR's status
+func assertPodsAttributesValidity(helper *helper.Helper, instance *mariadbv1.Galera, pods []corev1.Pod) {
+	for _, pod := range pods {
+		_, found := instance.Status.Attributes[pod.Name]
+		if !found {
+			continue
+		}
+		ci := instance.Status.Attributes[pod.Name].ContainerID
+		pci := pod.Status.ContainerStatuses[0].ContainerID
+		if ci != pci {
+			// This gcomm URI was pushed in a pod which was restarted
+			// before the attribute got cleared, which means the pod
+			// failed to start galera. Clear the attribute here, and
+			// reprobe the pod's state in the next reconcile loop
+			clearPodAttributes(instance, pod.Name)
+			util.LogForObject(helper, "Pod restarted while galera was starting", instance, "pod", pod.Name)
+		}
+	}
 }
 
 // RBAC for galera resources
@@ -316,8 +458,11 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 
 	// Ensure status is cleaned up in case of scale down
 	if *statefulset.Spec.Replicas < statefulset.Status.Replicas {
-		removeOldAttributesOnScaleDown(helper, instance)
+		clearOldPodsAttributesOnScaleDown(helper, instance)
 	}
+
+	// Ensure that all the ongoing galera start actions are still running
+	assertPodsAttributesValidity(helper, instance, podList.Items)
 
 	// Note:
 	//   . A pod is available in the statefulset if the pod's readiness
@@ -335,25 +480,28 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 			name := pod.Name
 			if _, found := instance.Status.Attributes[name]; found {
 				util.LogForObject(helper, "Galera started on pod "+pod.Name, instance)
-				delete(instance.Status.Attributes, name)
+				clearPodAttributes(instance, name)
 			}
 		}
 
 		// The other 'Running' pods can join the existing cluster.
-		for _, pod := range getRunningPodsMissingGcomm(podList.Items, instance) {
+		for _, pod := range getRunningPodsMissingGcomm(podList.Items, instance, helper, r.config) {
 			name := pod.Name
 			joinerURI := buildGcommURI(instance)
 			util.LogForObject(helper, "Pushing gcomm URI to joiner", instance, "pod", name)
 			// Setting the gcomm attribute marks this pod as 'currently joining the cluster'
-			err := injectGcommURI(helper, r.config, instance, name, joinerURI)
+			err := injectGcommURI(helper, r.config, instance, &pod, joinerURI)
 			if err != nil {
 				util.LogErrorForObject(helper, err, "Failed to push gcomm URI", instance, "pod", name)
+				// A failed injection likely means the pod's status has changed.
+				// drop it from status and reprobe it in another reconcile loop
+				clearPodAttributes(instance, name)
 				return ctrl.Result{}, err
 			}
 		}
 	}
 
-	// If the cluster is not running, probes the available pods for seqno
+	// If the cluster is not running, probe the available pods for seqno
 	// to determine the bootstrap node.
 	// Note:
 	//   . a pod whose phase is Running but who is not Ready hasn't started
@@ -362,10 +510,10 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	//   . any other status means the the pod is starting/restarting. We can't
 	//     exec into the pod yet, so we will probe it in another reconcile loop.
 	if !instance.Status.Bootstrapped && !isBootstrapInProgress(instance) {
-		for _, pod := range getRunningPodsMissingAttributes(podList.Items, instance) {
+		for _, pod := range getRunningPodsMissingAttributes(podList.Items, instance, helper, r.config) {
 			name := pod.Name
 			util.LogForObject(helper, fmt.Sprintf("Pod %s running, retrieve seqno", name), instance)
-			err := retrieveSequenceNumber(helper, r.config, instance, name)
+			err := retrieveSequenceNumber(helper, r.config, instance, &pod)
 			if err != nil {
 				util.LogErrorForObject(helper, err, "Failed to retrieve seqno for "+name, instance)
 				return ctrl.Result{}, err
@@ -374,13 +522,18 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		}
 
 		// Check if we have enough info to bootstrap the cluster now
-		if len(podList.Items) == len(instance.Status.Attributes) {
+		if (len(instance.Status.Attributes) > 0) &&
+			(len(instance.Status.Attributes) == len(podList.Items)) {
 			node := findBestCandidate(&instance.Status)
+			pod := getPodFromName(podList.Items, node)
 			util.LogForObject(helper, "Pushing gcomm URI to bootstrap", instance, "pod", node)
 			// Setting the gcomm attribute marks this pod as 'currently bootstrapping the cluster'
-			err := injectGcommURI(helper, r.config, instance, node, "gcomm://")
+			err := injectGcommURI(helper, r.config, instance, pod, "gcomm://")
 			if err != nil {
 				util.LogErrorForObject(helper, err, "Failed to push gcomm URI", instance, "pod", node)
+				// A failed injection likely means the pod's status has changed.
+				// drop it from status and reprobe it in another reconcile loop
+				clearPodAttributes(instance, node)
 				return ctrl.Result{}, err
 			}
 		}
@@ -450,69 +603,6 @@ func (r *GaleraReconciler) generateConfigMaps(
 	}
 
 	return nil
-}
-
-// getReadyPods returns all the pods in Running phase, filtered by Ready state
-func getReadyPods(pods []corev1.Pod) (ret []corev1.Pod) {
-	for _, pod := range pods {
-		if pod.Status.Phase == corev1.PodRunning && podutils.IsPodReady(&pod) {
-			ret = append(ret, pod)
-		}
-	}
-	return
-}
-
-// getRunningPodsMissingAttributes returns all the pods without seqno information
-func getRunningPodsMissingAttributes(pods []corev1.Pod, instance *mariadbv1.Galera) (ret []corev1.Pod) {
-	for _, pod := range pods {
-		if pod.Status.Phase == corev1.PodRunning {
-			if _, found := instance.Status.Attributes[pod.Name]; !found {
-				ret = append(ret, pod)
-			}
-		}
-	}
-	return
-}
-
-// getRunningPodsMissingGcomm returns all the pods without seqno information
-func getRunningPodsMissingGcomm(pods []corev1.Pod, instance *mariadbv1.Galera) (ret []corev1.Pod) {
-	for _, pod := range pods {
-		if pod.Status.Phase == corev1.PodRunning && !podutils.IsPodReady(&pod) {
-			if _, found := instance.Status.Attributes[pod.Name]; found {
-				if instance.Status.Attributes[pod.Name].Gcomm == "" {
-					ret = append(ret, pod)
-				}
-			} else {
-				ret = append(ret, pod)
-			}
-		}
-	}
-	return
-}
-
-// isBootstrapInProgress checks whether a node is currently starting a galera cluster
-func isBootstrapInProgress(instance *mariadbv1.Galera) bool {
-	for _, attr := range instance.Status.Attributes {
-		if attr.Gcomm == "gcomm://" {
-			return true
-		}
-	}
-	return false
-}
-
-// isBootstrapInProgress checks whether a node is currently starting a galera cluster
-func removeOldAttributesOnScaleDown(helper *helper.Helper, instance *mariadbv1.Galera) {
-	replicas := int(instance.Spec.Replicas)
-
-	// a pod's name is built as 'statefulsetname-n'
-	for node := range instance.Status.Attributes {
-		parts := strings.Split(node, "-")
-		index, _ := strconv.Atoi(parts[len(parts)-1])
-		if index >= replicas {
-			delete(instance.Status.Attributes, node)
-			util.LogForObject(helper, "Remove old node from status after scale-down", instance, "node", node)
-		}
-	}
 }
 
 // SetupWithManager sets up the controller with the Manager.
