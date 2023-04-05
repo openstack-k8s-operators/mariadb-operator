@@ -283,7 +283,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 			condition.SeverityWarning,
 			condition.ServiceConfigReadyErrorMessage,
 			err.Error()))
-		return ctrl.Result{}, fmt.Errorf("error calculating configmap hash: %v", err)
+		return ctrl.Result{}, fmt.Errorf("error calculating configmap hash: %w", err)
 	}
 	// From hereon, configMapVars holds a hash of the config generated for this instance
 	// This is used in an envvar in the statefulset to restart it on config change

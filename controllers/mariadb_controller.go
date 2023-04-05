@@ -238,7 +238,7 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			condition.SeverityWarning,
 			condition.ServiceConfigReadyErrorMessage,
 			err.Error()))
-		return ctrl.Result{}, fmt.Errorf("error calculating configmap hash: %v", err)
+		return ctrl.Result{}, fmt.Errorf("error calculating configmap hash: %w", err)
 	}
 	mergedMapVars := env.MergeEnvs([]corev1.EnvVar{}, configMapVars)
 	configHash := ""
