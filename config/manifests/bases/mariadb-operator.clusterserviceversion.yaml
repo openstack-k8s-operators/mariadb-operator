@@ -16,6 +16,11 @@ spec:
       kind: MaraiDB
       name: mariadbs.mariadb.openstack.org
       version: v1beta1
+    - description: Galera is the Schema for the galeras API
+      displayName: Galera
+      kind: Galera
+      name: galeras.mariadb.openstack.org
+      version: v1beta1
     - description: MariaDBDatabase is the Schema for the mariadbdatabases API
       displayName: Maria DBDatabase
       kind: MariaDBDatabase

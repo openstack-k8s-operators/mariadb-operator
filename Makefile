@@ -312,3 +312,17 @@ gowork: ## Generate go.work file
 	test -f go.work || go work init
 	go work use .
 	go work use ./api
+
+# Used for webhook testing
+# Please ensure the mariadb-controller-manager deployment and
+# webhook definitions are removed from the csv before running
+# this. Also, cleanup the webhook configuration for local testing
+# before deplying with olm again.
+# $oc delete -n openstack validatingwebhookconfiguration/vmariadb.kb.io
+# $oc delete -n openstack mutatingwebhookconfiguration/mmariadb.kb.io
+SKIP_CERT ?=false
+.PHONY: run-with-webhook
+run-with-webhook: export MARIADB_IMAGE_URL_DEFAULT=quay.io/tripleozedcentos9/openstack-mariadb:current-tripleo
+run-with-webhook: manifests generate fmt vet ## Run a controller from your host.
+	/bin/bash hack/configure_local_webhook.sh
+	go run ./main.go

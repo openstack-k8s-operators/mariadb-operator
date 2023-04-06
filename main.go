@@ -19,6 +19,7 @@ package main
 import (
 	"flag"
 	"os"
+	"strings"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -118,6 +119,26 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "MariaDBDatabase")
 		os.Exit(1)
 	}
+
+	// Acquire environmental defaults and initialize MariaDB defaults with them
+	mariadbDefaults := mariadbv1beta1.MariaDBDefaults{
+		ContainerImageURL: os.Getenv("MARIADB_IMAGE_URL_DEFAULT"),
+	}
+
+	mariadbv1beta1.SetupMariaDBDefaults(mariadbDefaults)
+
+	// Setup webhooks if requested
+	if strings.ToLower(os.Getenv("ENABLE_WEBHOOKS")) != "false" {
+		if err = (&mariadbv1beta1.MariaDB{}).SetupWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "MariaDB")
+			os.Exit(1)
+		}
+		if err = (&mariadbv1beta1.Galera{}).SetupWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "Galera")
+			os.Exit(1)
+		}
+	}
+
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
