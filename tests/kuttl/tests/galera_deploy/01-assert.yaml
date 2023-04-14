@@ -46,7 +46,7 @@ spec:
         - /usr/bin/dumb-init
         - --
         - /usr/local/bin/kolla_start
-        image: quay.io/tripleozedcentos9/openstack-mariadb:current-tripleo 
+        image: quay.io/tripleozedcentos9/openstack-mariadb:current-tripleo
         name: galera
         ports:
         - containerPort: 3306
