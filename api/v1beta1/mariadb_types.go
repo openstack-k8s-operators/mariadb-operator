@@ -82,3 +82,18 @@ func init() {
 func (instance MariaDB) IsReady() bool {
 	return instance.Status.Conditions.IsTrue(condition.DeploymentReadyCondition)
 }
+
+// RbacConditionsSet - set the conditions for the rbac object
+func (instance MariaDB) RbacConditionsSet(c *condition.Condition) {
+	instance.Status.Conditions.Set(c)
+}
+
+// RbacNamespace - return the namespace
+func (instance MariaDB) RbacNamespace() string {
+	return instance.Namespace
+}
+
+// RbacResourceName - return the name to be used for rbac objects (serviceaccount, role, rolebinding)
+func (instance MariaDB) RbacResourceName() string {
+	return "mariadb-" + instance.Name
+}

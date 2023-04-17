@@ -44,26 +44,6 @@ type MariaDBDatabaseReconciler struct {
 	Scheme  *runtime.Scheme
 }
 
-// GetClient -
-func (r *MariaDBDatabaseReconciler) GetClient() client.Client {
-	return r.Client
-}
-
-// GetKClient -
-func (r *MariaDBDatabaseReconciler) GetKClient() kubernetes.Interface {
-	return r.Kclient
-}
-
-// GetLogger -
-func (r *MariaDBDatabaseReconciler) GetLogger() logr.Logger {
-	return r.Log
-}
-
-// GetScheme -
-func (r *MariaDBDatabaseReconciler) GetScheme() *runtime.Scheme {
-	return r.Scheme
-}
-
 // +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbdatabases,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbdatabases/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbdatabases/finalizers,verbs=update
@@ -154,7 +134,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	//
 	// Non-deletion (normal) flow follows
 	//
-	var dbName, dbSecret, dbContainerImage string
+	var dbName, dbSecret, dbContainerImage, serviceAccount string
 
 	// It is impossible to reach here without either dbGalera or dbMariadb not being nil, due to the checks above
 	if dbGalera != nil {
@@ -166,6 +146,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		dbName = dbGalera.Name
 		dbSecret = dbGalera.Spec.Secret
 		dbContainerImage = dbGalera.Spec.ContainerImage
+		serviceAccount = dbGalera.RbacResourceName()
 	} else if dbMariadb != nil {
 		if dbMariadb.Status.DbInitHash == "" {
 			r.Log.Info("DB initialization not complete. Requeue...")
@@ -175,10 +156,11 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		dbName = dbMariadb.Name
 		dbSecret = dbMariadb.Spec.Secret
 		dbContainerImage = dbMariadb.Spec.ContainerImage
+		serviceAccount = dbMariadb.RbacResourceName()
 	}
 
 	// Define a new Job object (hostname, password, containerImage)
-	jobDef, err := mariadb.DbDatabaseJob(instance, dbName, dbSecret, dbContainerImage)
+	jobDef, err := mariadb.DbDatabaseJob(instance, dbName, dbSecret, dbContainerImage, serviceAccount)
 	if err != nil {
 		return ctrl.Result{}, err
 	}

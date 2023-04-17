@@ -23,6 +23,7 @@ import (
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -36,31 +37,12 @@ import (
 	helper "github.com/openstack-k8s-operators/lib-common/modules/common/helper"
 	job "github.com/openstack-k8s-operators/lib-common/modules/common/job"
 	labels "github.com/openstack-k8s-operators/lib-common/modules/common/labels"
+	common_rbac "github.com/openstack-k8s-operators/lib-common/modules/common/rbac"
 	util "github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	mariadb "github.com/openstack-k8s-operators/mariadb-operator/pkg"
 	"k8s.io/client-go/kubernetes"
 )
-
-// GetClient -
-func (r *MariaDBReconciler) GetClient() client.Client {
-	return r.Client
-}
-
-// GetKClient -
-func (r *MariaDBReconciler) GetKClient() kubernetes.Interface {
-	return r.Kclient
-}
-
-// GetLogger -
-func (r *MariaDBReconciler) GetLogger() logr.Logger {
-	return r.Log
-}
-
-// GetScheme -
-func (r *MariaDBReconciler) GetScheme() *runtime.Scheme {
-	return r.Scheme
-}
 
 // MariaDBReconciler reconciles a MariaDB object
 type MariaDBReconciler struct {
@@ -79,6 +61,11 @@ type MariaDBReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;delete;
 // +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;delete;
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;delete;
+// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update
+// +kubebuilder:rbac:groups="rbac.authorization.k8s.io",resources=roles,verbs=get;list;watch;create;update
+// +kubebuilder:rbac:groups="rbac.authorization.k8s.io",resources=rolebindings,verbs=get;list;watch;create;update
+// +kubebuilder:rbac:groups="security.openshift.io",resourceNames=anyuid,resources=securitycontextconstraints,verbs=use
+// +kubebuilder:rbac:groups="",resources=pods,verbs=create;delete;get;list;patch;update;watch
 
 // Reconcile reconcile mariadb API requests
 func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -105,6 +92,9 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			condition.UnknownCondition(condition.ServiceConfigReadyCondition, condition.InitReason, condition.ServiceConfigReadyInitMessage),
 			condition.UnknownCondition(databasev1beta1.MariaDBInitializedCondition, condition.InitReason, databasev1beta1.MariaDBInitializedInitMessage),
 			condition.UnknownCondition(condition.DeploymentReadyCondition, condition.InitReason, condition.DeploymentReadyInitMessage),
+			condition.UnknownCondition(condition.ServiceAccountReadyCondition, condition.InitReason, condition.ServiceAccountReadyInitMessage),
+			condition.UnknownCondition(condition.RoleReadyCondition, condition.InitReason, condition.RoleReadyInitMessage),
+			condition.UnknownCondition(condition.RoleBindingReadyCondition, condition.InitReason, condition.RoleBindingReadyInitMessage),
 		)
 
 		instance.Status.Conditions.Init(&cl)
@@ -145,6 +135,26 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			}
 		}
 	}()
+
+	rbacRules := []rbacv1.PolicyRule{
+		{
+			APIGroups:     []string{"security.openshift.io"},
+			ResourceNames: []string{"anyuid"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"pods"},
+			Verbs:     []string{"create", "get", "list", "watch", "update", "patch", "delete"},
+		},
+	}
+	rbacResult, err := common_rbac.ReconcileRbac(ctx, h, instance, rbacRules)
+	if err != nil {
+		return rbacResult, err
+	} else if (rbacResult != ctrl.Result{}) {
+		return rbacResult, nil
+	}
 
 	// PVC
 	// TODO: Add PVC condition handling?  We don't currently in other operators that have PVC concerns, though

@@ -32,6 +32,18 @@ status:
     reason: Ready
     status: "True"
     type: MariaDBInitialized
+  - message: RoleBinding created
+    reason: Ready
+    status: "True"
+    type: RoleBindingReady
+  - message: Role created
+    reason: Ready
+    status: "True"
+    type: RoleReady
+  - message: ServiceAccount created
+    reason: Ready
+    status: "True"
+    type: ServiceAccountReady
   - message: Service config create completed
     reason: Ready
     status: "True"
@@ -55,7 +67,7 @@ spec:
     name: mariadb
     resources: {}
   restartPolicy: Always
-  serviceAccount: mariadb-operator-mariadb
-  serviceAccountName: mariadb-operator-mariadb
+  serviceAccount: mariadb-openstack
+  serviceAccountName: mariadb-openstack
 status:
   phase: Running

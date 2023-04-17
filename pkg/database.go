@@ -17,7 +17,7 @@ type dbCreateOptions struct {
 }
 
 // DbDatabaseJob -
-func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName string, databaseSecret string, containerImage string) (*batchv1.Job, error) {
+func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName string, databaseSecret string, containerImage string, serviceAccountName string) (*batchv1.Job, error) {
 
 	opts := dbCreateOptions{database.Spec.Name, databaseHostName, "root"}
 	dbCmd, err := util.ExecuteTemplateFile("database.sh", &opts)
@@ -40,7 +40,7 @@ func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName s
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					RestartPolicy:      "OnFailure",
-					ServiceAccountName: "mariadb-operator-mariadb",
+					ServiceAccountName: serviceAccountName,
 					Containers: []corev1.Container{
 						{
 							Name:    "mariadb-database-create",
@@ -81,7 +81,7 @@ func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName s
 }
 
 // DeleteDbDatabaseJob -
-func DeleteDbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName string, databaseSecret string, containerImage string) (*batchv1.Job, error) {
+func DeleteDbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName string, databaseSecret string, containerImage string, serviceAccountName string) (*batchv1.Job, error) {
 
 	opts := dbCreateOptions{database.Spec.Name, databaseHostName, "root"}
 	delCmd, err := util.ExecuteTemplateFile("delete_database.sh", &opts)
@@ -101,7 +101,7 @@ func DeleteDbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHost
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					RestartPolicy:      "OnFailure",
-					ServiceAccountName: "mariadb-operator-mariadb",
+					ServiceAccountName: serviceAccountName,
 					Containers: []corev1.Container{
 						{
 							Name:    "mariadb-database-create",

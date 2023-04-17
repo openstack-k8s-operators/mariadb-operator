@@ -20,7 +20,7 @@ func DbInitJob(db *databasev1beta1.MariaDB) *batchv1.Job {
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					RestartPolicy:      "OnFailure",
-					ServiceAccountName: "mariadb-operator-mariadb",
+					ServiceAccountName: db.RbacResourceName(),
 					Containers: []corev1.Container{
 						{
 							Name:  "mariadb-init",
