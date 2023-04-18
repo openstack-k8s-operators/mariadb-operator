@@ -323,7 +323,7 @@ gowork: ## Generate go.work file
 # $oc delete -n openstack mutatingwebhookconfiguration/mmariadb.kb.io
 SKIP_CERT ?=false
 .PHONY: run-with-webhook
-run-with-webhook: export MARIADB_IMAGE_URL_DEFAULT=quay.io/tripleozedcentos9/openstack-mariadb:current-tripleo
+run-with-webhook: export MARIADB_IMAGE_URL_DEFAULT=quay.io/podified-antelope-centos9/openstack-mariadb:current-podified
 run-with-webhook: export METRICS_PORT?=8080
 run-with-webhook: export HEALTH_PORT?=8081
 run-with-webhook: export OPERATOR_TEMPLATES=./templates/
