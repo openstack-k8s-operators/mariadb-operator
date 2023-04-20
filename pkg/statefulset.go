@@ -15,7 +15,6 @@ func StatefulSet(g *mariadbv1.Galera) *appsv1.StatefulSet {
 	ls := StatefulSetLabels(g)
 	name := StatefulSetName(g.Name)
 	replicas := g.Spec.Replicas
-	runAsUser := int64(0)
 	storage := g.Spec.StorageClass
 	storageRequest := resource.MustParse(g.Spec.StorageRequest)
 	configHash := g.Status.ConfigHash
@@ -41,9 +40,6 @@ func StatefulSet(g *mariadbv1.Galera) *appsv1.StatefulSet {
 						Image:   g.Spec.ContainerImage,
 						Name:    "mysql-bootstrap",
 						Command: []string{"bash", "/var/lib/operator-scripts/mysql_bootstrap.sh"},
-						SecurityContext: &corev1.SecurityContext{
-							RunAsUser: &runAsUser,
-						},
 						Env: []corev1.EnvVar{{
 							Name:  "KOLLA_BOOTSTRAP",
 							Value: "True",
@@ -103,9 +99,6 @@ func StatefulSet(g *mariadbv1.Galera) *appsv1.StatefulSet {
 								},
 							},
 						}},
-						SecurityContext: &corev1.SecurityContext{
-							RunAsUser: &runAsUser,
-						},
 						Ports: []corev1.ContainerPort{{
 							ContainerPort: 3306,
 							Name:          "mysql",
