@@ -72,13 +72,13 @@ type MariaDBReconciler struct {
 
 // +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbs/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbs/finalizers,verbs=update
-// +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;delete;
-// +kubebuilder:rbac:groups=core,resources=endpoints,verbs=get;list;watch;create;update;delete;
-// +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;delete;
-// +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;delete;
-// +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;delete;
-// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;delete;
+// +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbs/finalizers,verbs=update;patch
+// +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;delete;patch
+// +kubebuilder:rbac:groups=core,resources=endpoints,verbs=get;list;watch;create;update;delete;patch
+// +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;delete;patch
+// +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;delete;patch
+// +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;delete;patch
+// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;delete;patch
 
 // Reconcile reconcile mariadb API requests
 func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -295,6 +295,16 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	op, err = controllerutil.CreateOrPatch(ctx, r.Client, pod, func() error {
 		pod.Spec.Containers[0].Image = instance.Spec.ContainerImage
+		pod.Spec.Containers[0].Env = []corev1.EnvVar{
+			{
+				Name:  "KOLLA_CONFIG_STRATEGY",
+				Value: "COPY_ALWAYS",
+			},
+			{
+				Name:  "CONFIG_HASH",
+				Value: configHash,
+			},
+		}
 		err := controllerutil.SetControllerReference(instance, pod, r.Scheme)
 		if err != nil {
 			return err
