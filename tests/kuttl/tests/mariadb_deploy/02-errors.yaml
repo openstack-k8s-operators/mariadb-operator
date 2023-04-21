@@ -1,0 +1,19 @@
+#
+# Check for:
+#
+# - No MariaDB CR
+# - No Pod for MariaDB CR
+
+apiVersion: mariadb.openstack.org/v1beta1
+kind: MariaDB
+metadata:
+  name: openstack
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: mariadb
+    cr: mariadb-openstack
+    owner: mariadb-operator
+  name: mariadb-openstack
