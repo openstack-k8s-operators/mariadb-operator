@@ -1,0 +1,27 @@
+#
+# Check for:
+#
+# - 1 Galera CR with 1 replicas
+# - Galera StatefulSet with 1 replicas
+#
+
+apiVersion: mariadb.openstack.org/v1beta1
+kind: Galera
+metadata:
+  name: openstack
+spec:
+  replicas: 1
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: openstack-galera
+spec:
+  replicas: 1
+status:
+  availableReplicas: 1
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: openstack-galera-0
