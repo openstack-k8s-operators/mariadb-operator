@@ -55,8 +55,8 @@ spec:
         - containerPort: 4567
           name: galera
           protocol: TCP
-      serviceAccount: mariadb-operator-mariadb
-      serviceAccountName: mariadb-operator-mariadb
+      serviceAccount: galera-openstack
+      serviceAccountName: galera-openstack
 status:
   availableReplicas: 3
   readyReplicas: 3

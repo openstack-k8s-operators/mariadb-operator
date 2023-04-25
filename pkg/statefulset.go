@@ -35,7 +35,7 @@ func StatefulSet(g *mariadbv1.Galera) *appsv1.StatefulSet {
 					Labels: ls,
 				},
 				Spec: corev1.PodSpec{
-					ServiceAccountName: "mariadb-operator-mariadb",
+					ServiceAccountName: g.RbacResourceName(),
 					InitContainers: []corev1.Container{{
 						Image:   g.Spec.ContainerImage,
 						Name:    "mysql-bootstrap",

@@ -21,10 +21,12 @@ import (
 	configmap "github.com/openstack-k8s-operators/lib-common/modules/common/configmap"
 	env "github.com/openstack-k8s-operators/lib-common/modules/common/env"
 	helper "github.com/openstack-k8s-operators/lib-common/modules/common/helper"
+	common_rbac "github.com/openstack-k8s-operators/lib-common/modules/common/rbac"
 	commonstatefulset "github.com/openstack-k8s-operators/lib-common/modules/common/statefulset"
 	util "github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -33,11 +35,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"golang.org/x/exp/maps"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/exp/maps"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -133,11 +136,11 @@ func getReadyPods(pods []corev1.Pod) (ret []corev1.Pod) {
 // Note: a pod is considered 'ready for inspection' when its main container is
 // started and its inner process is currently waiting for a gcomm URI
 // (i.e. it is not running mysqld)
-func getRunningPodsMissingAttributes(pods []corev1.Pod, instance *mariadbv1.Galera, h *helper.Helper, config *rest.Config) (ret []corev1.Pod) {
+func getRunningPodsMissingAttributes(ctx context.Context, pods []corev1.Pod, instance *mariadbv1.Galera, h *helper.Helper, config *rest.Config) (ret []corev1.Pod) {
 	for _, pod := range pods {
 		if pod.Status.Phase == corev1.PodRunning && !podutils.IsPodReady(&pod) {
 			_, attrFound := instance.Status.Attributes[pod.Name]
-			if !attrFound && isGaleraContainerStartedAndWaiting(&pod, instance, h, config) {
+			if !attrFound && isGaleraContainerStartedAndWaiting(ctx, &pod, instance, h, config) {
 				ret = append(ret, pod)
 			}
 		}
@@ -150,10 +153,10 @@ func getRunningPodsMissingAttributes(pods []corev1.Pod, instance *mariadbv1.Gale
 // Note: a pod is considered 'ready to join' when its main container is
 // started and its inner process is currently waiting for a gcomm URI
 // (i.e. it is not running mysqld)
-func getRunningPodsMissingGcomm(pods []corev1.Pod, instance *mariadbv1.Galera, h *helper.Helper, config *rest.Config) (ret []corev1.Pod) {
+func getRunningPodsMissingGcomm(ctx context.Context, pods []corev1.Pod, instance *mariadbv1.Galera, h *helper.Helper, config *rest.Config) (ret []corev1.Pod) {
 	for _, pod := range pods {
 		if pod.Status.Phase == corev1.PodRunning && !podutils.IsPodReady(&pod) &&
-			isGaleraContainerStartedAndWaiting(&pod, instance, h, config) {
+			isGaleraContainerStartedAndWaiting(ctx, &pod, instance, h, config) {
 			if _, attrFound := instance.Status.Attributes[pod.Name]; attrFound {
 				if instance.Status.Attributes[pod.Name].Gcomm == "" {
 					ret = append(ret, pod)
@@ -167,9 +170,9 @@ func getRunningPodsMissingGcomm(pods []corev1.Pod, instance *mariadbv1.Galera, h
 }
 
 // isGaleraContainerStartedAndWaiting checks whether the galera container is waiting for a gcomm_uri file
-func isGaleraContainerStartedAndWaiting(pod *corev1.Pod, instance *mariadbv1.Galera, h *helper.Helper, config *rest.Config) bool {
+func isGaleraContainerStartedAndWaiting(ctx context.Context, pod *corev1.Pod, instance *mariadbv1.Galera, h *helper.Helper, config *rest.Config) bool {
 	waiting := false
-	err := mariadb.ExecInPod(h, config, instance.Namespace, pod.Name, "galera",
+	err := mariadb.ExecInPod(ctx, h, config, instance.Namespace, pod.Name, "galera",
 		[]string{"/bin/bash", "-c", "test ! -f /var/lib/mysql/gcomm_uri && pgrep -aP1 | grep -o detect_gcomm_and_start.sh"},
 		func(stdout *bytes.Buffer, stderr *bytes.Buffer) error {
 			predicate := strings.TrimSuffix(stdout.String(), "\n")
@@ -185,8 +188,8 @@ func isGaleraContainerStartedAndWaiting(pod *corev1.Pod, instance *mariadbv1.Gal
 //
 
 // injectGcommURI configures a pod to start galera with a given URI
-func injectGcommURI(h *helper.Helper, config *rest.Config, instance *mariadbv1.Galera, pod *corev1.Pod, uri string) error {
-	err := mariadb.ExecInPod(h, config, instance.Namespace, pod.Name, "galera",
+func injectGcommURI(ctx context.Context, h *helper.Helper, config *rest.Config, instance *mariadbv1.Galera, pod *corev1.Pod, uri string) error {
+	err := mariadb.ExecInPod(ctx, h, config, instance.Namespace, pod.Name, "galera",
 		[]string{"/bin/bash", "-c", "echo '" + uri + "' > /var/lib/mysql/gcomm_uri"},
 		func(stdout *bytes.Buffer, stderr *bytes.Buffer) error {
 			attr := instance.Status.Attributes[pod.Name]
@@ -199,8 +202,8 @@ func injectGcommURI(h *helper.Helper, config *rest.Config, instance *mariadbv1.G
 }
 
 // retrieveSequenceNumber probes a pod's galera instance for sequence number
-func retrieveSequenceNumber(helper *helper.Helper, config *rest.Config, instance *mariadbv1.Galera, pod *corev1.Pod) error {
-	err := mariadb.ExecInPod(helper, config, instance.Namespace, pod.Name, "galera",
+func retrieveSequenceNumber(ctx context.Context, helper *helper.Helper, config *rest.Config, instance *mariadbv1.Galera, pod *corev1.Pod) error {
+	err := mariadb.ExecInPod(ctx, helper, config, instance.Namespace, pod.Name, "galera",
 		[]string{"/bin/bash", "/var/lib/operator-scripts/detect_last_commit.sh"},
 		func(stdout *bytes.Buffer, stderr *bytes.Buffer) error {
 			seqno := strings.TrimSuffix(stdout.String(), "\n")
@@ -280,6 +283,15 @@ func assertPodsAttributesValidity(helper *helper.Helper, instance *mariadbv1.Gal
 // RBAC for configmaps
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete;
 
+// RBAC permissions to create service accounts, roles, role bindings
+// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update
+// +kubebuilder:rbac:groups="rbac.authorization.k8s.io",resources=roles,verbs=get;list;watch;create;update
+// +kubebuilder:rbac:groups="rbac.authorization.k8s.io",resources=rolebindings,verbs=get;list;watch;create;update
+
+// RBAC required to grant the service account role these capabilities
+// +kubebuilder:rbac:groups="security.openshift.io",resourceNames=anyuid,resources=securitycontextconstraints,verbs=use
+// +kubebuilder:rbac:groups="",resources=pods,verbs=create;delete;get;list;patch;update;watch
+
 // Reconcile - Galera
 func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, _err error) {
 	_ = log.FromContext(ctx)
@@ -339,12 +351,39 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 			condition.UnknownCondition(condition.ServiceConfigReadyCondition, condition.InitReason, condition.ServiceConfigReadyInitMessage),
 			// cluster bootstrap
 			condition.UnknownCondition(condition.DeploymentReadyCondition, condition.InitReason, condition.DeploymentReadyInitMessage),
+			// service account, role, rolebinding
+			condition.UnknownCondition(condition.ServiceAccountReadyCondition, condition.InitReason, condition.ServiceAccountReadyInitMessage),
+			condition.UnknownCondition(condition.RoleReadyCondition, condition.InitReason, condition.RoleReadyInitMessage),
+			condition.UnknownCondition(condition.RoleBindingReadyCondition, condition.InitReason, condition.RoleBindingReadyInitMessage),
 		)
 
 		instance.Status.Conditions.Init(&cl)
 
 		// Register overall status immediately to have an early feedback e.g. in the cli
 		return ctrl.Result{}, nil
+	}
+
+	//
+	// Service account, role, binding
+	//
+	rbacRules := []rbacv1.PolicyRule{
+		{
+			APIGroups:     []string{"security.openshift.io"},
+			ResourceNames: []string{"anyuid"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"pods"},
+			Verbs:     []string{"create", "get", "list", "watch", "update", "patch", "delete"},
+		},
+	}
+	rbacResult, err := common_rbac.ReconcileRbac(ctx, helper, instance, rbacRules)
+	if err != nil {
+		return rbacResult, err
+	} else if (rbacResult != ctrl.Result{}) {
+		return rbacResult, nil
 	}
 
 	//
@@ -485,12 +524,12 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		}
 
 		// The other 'Running' pods can join the existing cluster.
-		for _, pod := range getRunningPodsMissingGcomm(podList.Items, instance, helper, r.config) {
+		for _, pod := range getRunningPodsMissingGcomm(ctx, podList.Items, instance, helper, r.config) {
 			name := pod.Name
 			joinerURI := buildGcommURI(instance)
 			util.LogForObject(helper, "Pushing gcomm URI to joiner", instance, "pod", name)
 			// Setting the gcomm attribute marks this pod as 'currently joining the cluster'
-			err := injectGcommURI(helper, r.config, instance, &pod, joinerURI)
+			err := injectGcommURI(ctx, helper, r.config, instance, &pod, joinerURI)
 			if err != nil {
 				util.LogErrorForObject(helper, err, "Failed to push gcomm URI", instance, "pod", name)
 				// A failed injection likely means the pod's status has changed.
@@ -510,10 +549,10 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	//   . any other status means the the pod is starting/restarting. We can't
 	//     exec into the pod yet, so we will probe it in another reconcile loop.
 	if !instance.Status.Bootstrapped && !isBootstrapInProgress(instance) {
-		for _, pod := range getRunningPodsMissingAttributes(podList.Items, instance, helper, r.config) {
+		for _, pod := range getRunningPodsMissingAttributes(ctx, podList.Items, instance, helper, r.config) {
 			name := pod.Name
 			util.LogForObject(helper, fmt.Sprintf("Pod %s running, retrieve seqno", name), instance)
-			err := retrieveSequenceNumber(helper, r.config, instance, &pod)
+			err := retrieveSequenceNumber(ctx, helper, r.config, instance, &pod)
 			if err != nil {
 				util.LogErrorForObject(helper, err, "Failed to retrieve seqno for "+name, instance)
 				return ctrl.Result{}, err
@@ -528,7 +567,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 			pod := getPodFromName(podList.Items, node)
 			util.LogForObject(helper, "Pushing gcomm URI to bootstrap", instance, "pod", node)
 			// Setting the gcomm attribute marks this pod as 'currently bootstrapping the cluster'
-			err := injectGcommURI(helper, r.config, instance, pod, "gcomm://")
+			err := injectGcommURI(ctx, helper, r.config, instance, pod, "gcomm://")
 			if err != nil {
 				util.LogErrorForObject(helper, err, "Failed to push gcomm URI", instance, "pod", node)
 				// A failed injection likely means the pod's status has changed.

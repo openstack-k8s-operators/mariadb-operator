@@ -114,3 +114,18 @@ func init() {
 func (instance Galera) IsReady() bool {
 	return instance.Status.Conditions.IsTrue(condition.DeploymentReadyCondition)
 }
+
+// RbacConditionsSet - sets the conditions for the rbac object
+func (instance Galera) RbacConditionsSet(c *condition.Condition) {
+	instance.Status.Conditions.Set(c)
+}
+
+// RbacNamespace - returns the namespace name
+func (instance Galera) RbacNamespace() string {
+	return instance.Namespace
+}
+
+// RbacResourceName - return the name to be used for rbac objects (serviceaccount, role, rolebinding)
+func (instance Galera) RbacResourceName() string {
+	return "galera-" + instance.Name
+}

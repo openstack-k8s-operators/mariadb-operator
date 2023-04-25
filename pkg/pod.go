@@ -16,7 +16,7 @@ func Pod(db *databasev1beta1.MariaDB, configHash string) *corev1.Pod {
 			Labels:    GetLabels(db.Name),
 		},
 		Spec: corev1.PodSpec{
-			ServiceAccountName: "mariadb-operator-mariadb",
+			ServiceAccountName: db.RbacResourceName(),
 			Containers: []corev1.Container{
 				{
 					Name:  "mariadb",
