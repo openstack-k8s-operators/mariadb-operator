@@ -11,7 +11,7 @@ metadata:
   name: openstack
   namespace: openstack
 spec:
-  containerImage: quay.io/tripleozedcentos9/openstack-mariadb:current-tripleo
+  containerImage: quay.io/podified-antelope-centos9/openstack-mariadb:current-podified
   secret: osp-secret
   storageRequest: 500M
 status:
@@ -62,7 +62,7 @@ metadata:
   namespace: openstack
 spec:
   containers:
-  - image: quay.io/tripleozedcentos9/openstack-mariadb:current-tripleo
+  - image: quay.io/podified-antelope-centos9/openstack-mariadb:current-podified
     imagePullPolicy: IfNotPresent
     name: mariadb
     resources: {}
