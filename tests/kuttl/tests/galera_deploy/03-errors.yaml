@@ -11,46 +11,38 @@ apiVersion: mariadb.openstack.org/v1beta1
 kind: Galera
 metadata:
   name: openstack
-  namespace: openstack
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: openstack-galera
-  namespace: openstack
 ---
 apiVersion: v1
 kind: Pod
 metadata:
   name: openstack-galera-0
-  namespace: openstack
 ---
 apiVersion: v1
 kind: Pod
 metadata:
   name: openstack-galera-1
-  namespace: openstack
 ---
 apiVersion: v1
 kind: Pod
 metadata:
   name: openstack-galera-2
-  namespace: openstack
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: openstack-galera
-  namespace: openstack
 ---
 apiVersion: v1
 kind: Endpoints
 metadata:
   name: openstack-galera
-  namespace: openstack
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: openstack-config-data
-  namespace: openstack
