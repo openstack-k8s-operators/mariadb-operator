@@ -9,7 +9,6 @@ apiVersion: mariadb.openstack.org/v1beta1
 kind: MariaDB
 metadata:
   name: openstack
-  namespace: openstack
 spec:
   containerImage: quay.io/podified-antelope-centos9/openstack-mariadb:current-podified
   secret: osp-secret
@@ -59,7 +58,6 @@ metadata:
     cr: mariadb-openstack
     owner: mariadb-operator
   name: mariadb-openstack
-  namespace: openstack
 spec:
   containers:
   - image: quay.io/podified-antelope-centos9/openstack-mariadb:current-podified
