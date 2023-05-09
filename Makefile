@@ -130,6 +130,7 @@ run: export HEALTH_PORT?=8081
 run: export OPERATOR_TEMPLATES=./templates/
 run: export ENABLE_WEBHOOKS?=false
 run: manifests generate fmt vet ## Run a controller from your host.
+	/bin/bash hack/clean_local_webhook.sh
 	go run ./main.go -metrics-bind-address ":$(METRICS_PORT)" -health-probe-bind-address ":$(HEALTH_PORT)"
 
 .PHONY: docker-build
@@ -324,7 +325,6 @@ gowork: ## Generate go.work file
 # $oc delete -n openstack mutatingwebhookconfiguration/mmariadb.kb.io
 SKIP_CERT ?=false
 .PHONY: run-with-webhook
-run-with-webhook: export MARIADB_IMAGE_URL_DEFAULT=quay.io/podified-antelope-centos9/openstack-mariadb:current-podified
 run-with-webhook: export METRICS_PORT?=8080
 run-with-webhook: export HEALTH_PORT?=8081
 run-with-webhook: export OPERATOR_TEMPLATES=./templates/
