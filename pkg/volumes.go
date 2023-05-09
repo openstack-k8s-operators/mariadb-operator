@@ -6,6 +6,7 @@ import (
 )
 
 func getVolumes(instance *databasev1beta1.MariaDB) []corev1.Volume {
+	var config0644AccessMode int32 = 0644
 	var config0600AccessMode int32 = 0600
 	var volumes = []corev1.Volume{
 		{
@@ -92,7 +93,7 @@ func getVolumes(instance *databasev1beta1.MariaDB) []corev1.Volume {
 				Name: "tlsca-secret",
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
-						DefaultMode: &config0600AccessMode,
+						DefaultMode: &config0644AccessMode,
 						SecretName:  instance.Spec.TLS.CaSecretName,
 					},
 				},
@@ -165,5 +166,17 @@ func getInitVolumeMounts(instance *databasev1beta1.MariaDB) []corev1.VolumeMount
 			Name:      "lib-data",
 		},
 	}
+
+	if instance.Spec.TLS.CaSecretName != "" {
+		volumeMounts = append(
+			volumeMounts,
+			corev1.VolumeMount{
+				Name:      "tlsca-secret",
+				MountPath: "/var/lib/tlsca-data",
+				ReadOnly:  true,
+			},
+		)
+	}
+
 	return volumeMounts
 }
