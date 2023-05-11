@@ -18,7 +18,15 @@ package v1beta1
 
 import (
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+const (
+	// Container image fall-back defaults
+
+	// MariaDBContainerImage is the fall-back container image for MariaDB/Galera
+	MariaDBContainerImage = "quay.io/podified-antelope-centos9/openstack-mariadb:current-podified"
 )
 
 // MariaDBSpec defines the desired state of MariaDB
@@ -96,4 +104,14 @@ func (instance MariaDB) RbacNamespace() string {
 // RbacResourceName - return the name to be used for rbac objects (serviceaccount, role, rolebinding)
 func (instance MariaDB) RbacResourceName() string {
 	return "mariadb-" + instance.Name
+}
+
+// SetupDefaults - initializes any CRD field defaults based on environment variables (the defaulting mechanism itself is implemented via webhooks)
+func SetupDefaults() {
+	// Acquire environmental defaults and initialize Keystone defaults with them
+	mariaDBDefaults := MariaDBDefaults{
+		ContainerImageURL: util.GetEnvVar("MARIADB_IMAGE_URL_DEFAULT", MariaDBContainerImage),
+	}
+
+	SetupMariaDBDefaults(mariaDBDefaults)
 }

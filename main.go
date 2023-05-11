@@ -120,12 +120,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Acquire environmental defaults and initialize MariaDB defaults with them
-	mariadbDefaults := mariadbv1beta1.MariaDBDefaults{
-		ContainerImageURL: os.Getenv("MARIADB_IMAGE_URL_DEFAULT"),
-	}
-
-	mariadbv1beta1.SetupMariaDBDefaults(mariadbDefaults)
+	// Acquire environmental defaults and initialize operator defaults with them
+	mariadbv1beta1.SetupDefaults()
 
 	// Setup webhooks if requested
 	if strings.ToLower(os.Getenv("ENABLE_WEBHOOKS")) != "false" {
