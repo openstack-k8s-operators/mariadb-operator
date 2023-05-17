@@ -12,12 +12,11 @@ metadata:
   namespace: system
   labels:
     control-plane: controller-manager
-    app.kubernetes.io/name: mariadb-operator
-    app.kubernetes.io/component: mariadb
+    openstack.org/operator-name: mariadb
 spec:
   selector:
     matchLabels:
-      app.kubernetes.io/name: mariadb-operator
+      openstack.org/operator-name: mariadb
   replicas: 1
   template:
     metadata:
@@ -25,8 +24,7 @@ spec:
         kubectl.kubernetes.io/default-container: manager
       labels:
         control-plane: controller-manager
-        app.kubernetes.io/name: mariadb-operator
-        app.kubernetes.io/component: mariadb
+        openstack.org/operator-name: mariadb
     spec:
       securityContext:
         runAsNonRoot: true
