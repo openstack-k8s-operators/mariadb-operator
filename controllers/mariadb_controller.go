@@ -68,7 +68,7 @@ type MariaDBReconciler struct {
 // +kubebuilder:rbac:groups="",resources=pods,verbs=create;delete;get;list;patch;update;watch
 
 // Reconcile reconcile mariadb API requests
-func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, _err error) {
 	_ = r.Log.WithValues("mariadb", req.NamespacedName)
 
 	// Fetch the MariaDB instance
@@ -105,7 +105,7 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	}
 
-	h, err := helper.NewHelper(
+	helper, err := helper.NewHelper(
 		instance,
 		r.Client,
 		r.Kclient,
@@ -118,21 +118,22 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	// Always patch the instance status when exiting this function so we can persist any changes.
 	defer func() {
-		// update the overall status condition if service is ready
-		if instance.IsReady() {
-			instance.Status.Conditions.MarkTrue(condition.ReadyCondition, condition.ReadyMessage)
+		// update the Ready condition based on the sub conditions
+		if instance.Status.Conditions.AllSubConditionIsTrue() {
+			instance.Status.Conditions.MarkTrue(
+				condition.ReadyCondition, condition.ReadyMessage)
+		} else {
+			// something is not ready so reset the Ready condition
+			instance.Status.Conditions.MarkUnknown(
+				condition.ReadyCondition, condition.InitReason, condition.ReadyInitMessage)
+			// and recalculate it based on the state of the rest of the conditions
+			instance.Status.Conditions.Set(
+				instance.Status.Conditions.Mirror(condition.ReadyCondition))
 		}
-
-		if err := h.SetAfter(instance); err != nil {
-			util.LogErrorForObject(h, err, "Set after and calc patch/diff", instance)
-		}
-
-		if changed := h.GetChanges()["status"]; changed {
-			patch := client.MergeFrom(h.GetBeforeObject())
-
-			if err := r.Client.Status().Patch(ctx, instance, patch); err != nil && !k8s_errors.IsNotFound(err) {
-				util.LogErrorForObject(h, err, "Update status", instance)
-			}
+		err := helper.PatchInstance(ctx, instance)
+		if err != nil {
+			_err = err
+			return
 		}
 	}()
 
@@ -149,7 +150,7 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			Verbs:     []string{"create", "get", "list", "watch", "update", "patch", "delete"},
 		},
 	}
-	rbacResult, err := common_rbac.ReconcileRbac(ctx, h, instance, rbacRules)
+	rbacResult, err := common_rbac.ReconcileRbac(ctx, helper, instance, rbacRules)
 	if err != nil {
 		return rbacResult, err
 	} else if (rbacResult != ctrl.Result{}) {
@@ -202,7 +203,7 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	if op != controllerutil.OperationResultNone {
 		util.LogForObject(
-			h,
+			helper,
 			fmt.Sprintf("Service %s successfully reconciled - operation: %s", service.Name, string(op)),
 			instance,
 		)
@@ -229,7 +230,7 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 		if op != controllerutil.OperationResultNone {
 			util.LogForObject(
-				h,
+				helper,
 				fmt.Sprintf("Endpoints %s successfully reconciled - operation: %s", endpoints.Name, string(op)),
 				instance,
 			)
@@ -240,7 +241,7 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	// Generate the config maps for the various services
 	configMapVars := make(map[string]env.Setter)
-	err = r.generateServiceConfigMaps(ctx, h, instance, &configMapVars)
+	err = r.generateServiceConfigMaps(ctx, helper, instance, &configMapVars)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.ServiceConfigReadyCondition,
@@ -271,7 +272,7 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	ctrlResult, err := job.DoJob(
 		ctx,
-		h,
+		helper,
 	)
 	if (ctrlResult != ctrl.Result{}) {
 		instance.Status.Conditions.Set(condition.FalseCondition(
@@ -330,7 +331,7 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			condition.DeploymentReadyRunningMessage))
 
 		util.LogForObject(
-			h,
+			helper,
 			fmt.Sprintf("Pod %s successfully reconciled - operation: %s", pod.Name, string(op)),
 			instance,
 		)
