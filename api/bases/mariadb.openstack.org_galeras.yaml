@@ -166,9 +166,6 @@ spec:
                 default: ""
                 description: Hash of the configuration files
                 type: string
-              safeToBootstrap:
-                description: Name of the node that can safely bootstrap a cluster
-                type: string
             required:
             - bootstrapped
             - configHash

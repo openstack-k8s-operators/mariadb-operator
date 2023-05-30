@@ -219,10 +219,6 @@ func retrieveSequenceNumber(ctx context.Context, helper *helper.Helper, config *
 // clearPodAttributes clears information known by the operator about a pod
 func clearPodAttributes(instance *mariadbv1.Galera, podName string) {
 	delete(instance.Status.Attributes, podName)
-	// If the pod was deemed safeToBootstrap, this state has to be reassessed
-	if instance.Status.SafeToBootstrap == podName {
-		instance.Status.SafeToBootstrap = ""
-	}
 }
 
 // clearOldPodsAttributesOnScaleDown removes known information from old pods

@@ -71,8 +71,6 @@ type GaleraAttributes struct {
 type GaleraStatus struct {
 	// A map of database node attributes for each pod
 	Attributes map[string]GaleraAttributes `json:"attributes,omitempty"`
-	// Name of the node that can safely bootstrap a cluster
-	SafeToBootstrap string `json:"safeToBootstrap,omitempty"`
 	// Is the galera cluster currently running
 	// +kubebuilder:default=false
 	Bootstrapped bool `json:"bootstrapped"`
