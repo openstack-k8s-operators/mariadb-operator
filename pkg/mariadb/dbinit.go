@@ -19,7 +19,7 @@ func DbInitJob(db *databasev1beta1.MariaDB) *batchv1.Job {
 		Spec: batchv1.JobSpec{
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
-					RestartPolicy:      "OnFailure",
+					RestartPolicy:      corev1.RestartPolicyOnFailure,
 					ServiceAccountName: db.RbacResourceName(),
 					Containers: []corev1.Container{
 						{

@@ -39,7 +39,7 @@ func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName s
 		Spec: batchv1.JobSpec{
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
-					RestartPolicy:      "OnFailure",
+					RestartPolicy:      corev1.RestartPolicyOnFailure,
 					ServiceAccountName: serviceAccountName,
 					Containers: []corev1.Container{
 						{
@@ -100,7 +100,7 @@ func DeleteDbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHost
 		Spec: batchv1.JobSpec{
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
-					RestartPolicy:      "OnFailure",
+					RestartPolicy:      corev1.RestartPolicyOnFailure,
 					ServiceAccountName: serviceAccountName,
 					Containers: []corev1.Container{
 						{
