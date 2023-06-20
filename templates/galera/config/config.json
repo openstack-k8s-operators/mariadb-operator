@@ -2,13 +2,27 @@
     "command": "/usr/local/bin/detect_gcomm_and_start.sh",
     "config_files": [
         {
-            "source": "/var/lib/pod-config-data/galera.cnf",
+            "source": "/var/lib/config-data/generated/galera.cnf",
             "dest": "/etc/my.cnf.d/galera.cnf",
             "owner": "root",
             "perm": "0644"
         },
         {
-            "source": "/var/lib/pod-config-data/galera_custom.cnf",
+            "source": "/var/lib/config-data/generated/galera_tls.cnf",
+            "dest": "/etc/my.cnf.d/galera_tls.cnf",
+            "owner": "root",
+            "perm": "0644",
+            "optional": true
+        },
+        {
+            "source": "/var/lib/config-data/generated/galera_external_tls.cnf",
+            "dest": "/etc/my.cnf.d/galera_external_tls.cnf",
+            "owner": "root",
+            "perm": "0644",
+            "optional": true
+        },
+        {
+            "source": "/var/lib/config-data/generated/galera_custom.cnf",
             "dest": "/etc/my.cnf.d/galera_custom.cnf",
             "owner": "root",
             "perm": "0644",
@@ -20,6 +34,20 @@
             "owner": "root",
             "perm": "0755",
             "merge": "true"
+        },
+        {
+            "source": "/var/lib/config-data/tls/private/galera.key",
+            "dest": "/etc/pki/tls/private/galera.key",
+            "owner": "mysql",
+            "perm": "0600",
+            "optional": true
+        },
+        {
+            "source": "/var/lib/config-data/tls/certs/galera.crt",
+            "dest": "/etc/pki/tls/certs/galera.crt",
+            "owner": "mysql",
+            "perm": "0755",
+            "optional": true
         }
     ],
     "permissions": [

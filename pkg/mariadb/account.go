@@ -15,11 +15,24 @@ type accountCreateOrDeleteOptions struct {
 	DatabaseName          string
 	DatabaseHostname      string
 	DatabaseAdminUsername string
+	RequireTLS            string
 }
 
 func CreateDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName string, databaseHostName string, databaseSecret string, containerImage string, serviceAccountName string) (*batchv1.Job, error) {
+	var tlsStatement string
+	if account.Spec.RequireTLS {
+		tlsStatement = " REQUIRE SSL"
+	} else {
+		tlsStatement = ""
+	}
 
-	opts := accountCreateOrDeleteOptions{account.Spec.UserName, databaseName, databaseHostName, "root"}
+	opts := accountCreateOrDeleteOptions{
+		account.Spec.UserName,
+		databaseName,
+		databaseHostName,
+		"root",
+		tlsStatement,
+	}
 	dbCmd, err := util.ExecuteTemplateFile("account.sh", &opts)
 	if err != nil {
 		return nil, err
@@ -82,7 +95,7 @@ func CreateDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName st
 
 func DeleteDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName string, databaseHostName string, databaseSecret string, containerImage string, serviceAccountName string) (*batchv1.Job, error) {
 
-	opts := accountCreateOrDeleteOptions{account.Spec.UserName, databaseName, databaseHostName, "root"}
+	opts := accountCreateOrDeleteOptions{account.Spec.UserName, databaseName, databaseHostName, "root", ""}
 
 	delCmd, err := util.ExecuteTemplateFile("delete_account.sh", &opts)
 	if err != nil {

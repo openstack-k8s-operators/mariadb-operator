@@ -16,10 +16,17 @@ type dbCreateOptions struct {
 	DatabaseAdminUsername string
 	DefaultCharacterSet   string
 	DefaultCollation      string
+	DatabaseUserTLS       string
 }
 
 // DbDatabaseJob -
-func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName string, databaseSecret string, containerImage string, serviceAccountName string) (*batchv1.Job, error) {
+func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName string, databaseSecret string, containerImage string, serviceAccountName string, useTLS bool) (*batchv1.Job, error) {
+	var tlsStatement string
+	if useTLS {
+		tlsStatement = " REQUIRE SSL"
+	} else {
+		tlsStatement = ""
+	}
 
 	opts := dbCreateOptions{
 		database.Spec.Name,
@@ -27,6 +34,7 @@ func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName s
 		"root",
 		database.Spec.DefaultCharacterSet,
 		database.Spec.DefaultCollation,
+		tlsStatement,
 	}
 	dbCmd, err := util.ExecuteTemplateFile("database.sh", &opts)
 	if err != nil {
@@ -119,6 +127,7 @@ func DeleteDbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHost
 		"root",
 		database.Spec.DefaultCharacterSet,
 		database.Spec.DefaultCollation,
+		"",
 	}
 	delCmd, err := util.ExecuteTemplateFile("delete_database.sh", &opts)
 	if err != nil {

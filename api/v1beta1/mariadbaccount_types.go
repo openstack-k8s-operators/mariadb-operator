@@ -38,6 +38,10 @@ type MariaDBAccountSpec struct {
 	// Name of secret which contains DatabasePassword
 	// +kubebuilder:validation:Required
 	Secret string `json:"secret"`
+
+	// Account must use TLS to connect to the database
+	// +kubebuilder:default=false
+	RequireTLS bool `json:"requireTLS"`
 }
 
 // MariaDBAccountStatus defines the observed state of MariaDBAccount

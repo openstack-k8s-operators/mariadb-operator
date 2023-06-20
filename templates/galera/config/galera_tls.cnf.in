@@ -1,0 +1,15 @@
+[mysqld]
+ssl
+ssl-cert = /etc/pki/tls/certs/galera.crt
+ssl-key = /etc/pki/tls/private/galera.key
+ssl-ca = /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
+ssl-cipher = !SSLv2:kEECDH:kRSA:kEDH:kPSK:+3DES:!aNULL:!eNULL:!MD5:!EXP:!RC4:!SEED:!IDEA:!DES:!SSLv3:!TLSv1
+wsrep_provider_options = gcache.recover=no;gmcast.listen_addr=tcp://{ PODIP }:4567;socket.ssl_key=/etc/pki/tls/private/galera.key;socket.ssl_cert=/etc/pki/tls/certs/galera.crt;socket.ssl_cipher=AES128-SHA256;socket.ssl_ca=/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem;
+
+[sst]
+sockopt = cipher=!SSLv2:kEECDH:kRSA:kEDH:kPSK:+3DES:!aNULL:!eNULL:!MD5:!EXP:!RC4:!SEED:!IDEA:!DES:!SSLv3:!TLSv1
+tcert = /etc/pki/tls/certs/galera.crt
+tkey = /etc/pki/tls/private/galera.key
+tca = /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
+encrypt = 3
+ssl-mode = REQUIRED

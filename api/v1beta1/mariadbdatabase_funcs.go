@@ -107,7 +107,8 @@ func (d *Database) setDatabaseHostname(
 			err,
 		)
 	}
-	d.databaseHostname = serviceList.Items[0].GetName()
+	svc := serviceList.Items[0]
+	d.databaseHostname = svc.GetName() + "." + svc.GetNamespace() + ".svc"
 
 	return nil
 }

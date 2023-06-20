@@ -35,6 +35,10 @@ spec:
           spec:
             description: MariaDBAccountSpec defines the desired state of MariaDBAccount
             properties:
+              requireTLS:
+                default: false
+                description: Account must use TLS to connect to the database
+                type: boolean
               secret:
                 description: Name of secret which contains DatabasePassword
                 type: string
@@ -42,6 +46,7 @@ spec:
                 description: UserName for new account
                 type: string
             required:
+            - requireTLS
             - secret
             - userName
             type: object

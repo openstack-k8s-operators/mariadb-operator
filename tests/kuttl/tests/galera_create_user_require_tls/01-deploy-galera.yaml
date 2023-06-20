@@ -1,0 +1,54 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+delete:
+  - apiVersion: mariadb.openstack.org/v1beta1
+    kind: MariaDBDatabase
+    name: kuttldb
+  - apiVersion: mariadb.openstack.org/v1beta1
+    kind: Galera
+    name: openstack
+---
+# galera resource with external TLS only (no TLS for galera WSREP traffic)
+apiVersion: mariadb.openstack.org/v1beta1
+kind: Galera
+metadata:
+  name: openstack
+spec:
+  secret: osp-secret
+  storageClass: local-storage
+  storageRequest: 500M
+  replicas: 1
+  tls:
+    secretName: kuttl-galera-tls
+    caBundleSecretName: kuttl-galera-tls
+  disableNonTLSListeners: true
+---
+# a database cr associated with the db above will create users with grants
+# set up to only allow TLS connection
+apiVersion: mariadb.openstack.org/v1beta1
+kind: MariaDBDatabase
+metadata:
+  name: kuttldb
+  labels:
+    dbName: openstack
+spec:
+  secret: kuttldb-secret
+  name: kuttldb
+---
+apiVersion: mariadb.openstack.org/v1beta1
+kind: MariaDBAccount
+metadata:
+  labels:
+    mariaDBDatabaseName: kuttldb
+  name: kuttldb-tls-db-account
+spec:
+  userName: anotheruser
+  secret: kuttldb-secret
+  requireTLS: true
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kuttldb-secret
+data:
+  DatabasePassword: MTIzNDU2Nzg=
