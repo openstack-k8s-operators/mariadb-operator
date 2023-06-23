@@ -9,6 +9,7 @@ import (
 // Pod -
 func Pod(db *databasev1beta1.MariaDB, configHash string) *corev1.Pod {
 
+	runAsUser := int64(0)
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "mariadb-" + db.Name,
@@ -21,6 +22,9 @@ func Pod(db *databasev1beta1.MariaDB, configHash string) *corev1.Pod {
 				{
 					Name:  "mariadb",
 					Image: db.Spec.ContainerImage,
+					SecurityContext: &corev1.SecurityContext{
+						RunAsUser: &runAsUser,
+					},
 					Env: []corev1.EnvVar{
 						{
 							Name:  "KOLLA_CONFIG_STRATEGY",
