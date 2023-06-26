@@ -11,6 +11,10 @@ metadata:
   name: openstack
 spec:
   replicas: 1
+status:
+  conditions:
+  - status: "True"
+    type: Ready
 ---
 apiVersion: apps/v1
 kind: StatefulSet

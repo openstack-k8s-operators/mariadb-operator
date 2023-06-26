@@ -17,6 +17,10 @@ spec:
   storageRequest: 500M
   containerImage: quay.io/podified-antelope-centos9/openstack-mariadb:current-podified
   replicas: 3
+status:
+  conditions:
+  - status: "True"
+    type: Ready
 ---
 apiVersion: apps/v1
 kind: StatefulSet
