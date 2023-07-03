@@ -6,14 +6,16 @@
 #
 
 apiVersion: mariadb.openstack.org/v1beta1
-kind: MariaDB
+kind: Galera
 metadata:
   name: openstack
 spec:
   containerImage: quay.io/podified-antelope-centos9/openstack-mariadb:current-podified
+  replicas: 3
   secret: osp-secret
   storageRequest: 500M
 status:
+  bootstrapped: true
   conditions:
   - message: Setup complete
     reason: Ready
@@ -27,10 +29,6 @@ status:
     reason: Ready
     status: "True"
     type: ExposeServiceReady
-  - message: MariaDB dbinit completed
-    reason: Ready
-    status: "True"
-    type: MariaDBInitialized
   - message: RoleBinding created
     reason: Ready
     status: "True"
@@ -48,24 +46,81 @@ status:
     status: "True"
     type: ServiceConfigReady
 ---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: openstack-galera
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: galera
+      cr: galera-openstack
+      galera/name: openstack
+  serviceName: openstack-galera
+  template:
+    metadata:
+      labels:
+        app: galera
+        cr: galera-openstack
+        galera/name: openstack
+    spec:
+      containers:
+      - command:
+        - /usr/bin/dumb-init
+        - --
+        - /usr/local/bin/kolla_start
+        image: quay.io/podified-antelope-centos9/openstack-mariadb:current-podified
+        name: galera
+        ports:
+        - containerPort: 3306
+          name: mysql
+          protocol: TCP
+        - containerPort: 4567
+          name: galera
+          protocol: TCP
+      serviceAccount: galera-openstack
+      serviceAccountName: galera-openstack
+status:
+  availableReplicas: 3
+  readyReplicas: 3
+  replicas: 3
+---
 apiVersion: v1
 kind: Pod
 metadata:
-  annotations:
-    openshift.io/scc: anyuid
-  labels:
-    app: mariadb
-    cr: mariadb-openstack
-    owner: mariadb-operator
-  name: mariadb-openstack
+  name: openstack-galera-0
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: openstack-galera-1
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: openstack-galera-2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openstack-galera
 spec:
-  containers:
-  - image: quay.io/podified-antelope-centos9/openstack-mariadb:current-podified
-    imagePullPolicy: IfNotPresent
-    name: mariadb
-    resources: {}
-  restartPolicy: Always
-  serviceAccount: mariadb-openstack
-  serviceAccountName: mariadb-openstack
-status:
-  phase: Running
+  ports:
+  - name: mysql
+    port: 3306
+    protocol: TCP
+    targetPort: 3306
+  selector:
+    app: galera
+    cr: galera-openstack
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: openstack-galera
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openstack-config-data
