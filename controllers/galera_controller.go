@@ -50,7 +50,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
-	mariadb "github.com/openstack-k8s-operators/mariadb-operator/pkg"
+	mariadb "github.com/openstack-k8s-operators/mariadb-operator/pkg/mariadb"
 )
 
 // GaleraReconciler reconciles a Galera object
