@@ -7,5 +7,4 @@ spec:
   storageClass: local-storage
   storageRequest: 500M
   containerImage: quay.io/podified-antelope-centos9/openstack-mariadb:current-podified
-  # FIXME: dropping replicas to 1 as a workaround while we investigate MariaDB 10.5 replication issues
-  replicas: 1
+  replicas: 3
