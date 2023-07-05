@@ -33,7 +33,7 @@ import (
 	helper "github.com/openstack-k8s-operators/lib-common/modules/common/helper"
 	job "github.com/openstack-k8s-operators/lib-common/modules/common/job"
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
-	mariadb "github.com/openstack-k8s-operators/mariadb-operator/pkg"
+	mariadb "github.com/openstack-k8s-operators/mariadb-operator/pkg/mariadb"
 )
 
 // MariaDBDatabaseReconciler reconciles a MariaDBDatabase object

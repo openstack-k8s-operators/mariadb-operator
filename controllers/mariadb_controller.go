@@ -40,7 +40,7 @@ import (
 	common_rbac "github.com/openstack-k8s-operators/lib-common/modules/common/rbac"
 	util "github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
-	mariadb "github.com/openstack-k8s-operators/mariadb-operator/pkg"
+	mariadb "github.com/openstack-k8s-operators/mariadb-operator/pkg/mariadb"
 	"k8s.io/client-go/kubernetes"
 )
 
