@@ -6,4 +6,3 @@ spec:
   secret: mariadb-secret
   storageClass: local-storage
   storageRequest: 500M
-  containerImage: quay.io/podified-antelope-centos9/openstack-mariadb:current-podified
