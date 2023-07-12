@@ -43,7 +43,7 @@ type GaleraSpec struct {
 	// +kubebuilder:default=1
 	// +kubebuilder:validation:Enum=1;3
 	// Size of the galera cluster deployment
-	Replicas int32 `json:"replicas"`
+	Replicas *int32 `json:"replicas"`
 	// +kubebuilder:validation:Optional
 	// NodeSelector to target subset of worker nodes running this service
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`

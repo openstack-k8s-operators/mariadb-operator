@@ -14,10 +14,6 @@ import (
 func StatefulSet(g *mariadbv1.Galera) *appsv1.StatefulSet {
 	ls := StatefulSetLabels(g)
 	name := StatefulSetName(g.Name)
-	replicas := g.Spec.Replicas
-	storage := g.Spec.StorageClass
-	storageRequest := resource.MustParse(g.Spec.StorageRequest)
-	configHash := g.Status.ConfigHash
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -25,7 +21,7 @@ func StatefulSet(g *mariadbv1.Galera) *appsv1.StatefulSet {
 		},
 		Spec: appsv1.StatefulSetSpec{
 			ServiceName: name,
-			Replicas:    &replicas,
+			Replicas:    g.Spec.Replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: ls,
 			},
@@ -84,7 +80,7 @@ func StatefulSet(g *mariadbv1.Galera) *appsv1.StatefulSet {
 						Command: []string{"/usr/bin/dumb-init", "--", "/usr/local/bin/kolla_start"},
 						Env: []corev1.EnvVar{{
 							Name:  "CR_CONFIG_HASH",
-							Value: configHash,
+							Value: g.Status.ConfigHash,
 						}, {
 							Name:  "KOLLA_CONFIG_STRATEGY",
 							Value: "COPY_ALWAYS",
@@ -251,10 +247,10 @@ func StatefulSet(g *mariadbv1.Galera) *appsv1.StatefulSet {
 						AccessModes: []corev1.PersistentVolumeAccessMode{
 							"ReadWriteOnce",
 						},
-						StorageClassName: &storage,
+						StorageClassName: &g.Spec.StorageClass,
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
-								"storage": storageRequest,
+								"storage": resource.MustParse(g.Spec.StorageRequest),
 							},
 						},
 					},

@@ -86,7 +86,7 @@ func findBestCandidate(status *mariadbv1.GaleraStatus) string {
 // buildGcommURI builds a gcomm URI for a galera instance
 // e.g. "gcomm://galera-0.galera,galera-1.galera,galera-2.galera"
 func buildGcommURI(instance *mariadbv1.Galera) string {
-	replicas := int(instance.Spec.Replicas)
+	replicas := int(*instance.Spec.Replicas)
 	basename := instance.Name + "-galera"
 	res := []string{}
 
@@ -228,7 +228,7 @@ func clearPodAttributes(instance *mariadbv1.Galera, podName string) {
 // clearOldPodsAttributesOnScaleDown removes known information from old pods
 // that no longer exist after a scale down of the galera CR
 func clearOldPodsAttributesOnScaleDown(helper *helper.Helper, instance *mariadbv1.Galera) {
-	replicas := int(instance.Spec.Replicas)
+	replicas := int(*instance.Spec.Replicas)
 
 	// a pod's name is built as 'statefulsetname-n'
 	for node := range instance.Status.Attributes {
