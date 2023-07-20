@@ -8,7 +8,7 @@ require (
 	github.com/onsi/gomega v1.27.8
 	github.com/openstack-k8s-operators/lib-common/modules/common v0.0.0-20230523062001-d41eddbb4da6
 	github.com/openstack-k8s-operators/mariadb-operator/api v0.0.0-20230719193008-17957ceb4301
-	golang.org/x/exp v0.0.0-20221212164502-fae10dda9338
+	golang.org/x/exp v0.0.0-20230713183714-613f0c0eb8a1
 	k8s.io/api v0.26.7
 	k8s.io/apimachinery v0.26.7
 	k8s.io/client-go v0.26.7
