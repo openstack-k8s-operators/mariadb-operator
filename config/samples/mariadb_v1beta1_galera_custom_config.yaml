@@ -3,7 +3,7 @@ kind: Galera
 metadata:
   name: openstack
 spec:
-  secret: mariadb-secret
+  secret: osp-secret
   storageClass: local-storage
   storageRequest: 500M
   replicas: 3
