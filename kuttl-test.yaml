@@ -18,6 +18,7 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestSuite
 reportFormat: JSON
 reportName: kuttl-test-mariadb
+namespace: mariadb-kuttl-tests
 timeout: 180
 parallel: 2
 suppress:
