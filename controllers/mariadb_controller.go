@@ -25,7 +25,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -37,6 +36,7 @@ import (
 	helper "github.com/openstack-k8s-operators/lib-common/modules/common/helper"
 	job "github.com/openstack-k8s-operators/lib-common/modules/common/job"
 	labels "github.com/openstack-k8s-operators/lib-common/modules/common/labels"
+	pvc "github.com/openstack-k8s-operators/lib-common/modules/common/pvc"
 	common_rbac "github.com/openstack-k8s-operators/lib-common/modules/common/rbac"
 	util "github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
@@ -158,34 +158,20 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 	}
 
 	// PVC
-	// TODO: Add PVC condition handling?  We don't currently in other operators that have PVC concerns, though
-	pvc := mariadb.Pvc(instance)
-	op, err := controllerutil.CreateOrPatch(ctx, r.Client, pvc, func() error {
+	pvc := pvc.NewPvc(
+		mariadb.Pvc(instance),
+		time.Duration(5)*time.Second,
+	)
 
-		pvc.Spec.Resources.Requests = corev1.ResourceList{
-			corev1.ResourceStorage: resource.MustParse(instance.Spec.StorageRequest),
-		}
+	ctrlResult, err := pvc.CreateOrPatch(ctx, helper)
 
-		pvc.Spec.StorageClassName = &instance.Spec.StorageClass
-		pvc.Spec.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
-
-		err := controllerutil.SetOwnerReference(instance, pvc, r.Client.Scheme())
-		if err != nil {
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	if op != controllerutil.OperationResultNone {
-		r.Log.Info(fmt.Sprintf("%s %s database PVC %s - operation: %s", instance.Kind, instance.Name, pvc.Name, string(op)))
-		return ctrl.Result{RequeueAfter: time.Duration(5) * time.Second}, err
+	if (err != nil || ctrlResult != ctrl.Result{}) {
+		return ctrlResult, err
 	}
 
 	// Service
 	service := mariadb.Service(instance)
-	op, err = controllerutil.CreateOrPatch(ctx, r.Client, service, func() error {
+	op, err := controllerutil.CreateOrPatch(ctx, r.Client, service, func() error {
 		err := controllerutil.SetControllerReference(instance, service, r.Scheme)
 		if err != nil {
 			return err
@@ -270,7 +256,7 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 		instance.Status.DbInitHash,
 	)
 
-	ctrlResult, err := job.DoJob(
+	ctrlResult, err = job.DoJob(
 		ctx,
 		helper,
 	)
