@@ -598,18 +598,6 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	return ctrl.Result{}, err
 }
 
-// configMapNameForScripts - name of the configmap that holds the
-// used by the statefulset associated to a galera CR
-func configMapNameForScripts(instance *mariadbv1.Galera) string {
-	return fmt.Sprintf("%s-scripts", instance.Name)
-}
-
-// configMapNameForConfig - name of the configmap that holds configuration
-// files injected into pods associated to a galera CR
-func configMapNameForConfig(instance *mariadbv1.Galera) string {
-	return fmt.Sprintf("%s-config-data", instance.Name)
-}
-
 // generateConfigMaps returns the config map resource for a galera instance
 func (r *GaleraReconciler) generateConfigMaps(
 	ctx context.Context,
@@ -624,7 +612,7 @@ func (r *GaleraReconciler) generateConfigMaps(
 	cms := []util.Template{
 		// ScriptsConfigMap
 		{
-			Name:         configMapNameForScripts(instance),
+			Name:         fmt.Sprintf("%s-scripts", instance.Name),
 			Namespace:    instance.Namespace,
 			Type:         util.TemplateTypeScripts,
 			InstanceType: instance.Kind,
@@ -632,7 +620,7 @@ func (r *GaleraReconciler) generateConfigMaps(
 		},
 		// ConfigMap
 		{
-			Name:          configMapNameForConfig(instance),
+			Name:          fmt.Sprintf("%s-config-data", instance.Name),
 			Namespace:     instance.Namespace,
 			Type:          util.TemplateTypeConfig,
 			InstanceType:  instance.Kind,
