@@ -32,15 +32,19 @@ const (
 // MariaDBSpec defines the desired state of MariaDB
 type MariaDBSpec struct {
 	// Secret containing a RootPassword
-	Secret string `json:"secret,omitempty"`
-
-	StorageClass string `json:"storageClass,omitempty"`
-
-	StorageRequest string `json:"storageRequest,omitempty"`
-
+	// +kubebuilder:validation:Required
+	Secret string `json:"secret"`
+	// Storage class to host the mariadb databases
+	// +kubebuilder:validation:Required
+	StorageClass string `json:"storageClass"`
+	// Storage size allocated for the mariadb databases
+	// +kubebuilder:validation:Required
+	StorageRequest string `json:"storageRequest"`
 	// ContainerImage - Container Image URL (will be set to environmental default if empty)
+	// +kubebuilder:validation:Required
 	ContainerImage string `json:"containerImage"`
-
+	// Adoption configuration
+	// +kubebuilder:validation:Optional
 	AdoptionRedirect AdoptionRedirectSpec `json:"adoptionRedirect,omitempty"`
 }
 

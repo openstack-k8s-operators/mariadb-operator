@@ -45,8 +45,7 @@ spec:
             description: MariaDBSpec defines the desired state of MariaDB
             properties:
               adoptionRedirect:
-                description: AdoptionRedirectSpec defines redirection to a different
-                  DB instance during Adoption
+                description: Adoption configuration
                 properties:
                   host:
                     description: MariaDB host to redirect to (IP or name)
@@ -60,11 +59,16 @@ spec:
                 description: Secret containing a RootPassword
                 type: string
               storageClass:
+                description: Storage class to host the mariadb databases
                 type: string
               storageRequest:
+                description: Storage size allocated for the mariadb databases
                 type: string
             required:
             - containerImage
+            - secret
+            - storageClass
+            - storageRequest
             type: object
           status:
             description: MariaDBStatus defines the observed state of MariaDB

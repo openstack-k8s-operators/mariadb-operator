@@ -38,6 +38,7 @@ type GaleraSpec struct {
 	// +kubebuilder:validation:Required
 	StorageRequest string `json:"storageRequest"`
 	// Name of the galera container image to run (will be set to environmental default if empty)
+	// +kubebuilder:validation:Required
 	ContainerImage string `json:"containerImage"`
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:default=1
