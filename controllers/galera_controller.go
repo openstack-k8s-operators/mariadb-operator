@@ -58,8 +58,12 @@ type GaleraReconciler struct {
 	client.Client
 	Kclient kubernetes.Interface
 	config  *rest.Config
-	Log     logr.Logger
 	Scheme  *runtime.Scheme
+}
+
+// GetLog returns a logger object with a prefix of "controller.name" and additional controller context fields
+func GetLog(ctx context.Context, controller string) logr.Logger {
+	return log.FromContext(ctx).WithName("Controllers").WithName(controller)
 }
 
 ///
@@ -227,7 +231,8 @@ func clearPodAttributes(instance *mariadbv1.Galera, podName string) {
 
 // clearOldPodsAttributesOnScaleDown removes known information from old pods
 // that no longer exist after a scale down of the galera CR
-func clearOldPodsAttributesOnScaleDown(helper *helper.Helper, instance *mariadbv1.Galera) {
+func clearOldPodsAttributesOnScaleDown(helper *helper.Helper, instance *mariadbv1.Galera, ctx context.Context) {
+	log := GetLog(ctx, "galera")
 	replicas := int(*instance.Spec.Replicas)
 
 	// a pod's name is built as 'statefulsetname-n'
@@ -236,7 +241,7 @@ func clearOldPodsAttributesOnScaleDown(helper *helper.Helper, instance *mariadbv
 		index, _ := strconv.Atoi(parts[len(parts)-1])
 		if index >= replicas {
 			clearPodAttributes(instance, node)
-			util.LogForObject(helper, "Remove old pod from status after scale-down", instance, "pod", node)
+			log.Info("Remove old pod from status after scale-down", "instance", instance, "pod", node)
 		}
 	}
 }
@@ -294,7 +299,7 @@ func assertPodsAttributesValidity(helper *helper.Helper, instance *mariadbv1.Gal
 
 // Reconcile - Galera
 func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, _err error) {
-	_ = log.FromContext(ctx)
+	log := GetLog(ctx, "galera")
 
 	// Fetch the Galera instance
 	instance := &mariadbv1.Galera{}
@@ -315,7 +320,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		r.Client,
 		r.Kclient,
 		r.Scheme,
-		r.Log,
+		log,
 	)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -419,7 +424,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 			return ctrl.Result{}, err
 		}
 		if op != controllerutil.OperationResultNone {
-			r.Log.Info(fmt.Sprintf("%s %s database endpoints %s - operation: %s", instance.Kind, instance.Name, endpoints.Name, string(op)))
+			log.Info("", "Kind", instance.Kind, "Name", instance.Name, "database endpoints", endpoints.Name, "operation:", string(op))
 		}
 	}
 
@@ -441,7 +446,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		return ctrl.Result{}, err
 	}
 	if op != controllerutil.OperationResultNone {
-		r.Log.Info(fmt.Sprintf("%s %s database headless service %s - operation: %s", instance.Kind, instance.Name, headless.Name, string(op)))
+		log.Info("", "Kind", instance.Kind, "Name", instance.Name, "database headless service", headless.Name, "operation", string(op))
 	}
 
 	pkgsvc := mariadb.ServiceForAdoption(instance, "galera", adoption)
@@ -458,7 +463,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		return ctrl.Result{}, err
 	}
 	if op != controllerutil.OperationResultNone {
-		r.Log.Info(fmt.Sprintf("%s %s database service %s - operation: %s", instance.Kind, instance.Name, service.Name, string(op)))
+		log.Info("", "Kind", instance.Kind, "Name", instance.Name, "database service", service.Name, "operation", string(op))
 	}
 
 	// Generate the config maps for the various services
@@ -494,7 +499,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		client.MatchingLabels(mariadb.StatefulSetLabels(instance)),
 	}
 	if err = r.List(ctx, podList, listOpts...); err != nil {
-		util.LogErrorForObject(helper, err, "Failed to list pods", instance)
+		log.Error(err, "Failed to list pods")
 		return ctrl.Result{}, err
 	}
 
@@ -504,7 +509,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 
 	// Ensure status is cleaned up in case of scale down
 	if *statefulset.Spec.Replicas < statefulset.Status.Replicas {
-		clearOldPodsAttributesOnScaleDown(helper, instance)
+		clearOldPodsAttributesOnScaleDown(helper, instance, ctx)
 	}
 
 	// Ensure that all the ongoing galera start actions are still running
@@ -525,7 +530,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		for _, pod := range getReadyPods(podList.Items) {
 			name := pod.Name
 			if _, found := instance.Status.Attributes[name]; found {
-				util.LogForObject(helper, "Galera started on pod "+pod.Name, instance)
+				log.Info("Galera started on", "pod", pod.Name)
 				clearPodAttributes(instance, name)
 			}
 		}
@@ -534,11 +539,11 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		for _, pod := range getRunningPodsMissingGcomm(ctx, podList.Items, instance, helper, r.config) {
 			name := pod.Name
 			joinerURI := buildGcommURI(instance)
-			util.LogForObject(helper, "Pushing gcomm URI to joiner", instance, "pod", name)
+			log.Info("Pushing gcomm URI to joiner", "pod", name)
 			// Setting the gcomm attribute marks this pod as 'currently joining the cluster'
 			err := injectGcommURI(ctx, helper, r.config, instance, &pod, joinerURI)
 			if err != nil {
-				util.LogErrorForObject(helper, err, "Failed to push gcomm URI", instance, "pod", name)
+				log.Error(err, "Failed to push gcomm URI", "pod", name)
 				// A failed injection likely means the pod's status has changed.
 				// drop it from status and reprobe it in another reconcile loop
 				clearPodAttributes(instance, name)
@@ -561,10 +566,10 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 			util.LogForObject(helper, fmt.Sprintf("Pod %s running, retrieve seqno", name), instance)
 			err := retrieveSequenceNumber(ctx, helper, r.config, instance, &pod)
 			if err != nil {
-				util.LogErrorForObject(helper, err, "Failed to retrieve seqno for "+name, instance)
+				log.Error(err, "Failed to retrieve seqno for ", "name", name)
 				return ctrl.Result{}, err
 			}
-			util.LogForObject(helper, fmt.Sprintf("Pod %s seqno: %s", name, instance.Status.Attributes[name].Seqno), instance)
+			log.Info("", "Pod", name, "seqno:", instance.Status.Attributes[name].Seqno)
 		}
 
 		// Check if we have enough info to bootstrap the cluster now
@@ -572,11 +577,11 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 			(len(instance.Status.Attributes) == len(podList.Items)) {
 			node := findBestCandidate(&instance.Status)
 			pod := getPodFromName(podList.Items, node)
-			util.LogForObject(helper, "Pushing gcomm URI to bootstrap", instance, "pod", node)
+			log.Info("Pushing gcomm URI to bootstrap", "pod", node)
 			// Setting the gcomm attribute marks this pod as 'currently bootstrapping the cluster'
 			err := injectGcommURI(ctx, helper, r.config, instance, pod, "gcomm://")
 			if err != nil {
-				util.LogErrorForObject(helper, err, "Failed to push gcomm URI", instance, "pod", node)
+				log.Error(err, "Failed to push gcomm URI", "pod", node)
 				// A failed injection likely means the pod's status has changed.
 				// drop it from status and reprobe it in another reconcile loop
 				clearPodAttributes(instance, node)
@@ -591,7 +596,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	// So until all pods become available, we have to requeue this event to get
 	// a chance to react to all pod's transitions.
 	if statefulset.Status.AvailableReplicas != statefulset.Status.Replicas {
-		util.LogForObject(helper, "Requeuing until all replicas are available", instance)
+		log.Info("Requeuing until all replicas are available")
 		return ctrl.Result{RequeueAfter: time.Duration(3) * time.Second}, nil
 	}
 
@@ -617,6 +622,7 @@ func (r *GaleraReconciler) generateConfigMaps(
 	instance *mariadbv1.Galera,
 	envVars *map[string]env.Setter,
 ) error {
+	log := GetLog(ctx, "galera")
 	templateParameters := make(map[string]interface{})
 	customData := make(map[string]string)
 	customData[mariadbv1.CustomServiceConfigFile] = instance.Spec.CustomServiceConfig
@@ -644,7 +650,7 @@ func (r *GaleraReconciler) generateConfigMaps(
 
 	err := configmap.EnsureConfigMaps(ctx, h, instance, cms, envVars)
 	if err != nil {
-		util.LogErrorForObject(h, err, "Unable to retrieve or create config maps", instance)
+		log.Error(err, "Unable to retrieve or create config maps")
 		return err
 	}
 

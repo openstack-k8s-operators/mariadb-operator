@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/go-logr/logr"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -40,7 +39,6 @@ import (
 type MariaDBDatabaseReconciler struct {
 	client.Client
 	Kclient kubernetes.Interface
-	Log     logr.Logger
 	Scheme  *runtime.Scheme
 }
 
@@ -53,7 +51,7 @@ type MariaDBDatabaseReconciler struct {
 
 // Reconcile reconcile mariadbdatabase API requests
 func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, _err error) {
-	_ = r.Log.WithValues("mariadbdatabase", req.NamespacedName)
+	log := GetLog(ctx, "MariaDBDatabase")
 
 	var err error
 
@@ -69,7 +67,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		r.Client,
 		r.Kclient,
 		r.Scheme,
-		r.Log,
+		log,
 	)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -139,7 +137,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// It is impossible to reach here without either dbGalera or dbMariadb not being nil, due to the checks above
 	if dbGalera != nil {
 		if !dbGalera.Status.Bootstrapped {
-			r.Log.Info("DB bootstrap not complete. Requeue...")
+			log.Info("DB bootstrap not complete. Requeue...")
 			return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 		}
 
@@ -149,7 +147,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		serviceAccount = dbGalera.RbacResourceName()
 	} else if dbMariadb != nil {
 		if dbMariadb.Status.DbInitHash == "" {
-			r.Log.Info("DB initialization not complete. Requeue...")
+			log.Info("DB initialization not complete. Requeue...")
 			return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
 		}
 
@@ -188,7 +186,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			instance.Status.Hash = make(map[string]string)
 		}
 		instance.Status.Hash[databasev1beta1.DbCreateHash] = dbCreateJob.GetHash()
-		r.Log.Info(fmt.Sprintf("Job %s hash added - %s", jobDef.Name, instance.Status.Hash[databasev1beta1.DbCreateHash]))
+		log.Info("Job hash added", "Job", jobDef.Name, "Hash", instance.Status.Hash[databasev1beta1.DbCreateHash])
 	}
 
 	// database creation finished... okay to set to completed
