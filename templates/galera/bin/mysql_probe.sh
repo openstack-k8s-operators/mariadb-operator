@@ -2,7 +2,7 @@
 set -u
 
 # This secret is mounted by k8s and always up to date
-read -s -u 3 3< /var/lib/secrets/dbpassword MYSQL_PWD || true
+read -s -u 3 3< <(cat /var/lib/secrets/dbpassword; echo) MYSQL_PWD
 export MYSQL_PWD
 
 PROBE_USER=root
