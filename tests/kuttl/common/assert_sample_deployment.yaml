@@ -10,7 +10,6 @@ kind: Galera
 metadata:
   name: openstack
 spec:
-  containerImage: quay.io/podified-antelope-centos9/openstack-mariadb:current-podified
   replicas: 3
   secret: osp-secret
   storageRequest: 500M
@@ -70,7 +69,6 @@ spec:
         - /usr/bin/dumb-init
         - --
         - /usr/local/bin/kolla_start
-        image: quay.io/podified-antelope-centos9/openstack-mariadb:current-podified
         name: galera
         ports:
         - containerPort: 3306
@@ -124,3 +122,29 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: openstack-config-data
+---
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+commands:
+  - script: |
+      # when using image digests the containerImage URLs are SHA's so we verify them with a script
+      tupleTemplate='{{ range (index .spec.template.spec.containers 1).env }}{{ .name }}{{ "#" }}{{ .value}}{{"\n"}}{{ end }}'
+      imageTuples=$(oc get -n openstack-operators deployment mariadb-operator-controller-manager -o go-template="$tupleTemplate")
+      # format of imageTuple is: RELATED_IMAGE_MARIADB_<service>#<image URL with SHA> separated by newlines
+      for ITEM in $(echo $imageTuples); do
+        # it is an image
+        if echo $ITEM | grep 'RELATED_IMAGE' &> /dev/null; then
+          NAME=$(echo $ITEM | sed -e 's|^RELATED_IMAGE_MARIADB_\([^_]*\)_.*|\1|')
+          IMG_FROM_ENV=$(echo $ITEM | sed -e 's|^.*#\(.*\)|\1|')
+          template='{{ (index .spec.template.spec.containers 0).image }}'
+          case $NAME in
+            IMAGE)
+              STATEFUL_SET_IMG=$(oc get -n $NAMESPACE statefulset openstack-galera -o go-template="$template")
+              ;;
+          esac
+          if [ "$STATEFUL_SET_IMG" != "$IMG_FROM_ENV" ]; then
+            echo "$NAME image does not equal $VALUE"
+            exit 1
+          fi
+        fi
+      done
