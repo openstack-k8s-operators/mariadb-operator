@@ -12,11 +12,6 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
-    - description: MariaDB is the Schema for the mariadbs API
-      displayName: MariaDB
-      kind: MaraiDB
-      name: mariadbs.mariadb.openstack.org
-      version: v1beta1
     - description: Galera is the Schema for the galeras API
       displayName: Galera
       kind: Galera
