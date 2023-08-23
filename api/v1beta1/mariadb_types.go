@@ -114,7 +114,7 @@ func (instance MariaDB) RbacResourceName() string {
 func SetupDefaults() {
 	// Acquire environmental defaults and initialize Keystone defaults with them
 	mariaDBDefaults := MariaDBDefaults{
-		ContainerImageURL: util.GetEnvVar("MARIADB_IMAGE_URL_DEFAULT", MariaDBContainerImage),
+		ContainerImageURL: util.GetEnvVar("RELATED_IMAGE_MARIADB_IMAGE_URL_DEFAULT", MariaDBContainerImage),
 	}
 
 	SetupMariaDBDefaults(mariaDBDefaults)

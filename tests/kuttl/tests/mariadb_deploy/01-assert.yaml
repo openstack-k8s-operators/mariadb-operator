@@ -10,7 +10,6 @@ kind: MariaDB
 metadata:
   name: openstack
 spec:
-  containerImage: quay.io/podified-antelope-centos9/openstack-mariadb:current-podified
   secret: osp-secret
   storageRequest: 500M
 status:
@@ -60,8 +59,7 @@ metadata:
   name: mariadb-openstack
 spec:
   containers:
-  - image: quay.io/podified-antelope-centos9/openstack-mariadb:current-podified
-    imagePullPolicy: IfNotPresent
+  - imagePullPolicy: IfNotPresent
     name: mariadb
     resources: {}
   restartPolicy: Always
