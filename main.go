@@ -123,6 +123,7 @@ func main() {
 	// Acquire environmental defaults and initialize operator defaults with them
 	mariadbv1beta1.SetupDefaults()
 
+	checker := healthz.Ping
 	// Setup webhooks if requested
 	if strings.ToLower(os.Getenv("ENABLE_WEBHOOKS")) != "false" {
 		if err = (&mariadbv1beta1.MariaDB{}).SetupWebhookWithManager(mgr); err != nil {
@@ -133,15 +134,16 @@ func main() {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Galera")
 			os.Exit(1)
 		}
+		checker = mgr.GetWebhookServer().StartedChecker()
 	}
 
 	//+kubebuilder:scaffold:builder
 
-	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+	if err := mgr.AddHealthzCheck("healthz", checker); err != nil {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
 	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+	if err := mgr.AddReadyzCheck("readyz", checker); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
