@@ -1,17 +1,10 @@
+# See the OWNERS docs at https://go.k8s.io/owners
 approvers:
-  - abays
-  - dciabrin
-  - dprince
-  - olliewalsh
-  - Sandeepyadav93
-  - stuggi
-  - viroel
+  - mariadb-approvers
+  - ci-approvers
+  - openstack-approvers
 
 reviewers:
-  - abays
-  - dciabrin
-  - dprince
-  - olliewalsh
-  - Sandeepyadav93
-  - stuggi
-  - viroel
+  - mariadb-approvers
+  - ci-approvers
+  - openstack-approvers
