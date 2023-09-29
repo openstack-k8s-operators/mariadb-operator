@@ -66,3 +66,22 @@ type MariaDBDatabaseList struct {
 func init() {
 	SchemeBuilder.Register(&MariaDBDatabase{}, &MariaDBDatabaseList{})
 }
+
+const (
+	// DatabaseUserPasswordKey - key in secret which holds the service user DB password
+	DatabaseUserPasswordKey = "DatabasePassword"
+	// DatabaseAdminPasswordKey - key in secret which holds the admin user password
+	DatabaseAdminPasswordKey = "AdminPassword"
+)
+
+// Database -
+type Database struct {
+	database         *MariaDBDatabase
+	databaseHostname string
+	databaseName     string
+	databaseUser     string
+	secret           string
+	labels           map[string]string
+	name             string
+	namespace        string
+}

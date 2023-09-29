@@ -26,7 +26,23 @@ const (
 )
 
 // MariaDB Reasons used by API objects.
-const ()
+const (
+	// ReasonDBError - DB error
+	ReasonDBError condition.Reason = "DatabaseError"
+	// ReasonDBPatchError - new resource set to reason Init
+	ReasonDBPatchError condition.Reason = "DatabasePatchError"
+	// ReasonDBPathOK - DB object created or patched ok
+	ReasonDBPatchOK condition.Reason = "DatabasePatchOK"
+	// ReasonDBNotFound - DB object not found
+	ReasonDBNotFound condition.Reason = "DatabaseNotFound"
+	// ReasonDBWaitingInitialized - waiting for service DB to be initialized
+	ReasonDBWaitingInitialized condition.Reason = "DatabaseWaitingInitialized"
+	// ReasonDBServiceNameError - error getting the DB service hostname
+	ReasonDBServiceNameError condition.Reason = "DatabaseServiceNameError"
+
+	// ReasonDBSync - Database sync in progress
+	ReasonDBSync condition.Reason = "DBSync"
+)
 
 // MariaDB Messages used by API objects.
 const (
