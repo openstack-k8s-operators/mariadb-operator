@@ -49,6 +49,57 @@ func NewTestHelper(
 	return helper
 }
 
+// CreateGalera creates a new Galera instance with the specified namespace in the Kubernetes cluster.
+func (tc *TestHelper) CreateGalera(namespace string, galeraName string, spec mariadbv1.GaleraSpec) types.NamespacedName {
+	name := types.NamespacedName{
+		Name:      galeraName,
+		Namespace: namespace,
+	}
+
+	db := &mariadbv1.Galera{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "mariadb.openstack.org/v1beta1",
+			Kind:       "Galera",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      galeraName,
+			Namespace: namespace,
+		},
+		Spec: spec,
+	}
+
+	gomega.Expect(tc.K8sClient.Create(tc.Ctx, db)).Should(gomega.Succeed())
+
+	return name
+}
+
+// DeleteGalera deletes a Galera instance from the Kubernetes cluster.
+func (tc *TestHelper) DeleteGalera(name types.NamespacedName) {
+	gomega.Eventually(func(g gomega.Gomega) {
+		db := &mariadbv1.Galera{}
+		err := tc.K8sClient.Get(tc.Ctx, name, db)
+		// if it is already gone that is OK
+		if k8s_errors.IsNotFound(err) {
+			return
+		}
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
+		g.Expect(tc.K8sClient.Delete(tc.Ctx, db)).Should(gomega.Succeed())
+
+		err = tc.K8sClient.Get(tc.Ctx, name, db)
+		g.Expect(k8s_errors.IsNotFound(err)).To(gomega.BeTrue())
+	}, tc.Timeout, tc.Interval).Should(gomega.Succeed())
+}
+
+// GetGalera waits for and retrieves a Galera instance from the Kubernetes cluster
+func (tc *TestHelper) GetGalera(name types.NamespacedName) *mariadbv1.Galera {
+	db := &mariadbv1.Galera{}
+	gomega.Eventually(func(g gomega.Gomega) {
+		g.Expect(tc.K8sClient.Get(tc.Ctx, name, db)).Should(gomega.Succeed())
+	}, tc.Timeout, tc.Interval).Should(gomega.Succeed())
+	return db
+}
+
 // CreateDBService creates a k8s Service object that matches with the
 // Expectations of lib-common database module as a Service for the MariaDB
 func (tc *TestHelper) CreateDBService(namespace string, mariadbCRName string, spec corev1.ServiceSpec) types.NamespacedName {
