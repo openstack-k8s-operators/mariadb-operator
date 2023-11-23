@@ -30,9 +30,16 @@ const (
 
 // MariaDBDatabaseSpec defines the desired state of MariaDBDatabase
 type MariaDBDatabaseSpec struct {
-	// Secret Name of secret which contains DatabasePassword
+	// Name of secret which contains DatabasePassword
 	Secret string `json:"secret,omitempty"`
-	Name   string `json:"name,omitempty"`
+	// Name of the database in MariaDB
+	Name string `json:"name,omitempty"`
+	// +kubebuilder:default=utf8
+	// Default character set for this database
+	DefaultCharacterSet string `json:"defaultCharacterSet"`
+	// +kubebuilder:default=utf8_general_ci
+	// Default collation for this database
+	DefaultCollation string `json:"defaultCollation"`
 }
 
 // MariaDBDatabaseStatus defines the observed state of MariaDBDatabase

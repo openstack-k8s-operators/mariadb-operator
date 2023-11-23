@@ -14,12 +14,20 @@ type dbCreateOptions struct {
 	DatabaseName          string
 	DatabaseHostname      string
 	DatabaseAdminUsername string
+	DefaultCharacterSet   string
+	DefaultCollation      string
 }
 
 // DbDatabaseJob -
 func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName string, databaseSecret string, containerImage string, serviceAccountName string) (*batchv1.Job, error) {
 
-	opts := dbCreateOptions{database.Spec.Name, databaseHostName, "root"}
+	opts := dbCreateOptions{
+		database.Spec.Name,
+		databaseHostName,
+		"root",
+		database.Spec.DefaultCharacterSet,
+		database.Spec.DefaultCollation,
+	}
 	dbCmd, err := util.ExecuteTemplateFile("database.sh", &opts)
 	if err != nil {
 		return nil, err
@@ -83,7 +91,13 @@ func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName s
 // DeleteDbDatabaseJob -
 func DeleteDbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName string, databaseSecret string, containerImage string, serviceAccountName string) (*batchv1.Job, error) {
 
-	opts := dbCreateOptions{database.Spec.Name, databaseHostName, "root"}
+	opts := dbCreateOptions{
+		database.Spec.Name,
+		databaseHostName,
+		"root",
+		database.Spec.DefaultCharacterSet,
+		database.Spec.DefaultCollation,
+	}
 	delCmd, err := util.ExecuteTemplateFile("delete_database.sh", &opts)
 	if err != nil {
 		return nil, err

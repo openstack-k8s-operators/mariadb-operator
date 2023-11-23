@@ -35,11 +35,23 @@ spec:
           spec:
             description: MariaDBDatabaseSpec defines the desired state of MariaDBDatabase
             properties:
+              defaultCharacterSet:
+                default: utf8
+                description: Default character set for this database
+                type: string
+              defaultCollation:
+                default: utf8_general_ci
+                description: Default collation for this database
+                type: string
               name:
+                description: Name of the database in MariaDB
                 type: string
               secret:
-                description: Secret Name of secret which contains DatabasePassword
+                description: Name of secret which contains DatabasePassword
                 type: string
+            required:
+            - defaultCharacterSet
+            - defaultCollation
             type: object
           status:
             description: MariaDBDatabaseStatus defines the observed state of MariaDBDatabase

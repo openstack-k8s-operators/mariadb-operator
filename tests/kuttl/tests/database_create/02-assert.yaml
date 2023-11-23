@@ -1,0 +1,14 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kuttldb-utf8-db-create
+status:
+  succeeded: 1
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kuttldb-latin1-db-create
+status:
+  succeeded: 1
