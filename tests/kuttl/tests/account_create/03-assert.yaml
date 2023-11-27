@@ -1,0 +1,27 @@
+---
+apiVersion: mariadb.openstack.org/v1beta1
+kind: MariaDBAccount
+metadata:
+  labels:
+    mariaDBDatabaseName: kuttldb-accounttest
+  name: kuttldb-some-db-account
+status:
+  conditions:
+    # message: 'MariaDBAccount secret is missing or incomplete: Secret $NAMESPACE/some-db-secret not found'
+  - reason: SecretMissing
+    severity: Info
+    status: "False"
+    type: Ready
+    # message: 'MariaDBAccount secret is missing or incomplete: Secret $NAMESPACE/some-db-secret not found'
+  - reason: SecretMissing
+    severity: Info
+    status: "False"
+    type: MariaDBAccountReady
+  - message: MariaDBDatabase ready
+    reason: Ready
+    status: "True"
+    type: MariaDBDatabaseReady
+  - message: MariaDB / Galera server ready
+    reason: Ready
+    status: "True"
+    type: MariaDBServerReady
