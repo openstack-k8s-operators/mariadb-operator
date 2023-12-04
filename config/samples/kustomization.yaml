@@ -3,4 +3,5 @@ resources:
 - mariadb_v1beta1_mariadb.yaml
 - mariadb_v1beta1_mariadbdatabase.yaml
 - mariadb_v1beta1_galera.yaml
+- mariadb_v1beta1_mariadbaccount.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples
