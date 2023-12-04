@@ -17,25 +17,36 @@ limitations under the License.
 package v1beta1
 
 import (
+	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+const (
+	// AccountCreateHash hash
+	AccountCreateHash = "accountcreate"
+
+	// AccountDeleteHash hash
+	AccountDeleteHash = "accountdelete"
+)
 
 // MariaDBAccountSpec defines the desired state of MariaDBAccount
 type MariaDBAccountSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// UserName for new account
+	// +kubebuilder:validation:Required
+	UserName string `json:"userName"`
 
-	// Foo is an example field of MariaDBAccount. Edit mariadbaccount_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// Name of secret which contains DatabasePassword
+	// +kubebuilder:validation:Required
+	Secret string `json:"secret"`
 }
 
 // MariaDBAccountStatus defines the observed state of MariaDBAccount
 type MariaDBAccountStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Deployment Conditions
+	Conditions condition.Conditions `json:"conditions,omitempty" optional:"true"`
+
+	// Map of hashes to track e.g. job status
+	Hash map[string]string `json:"hash,omitempty"`
 }
 
 //+kubebuilder:object:root=true
