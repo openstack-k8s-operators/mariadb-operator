@@ -7,6 +7,19 @@ metadata:
     app.kubernetes.io/part-of: mariadb-operator
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/created-by: mariadb-operator
-  name: mariadbaccount-sample
+    mariaDBDatabaseName: neutron
+  name: neutron1
 spec:
-  # TODO(user): Add fields here
+  userName: neutron1
+  secret: neutrondb-secret
+
+---
+
+apiVersion: v1
+data:
+  # neutron123
+  DatabasePassword: bmV1dHJvbjEyMw==
+kind: Secret
+metadata:
+  name: neutrondb-secret
+type: Opaque
