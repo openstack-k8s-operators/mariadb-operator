@@ -23,6 +23,14 @@ import (
 const (
 	// MariaDBInitializedCondition Status=True condition which indicates if the MariaDB dbinit has completed
 	MariaDBInitializedCondition condition.Type = "MariaDBInitialized"
+
+	MariaDBDatabaseReadyCondition condition.Type = "MariaDBDatabaseReady"
+
+	MariaDBAccountReadyCondition condition.Type = "MariaDBAccountReady"
+
+	// MariaDBServerReadyCondition Status=True condition which indicates that the MariaDB and/or
+	// Galera server is ready for database / account create/drop operations to proceed
+	MariaDBServerReadyCondition condition.Type = "MariaDBServerReady"
 )
 
 // MariaDB Reasons used by API objects.
@@ -60,4 +68,22 @@ const (
 
 	// MariaDBInitializedErrorMessage
 	MariaDBInitializedErrorMessage = "MariaDB dbinit error occured %s"
+
+	MariaDBDatabaseReadyInitMessage = "MariaDBDatabase not yet available"
+
+	MariaDBDatabaseReadyMessage = "MariaDBDatabase ready"
+
+	MariaDBServerReadyInitMessage = "MariaDB / Galera server not yet available"
+
+	MariaDBServerReadyMessage = "MariaDB / Galera server ready"
+
+	MariaDBAccountReadyInitMessage = "MariaDBAccount create / drop not started"
+
+	MariaDBAccountReadyMessage = "MariaDBAccount creation complete"
+
+	MariaDBAccountSecretNotReadyMessage = "MariaDBAccount secret is missing or incomplete: %s"
+
+	MariaDBErrorRetrievingMariaDBDatabaseMessage = "Error retrieving MariaDBDatabase instance %s"
+
+	MariaDBErrorRetrievingMariaDBGaleraMessage = "Error retrieving MariaDB/Galera instance %s"
 )

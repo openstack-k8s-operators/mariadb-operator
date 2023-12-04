@@ -28,6 +28,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/kubectl/pkg/util/podutils"
@@ -49,6 +50,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	mariadb "github.com/openstack-k8s-operators/mariadb-operator/pkg/mariadb"
 )
@@ -670,4 +672,46 @@ func (r *GaleraReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&rbacv1.Role{}).
 		Owns(&rbacv1.RoleBinding{}).
 		Complete(r)
+}
+
+// GetDatabaseObject - returns either a Galera or MariaDB object (and an associated client.Object interface).
+// used by both MariaDBDatabaseReconciler and MariaDBAccountReconciler
+// this will later return only Galera objects, so as a lookup it's part of the galera controller
+
+func GetDatabaseObject(clientObj client.Client, ctx context.Context, name string, namespace string) (client.Object, error) {
+
+	dbGalera := &databasev1beta1.Galera{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+	}
+
+	objectKey := client.ObjectKeyFromObject(dbGalera)
+
+	err := clientObj.Get(ctx, objectKey, dbGalera)
+	if err != nil && !k8s_errors.IsNotFound(err) {
+		return nil, err
+	}
+
+	if err != nil {
+		// Try to fetch MariaDB when Galera is not used
+		dbMariadb := &databasev1beta1.MariaDB{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: namespace,
+			},
+		}
+
+		objectKey = client.ObjectKeyFromObject(dbMariadb)
+
+		err = clientObj.Get(ctx, objectKey, dbMariadb)
+		if err != nil {
+			return nil, err
+		}
+
+		return dbMariadb, nil
+	}
+
+	return dbGalera, nil
 }
