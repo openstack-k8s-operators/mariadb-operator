@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
@@ -48,7 +47,6 @@ import (
 type MariaDBReconciler struct {
 	Client  client.Client
 	Kclient kubernetes.Interface
-	Log     logr.Logger
 	Scheme  *runtime.Scheme
 }
 
@@ -69,7 +67,7 @@ type MariaDBReconciler struct {
 
 // Reconcile reconcile mariadb API requests
 func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, _err error) {
-	_ = r.Log.WithValues("mariadb", req.NamespacedName)
+	log := GetLog(ctx, "MariaDBR")
 
 	// Fetch the MariaDB instance
 	instance := &databasev1beta1.MariaDB{}
@@ -110,7 +108,7 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 		r.Client,
 		r.Kclient,
 		r.Scheme,
-		r.Log,
+		log,
 	)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -179,7 +177,7 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 		return ctrl.Result{}, err
 	}
 	if op != controllerutil.OperationResultNone {
-		r.Log.Info(fmt.Sprintf("%s %s database PVC %s - operation: %s", instance.Kind, instance.Name, pvc.Name, string(op)))
+		log.Info("", "Kind", instance.Kind, "Name", instance.Name, "database PVC", pvc.Name, "operation:", string(op))
 		return ctrl.Result{RequeueAfter: time.Duration(5) * time.Second}, err
 	}
 
@@ -202,11 +200,7 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 		return ctrl.Result{}, err
 	}
 	if op != controllerutil.OperationResultNone {
-		util.LogForObject(
-			helper,
-			fmt.Sprintf("Service %s successfully reconciled - operation: %s", service.Name, string(op)),
-			instance,
-		)
+		log.Info("Service successfully reconciled", "service", service.Name, "operation:", string(op))
 	}
 
 	// Endpoints
@@ -229,11 +223,7 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 			return ctrl.Result{}, err
 		}
 		if op != controllerutil.OperationResultNone {
-			util.LogForObject(
-				helper,
-				fmt.Sprintf("Endpoints %s successfully reconciled - operation: %s", endpoints.Name, string(op)),
-				instance,
-			)
+			log.Info("Endpoints successfully reconciled", "endpoint", endpoints.Name, "operation", string(op))
 		}
 	}
 
@@ -296,7 +286,7 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 		if err := r.Client.Status().Update(ctx, instance); err != nil {
 			return ctrl.Result{}, err
 		}
-		r.Log.Info(fmt.Sprintf("Job %s hash added - %s", jobDef.Name, instance.Status.DbInitHash))
+		log.Info("Job hash added", "Job", jobDef.Name, "status", instance.Status.DbInitHash)
 	}
 
 	instance.Status.Conditions.MarkTrue(databasev1beta1.MariaDBInitializedCondition, databasev1beta1.MariaDBInitializedReadyMessage)
@@ -330,11 +320,7 @@ func (r *MariaDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 			condition.SeverityInfo,
 			condition.DeploymentReadyRunningMessage))
 
-		util.LogForObject(
-			helper,
-			fmt.Sprintf("Pod %s successfully reconciled - operation: %s", pod.Name, string(op)),
-			instance,
-		)
+		log.Info("Pod successfully reconciled", "pod", pod.Name, "operation", string(op))
 	}
 
 	if pod.Status.Phase == corev1.PodRunning {

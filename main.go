@@ -105,7 +105,6 @@ func main() {
 	if err = (&controllers.GaleraReconciler{
 		Client:  mgr.GetClient(),
 		Kclient: kclient,
-		Log:     ctrl.Log.WithName("controllers").WithName("Galera"),
 		Scheme:  mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Galera")
@@ -114,7 +113,6 @@ func main() {
 	if err = (&controllers.MariaDBReconciler{
 		Client:  mgr.GetClient(),
 		Kclient: kclient,
-		Log:     ctrl.Log.WithName("controllers").WithName("MariaDB"),
 		Scheme:  mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MariaDB")
@@ -123,7 +121,6 @@ func main() {
 	if err = (&controllers.MariaDBDatabaseReconciler{
 		Client:  mgr.GetClient(),
 		Kclient: kclient,
-		Log:     ctrl.Log.WithName("controllers").WithName("MariaDBDatabase"),
 		Scheme:  mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MariaDBDatabase")
