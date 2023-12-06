@@ -110,14 +110,6 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Galera")
 		os.Exit(1)
 	}
-	if err = (&controllers.MariaDBReconciler{
-		Client:  mgr.GetClient(),
-		Kclient: kclient,
-		Scheme:  mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "MariaDB")
-		os.Exit(1)
-	}
 	if err = (&controllers.MariaDBDatabaseReconciler{
 		Client:  mgr.GetClient(),
 		Kclient: kclient,
@@ -137,10 +129,6 @@ func main() {
 		srv := mgr.GetWebhookServer()
 		srv.TLSOpts = []func(config *tls.Config){disableHTTP2}
 
-		if err = (&mariadbv1beta1.MariaDB{}).SetupWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "MariaDB")
-			os.Exit(1)
-		}
 		if err = (&mariadbv1beta1.Galera{}).SetupWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Galera")
 			os.Exit(1)

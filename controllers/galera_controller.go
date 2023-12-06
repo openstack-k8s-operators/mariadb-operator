@@ -280,7 +280,7 @@ func assertPodsAttributesValidity(helper *helper.Helper, instance *mariadbv1.Gal
 // +kubebuilder:rbac:groups=apps,resources=statefulsets/status,verbs=get;list;watch
 
 // RBAC for pods
-// +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete;
 // +kubebuilder:rbac:groups=core,resources=pods/exec,verbs=create
 
 // RBAC for services and endpoints
@@ -298,6 +298,8 @@ func assertPodsAttributesValidity(helper *helper.Helper, instance *mariadbv1.Gal
 // RBAC required to grant the service account role these capabilities
 // +kubebuilder:rbac:groups="security.openshift.io",resourceNames=anyuid,resources=securitycontextconstraints,verbs=use
 // +kubebuilder:rbac:groups="",resources=pods,verbs=create;delete;get;list;patch;update;watch
+
+// +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;delete;
 
 // Reconcile - Galera
 func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, _err error) {
@@ -678,7 +680,7 @@ func (r *GaleraReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // used by both MariaDBDatabaseReconciler and MariaDBAccountReconciler
 // this will later return only Galera objects, so as a lookup it's part of the galera controller
 
-func GetDatabaseObject(clientObj client.Client, ctx context.Context, name string, namespace string) (client.Object, error) {
+func GetDatabaseObject(clientObj client.Client, ctx context.Context, name string, namespace string) (*databasev1beta1.Galera, error) {
 
 	dbGalera := &databasev1beta1.Galera{
 		ObjectMeta: metav1.ObjectMeta{
@@ -690,28 +692,10 @@ func GetDatabaseObject(clientObj client.Client, ctx context.Context, name string
 	objectKey := client.ObjectKeyFromObject(dbGalera)
 
 	err := clientObj.Get(ctx, objectKey, dbGalera)
-	if err != nil && !k8s_errors.IsNotFound(err) {
-		return nil, err
-	}
-
 	if err != nil {
-		// Try to fetch MariaDB when Galera is not used
-		dbMariadb := &databasev1beta1.MariaDB{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: namespace,
-			},
-		}
-
-		objectKey = client.ObjectKeyFromObject(dbMariadb)
-
-		err = clientObj.Get(ctx, objectKey, dbMariadb)
-		if err != nil {
-			return nil, err
-		}
-
-		return dbMariadb, nil
+		return nil, err
+	} else {
+		return dbGalera, err
 	}
 
-	return dbGalera, nil
 }

@@ -44,7 +44,6 @@ type MariaDBDatabaseReconciler struct {
 // +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbdatabases,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbdatabases/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbdatabases/finalizers,verbs=update
-// +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbs/status,verbs=get;list
 // +kubebuilder:rbac:groups=mariadb.openstack.org,resources=galeras/status,verbs=get;list
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;delete;patch
 
@@ -81,15 +80,14 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}()
 
-	// Fetch the Galera or MariaDB instance from which we'll pull the credentials
-	// Note: this will go away when we transition to galera as the db
-	db, err := r.getDatabaseObject(ctx, instance)
+	// Fetch the Galera instance from which we'll pull the credentials
+	dbGalera, err := r.getDatabaseObject(ctx, instance)
 
-	// if we are being deleted then we have to remove the finalizer from MariaDB/Galera and then remove it from ourselves
+	// if we are being deleted then we have to remove the finalizer from Galera and then remove it from ourselves
 	if !instance.DeletionTimestamp.IsZero() {
-		if err == nil { // so we have MariaDB or Galera to remove finalizer from
-			if controllerutil.RemoveFinalizer(db, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
-				err := r.Update(ctx, db)
+		if err == nil { // so we have Galera to remove finalizer from
+			if controllerutil.RemoveFinalizer(dbGalera, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
+				err := r.Update(ctx, dbGalera)
 				if err != nil {
 					return ctrl.Result{}, err
 				}
@@ -106,17 +104,17 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// we now know that this is not a delete case
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
-			// as it is not a delete case we need to wait for MariaDB or Galera to exists before we can continue.
+			// as it is not a delete case we need to wait for Galera to exists before we can continue.
 			return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
 		}
 
 		return ctrl.Result{}, err
 	}
 
-	// here we know that MariaDB or Galera exists so add a finalizer to ourselves and to the db CR. Before this point there is no reason to have a finalizer on ourselves as nothing to cleanup.
+	// here we know that Galera exists so add a finalizer to ourselves and to the db CR. Before this point there is no reason to have a finalizer on ourselves as nothing to cleanup.
 	if instance.DeletionTimestamp.IsZero() { // this condition can be removed if you wish as it is always true at this point otherwise we would returned earlier.
-		if controllerutil.AddFinalizer(db, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
-			err := r.Update(ctx, db)
+		if controllerutil.AddFinalizer(dbGalera, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
+			err := r.Update(ctx, dbGalera)
 			if err != nil {
 				return ctrl.Result{}, err
 			}
@@ -133,33 +131,15 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	//
 	var dbName, dbSecret, dbContainerImage, serviceAccount string
 
-	// It is impossible to reach here without either dbGalera or dbMariadb not being nil, due to the checks above
-
-	dbGalera, isGalera := db.(*databasev1beta1.Galera)
-	dbMariadb, isMariaDB := db.(*databasev1beta1.MariaDB)
-
-	if isGalera {
-
-		if !dbGalera.Status.Bootstrapped {
-			log.Info("DB bootstrap not complete. Requeue...")
-			return ctrl.Result{RequeueAfter: time.Second * 10}, nil
-		}
-
-		dbName = dbGalera.Name
-		dbSecret = dbGalera.Spec.Secret
-		dbContainerImage = dbGalera.Spec.ContainerImage
-		serviceAccount = dbGalera.RbacResourceName()
-	} else if isMariaDB {
-		if dbMariadb.Status.DbInitHash == "" {
-			log.Info("DB initialization not complete. Requeue...")
-			return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
-		}
-
-		dbName = dbMariadb.Name
-		dbSecret = dbMariadb.Spec.Secret
-		dbContainerImage = dbMariadb.Spec.ContainerImage
-		serviceAccount = dbMariadb.RbacResourceName()
+	if !dbGalera.Status.Bootstrapped {
+		log.Info("DB bootstrap not complete. Requeue...")
+		return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 	}
+
+	dbName = dbGalera.Name
+	dbSecret = dbGalera.Spec.Secret
+	dbContainerImage = dbGalera.Spec.ContainerImage
+	serviceAccount = dbGalera.RbacResourceName()
 
 	// Define a new Job object (hostname, password, containerImage)
 	jobDef, err := mariadb.DbDatabaseJob(instance, dbName, dbSecret, dbContainerImage, serviceAccount)
@@ -206,8 +186,8 @@ func (r *MariaDBDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// getDatabaseObject - returns either a Galera or MariaDB object (and an associated client.Object interface)
-func (r *MariaDBDatabaseReconciler) getDatabaseObject(ctx context.Context, instance *databasev1beta1.MariaDBDatabase) (client.Object, error) {
+// getDatabaseObject - returns a Galera object
+func (r *MariaDBDatabaseReconciler) getDatabaseObject(ctx context.Context, instance *databasev1beta1.MariaDBDatabase) (*databasev1beta1.Galera, error) {
 	return GetDatabaseObject(
 		r.Client, ctx,
 		instance.ObjectMeta.Labels["dbName"],

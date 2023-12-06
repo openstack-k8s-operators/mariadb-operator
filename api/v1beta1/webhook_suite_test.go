@@ -99,9 +99,6 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	err = (&MariaDB{}).SetupWebhookWithManager(mgr)
-	Expect(err).NotTo(HaveOccurred())
-
 	err = (&Galera{}).SetupWebhookWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 

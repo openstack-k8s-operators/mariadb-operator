@@ -3,7 +3,6 @@
 # It should be run by config/default
 resources:
 - bases/mariadb.openstack.org_galeras.yaml
-- bases/mariadb.openstack.org_mariadbs.yaml
 - bases/mariadb.openstack.org_mariadbdatabases.yaml
 - bases/mariadb.openstack.org_mariadbaccounts.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
@@ -12,7 +11,6 @@ patchesStrategicMerge:
 # [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix.
 # patches here are for enabling the conversion webhook for each CRD
 #- patches/webhook_in_galeras.yaml
-#- patches/webhook_in_mariadbs.yaml
 #- patches/webhook_in_mariadbdatabases.yaml
 #- patches/webhook_in_mariadbaccounts.yaml
 #+kubebuilder:scaffold:crdkustomizewebhookpatch
@@ -20,7 +18,6 @@ patchesStrategicMerge:
 # [CERTMANAGER] To enable cert-manager, uncomment all the sections with [CERTMANAGER] prefix.
 # patches here are for enabling the CA injection for each CRD
 #- patches/cainjection_in_galeras.yaml
-#- patches/cainjection_in_mariadbs.yaml
 #- patches/cainjection_in_mariadbdatabases.yaml
 #- patches/cainjection_in_mariadbaccounts.yaml
 #+kubebuilder:scaffold:crdkustomizecainjectionpatch

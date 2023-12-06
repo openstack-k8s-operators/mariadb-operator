@@ -1,17 +1,12 @@
 package mariadb
 
 import (
+	"net"
+
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"net"
 )
-
-// Service func
-func Service(db *databasev1beta1.MariaDB) *corev1.Service {
-	adoption := &db.Spec.AdoptionRedirect
-	return ServiceForAdoption(db, "mariadb", adoption)
-}
 
 // ServiceForAdoption - create a service based on the adoption configuration
 func ServiceForAdoption(db metav1.Object, dbType string, adoption *databasev1beta1.AdoptionRedirectSpec) *corev1.Service {

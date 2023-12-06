@@ -1,6 +1,0 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestStep
-delete:
-- apiVersion: mariadb.openstack.org/v1beta1
-  kind: MariaDB
-  name: openstack
