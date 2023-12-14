@@ -115,6 +115,16 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+- apiGroups:
+  - ""
+  resources:
   - services
   verbs:
   - create
@@ -149,6 +159,32 @@ rules:
   verbs:
   - get
   - list
+  - patch
+  - update
+- apiGroups:
+  - mariadb.openstack.org
+  resources:
+  - mariadbaccounts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - mariadb.openstack.org
+  resources:
+  - mariadbaccounts/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - mariadb.openstack.org
+  resources:
+  - mariadbaccounts/status
+  verbs:
+  - get
   - patch
   - update
 - apiGroups:

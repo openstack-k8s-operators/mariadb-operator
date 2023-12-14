@@ -1,0 +1,9 @@
+apiVersion: mariadb.openstack.org/v1beta1
+kind: MariaDBDatabase
+metadata:
+  name: kuttldb-accounttest
+  labels:
+    dbName: openstack
+spec:
+  secret: osp-secret
+  name: kuttldb_accounttest

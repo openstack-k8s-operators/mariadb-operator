@@ -22,7 +22,6 @@ import (
 	"time"
 
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -84,7 +83,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	// Fetch the Galera or MariaDB instance from which we'll pull the credentials
 	// Note: this will go away when we transition to galera as the db
-	db, dbGalera, dbMariadb, err := r.getDatabaseObject(ctx, instance)
+	db, err := r.getDatabaseObject(ctx, instance)
 
 	// if we are being deleted then we have to remove the finalizer from MariaDB/Galera and then remove it from ourselves
 	if !instance.DeletionTimestamp.IsZero() {
@@ -135,7 +134,12 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	var dbName, dbSecret, dbContainerImage, serviceAccount string
 
 	// It is impossible to reach here without either dbGalera or dbMariadb not being nil, due to the checks above
-	if dbGalera != nil {
+
+	dbGalera, isGalera := db.(*databasev1beta1.Galera)
+	dbMariadb, isMariaDB := db.(*databasev1beta1.MariaDB)
+
+	if isGalera {
+
 		if !dbGalera.Status.Bootstrapped {
 			log.Info("DB bootstrap not complete. Requeue...")
 			return ctrl.Result{RequeueAfter: time.Second * 10}, nil
@@ -145,7 +149,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		dbSecret = dbGalera.Spec.Secret
 		dbContainerImage = dbGalera.Spec.ContainerImage
 		serviceAccount = dbGalera.RbacResourceName()
-	} else if dbMariadb != nil {
+	} else if isMariaDB {
 		if dbMariadb.Status.DbInitHash == "" {
 			log.Info("DB initialization not complete. Requeue...")
 			return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
@@ -203,39 +207,10 @@ func (r *MariaDBDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 // getDatabaseObject - returns either a Galera or MariaDB object (and an associated client.Object interface)
-func (r *MariaDBDatabaseReconciler) getDatabaseObject(ctx context.Context, instance *databasev1beta1.MariaDBDatabase) (client.Object, *databasev1beta1.Galera, *databasev1beta1.MariaDB, error) {
-	dbGalera := &databasev1beta1.Galera{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      instance.ObjectMeta.Labels["dbName"],
-			Namespace: instance.Namespace,
-		},
-	}
-
-	objectKey := client.ObjectKeyFromObject(dbGalera)
-
-	err := r.Client.Get(ctx, objectKey, dbGalera)
-	if err != nil && !k8s_errors.IsNotFound(err) {
-		return nil, nil, nil, err
-	}
-
-	if err != nil {
-		// Try to fetch MariaDB when Galera is not used
-		dbMariadb := &databasev1beta1.MariaDB{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      instance.ObjectMeta.Labels["dbName"],
-				Namespace: instance.Namespace,
-			},
-		}
-
-		objectKey = client.ObjectKeyFromObject(dbMariadb)
-
-		err = r.Client.Get(ctx, objectKey, dbMariadb)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-
-		return dbMariadb, nil, dbMariadb, nil
-	}
-
-	return dbGalera, dbGalera, nil, nil
+func (r *MariaDBDatabaseReconciler) getDatabaseObject(ctx context.Context, instance *databasev1beta1.MariaDBDatabase) (client.Object, error) {
+	return GetDatabaseObject(
+		r.Client, ctx,
+		instance.ObjectMeta.Labels["dbName"],
+		instance.Namespace,
+	)
 }
