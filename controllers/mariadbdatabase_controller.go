@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
+	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	helper "github.com/openstack-k8s-operators/lib-common/modules/common/helper"
 	job "github.com/openstack-k8s-operators/lib-common/modules/common/job"
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
@@ -73,12 +74,48 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	// Always patch the instance status when exiting this function so we can persist any changes.
 	defer func() {
+		if instance.Status.Conditions.AllSubConditionIsTrue() {
+			// update the Ready condition based on the sub conditions
+
+			instance.Status.Conditions.MarkTrue(
+				condition.ReadyCondition, condition.ReadyMessage)
+		} else {
+			// something is not ready so reset the Ready condition
+			instance.Status.Conditions.MarkUnknown(
+				condition.ReadyCondition, condition.InitReason, condition.ReadyInitMessage)
+			// and recalculate it based on the state of the rest of the conditions
+			instance.Status.Conditions.Set(
+				instance.Status.Conditions.Mirror(condition.ReadyCondition))
+		}
+
+		if instance.Status.Conditions.IsTrue(condition.ReadyCondition) {
+			// database creation finished... okay to set to completed
+			instance.Status.Completed = true
+		}
+
 		err := helper.PatchInstance(ctx, instance)
+
 		if err != nil {
 			_err = err
 			return
 		}
+
 	}()
+
+	if instance.Status.Conditions == nil {
+		instance.Status.Conditions = condition.Conditions{}
+
+		// initialize conditions used later as Status=Unknown
+		cl := condition.CreateList(
+			condition.UnknownCondition(databasev1beta1.MariaDBServerReadyCondition, condition.InitReason, databasev1beta1.MariaDBServerReadyInitMessage),
+			condition.UnknownCondition(databasev1beta1.MariaDBDatabaseReadyCondition, condition.InitReason, databasev1beta1.MariaDBDatabaseReadyInitMessage),
+		)
+
+		instance.Status.Conditions.Init(&cl)
+
+		// Register overall status immediately to have an early feedback e.g. in the cli
+		return ctrl.Result{}, nil
+	}
 
 	// Fetch the Galera instance from which we'll pull the credentials
 	dbGalera, err := r.getDatabaseObject(ctx, instance)
@@ -133,6 +170,14 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	if !dbGalera.Status.Bootstrapped {
 		log.Info("DB bootstrap not complete. Requeue...")
+
+		instance.Status.Conditions.MarkFalse(
+			databasev1beta1.MariaDBServerReadyCondition,
+			databasev1beta1.ReasonDBWaitingInitialized,
+			condition.SeverityInfo,
+			databasev1beta1.MariaDBServerNotBootstrappedMessage,
+		)
+
 		return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 	}
 
@@ -140,6 +185,11 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	dbSecret = dbGalera.Spec.Secret
 	dbContainerImage = dbGalera.Spec.ContainerImage
 	serviceAccount = dbGalera.RbacResourceName()
+
+	instance.Status.Conditions.MarkTrue(
+		databasev1beta1.MariaDBServerReadyCondition,
+		databasev1beta1.MariaDBServerReadyMessage,
+	)
 
 	// Define a new Job object (hostname, password, containerImage)
 	jobDef, err := mariadb.DbDatabaseJob(instance, dbName, dbSecret, dbContainerImage, serviceAccount)
@@ -173,8 +223,10 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		log.Info("Job hash added", "Job", jobDef.Name, "Hash", instance.Status.Hash[databasev1beta1.DbCreateHash])
 	}
 
-	// database creation finished... okay to set to completed
-	instance.Status.Completed = true
+	instance.Status.Conditions.MarkTrue(
+		databasev1beta1.MariaDBDatabaseReadyCondition,
+		databasev1beta1.MariaDBDatabaseReadyMessage,
+	)
 
 	return ctrl.Result{}, nil
 }

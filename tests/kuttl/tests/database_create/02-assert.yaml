@@ -12,3 +12,53 @@ metadata:
   name: kuttldb-latin1-db-create
 status:
   succeeded: 1
+---
+apiVersion: mariadb.openstack.org/v1beta1
+kind: MariaDBDatabase
+metadata:
+  name: kuttldb-utf8
+  labels:
+    dbName: openstack
+spec:
+  secret: osp-secret
+  name: kuttldb_utf8
+status:
+  conditions:
+  - message: Setup complete
+    reason: Ready
+    status: "True"
+    type: Ready
+  - message: MariaDBDatabase ready
+    reason: Ready
+    status: "True"
+    type: MariaDBDatabaseReady
+  - message: MariaDB / Galera server ready
+    reason: Ready
+    status: "True"
+    type: MariaDBServerReady
+  completed: true
+---
+apiVersion: mariadb.openstack.org/v1beta1
+kind: MariaDBDatabase
+metadata:
+  name: kuttldb-latin1
+  labels:
+    dbName: openstack
+spec:
+  secret: osp-secret
+  name: kuttldb_latin1
+status:
+  conditions:
+  - message: Setup complete
+    reason: Ready
+    status: "True"
+    type: Ready
+  - message: MariaDBDatabase ready
+    reason: Ready
+    status: "True"
+    type: MariaDBDatabaseReady
+  - message: MariaDB / Galera server ready
+    reason: Ready
+    status: "True"
+    type: MariaDBServerReady
+  completed: true

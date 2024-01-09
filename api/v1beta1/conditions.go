@@ -77,6 +77,8 @@ const (
 
 	MariaDBServerReadyMessage = "MariaDB / Galera server ready"
 
+	MariaDBServerNotBootstrappedMessage = "MariaDB / Galera server not bootstrapped"
+
 	MariaDBAccountReadyInitMessage = "MariaDBAccount create / drop not started"
 
 	MariaDBAccountReadyMessage = "MariaDBAccount creation complete"

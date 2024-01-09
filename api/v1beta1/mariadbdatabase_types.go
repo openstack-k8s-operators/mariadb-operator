@@ -17,6 +17,7 @@ limitations under the License.
 package v1beta1
 
 import (
+	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -44,6 +45,9 @@ type MariaDBDatabaseSpec struct {
 
 // MariaDBDatabaseStatus defines the observed state of MariaDBDatabase
 type MariaDBDatabaseStatus struct {
+	// Deployment Conditions
+	Conditions condition.Conditions `json:"conditions,omitempty" optional:"true"`
+
 	Completed bool `json:"completed,omitempty"`
 	// Map of hashes to track e.g. job status
 	Hash map[string]string `json:"hash,omitempty"`
