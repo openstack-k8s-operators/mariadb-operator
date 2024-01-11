@@ -1,18 +1,3 @@
----
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: kuttldb-utf8-db-create
-status:
-  succeeded: 1
----
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: kuttldb-latin1-db-create
-status:
-  succeeded: 1
----
 apiVersion: mariadb.openstack.org/v1beta1
 kind: MariaDBDatabase
 metadata:
@@ -20,7 +5,6 @@ metadata:
   labels:
     dbName: openstack
 spec:
-  secret: osp-secret
   name: kuttldb_utf8
 status:
   conditions:
@@ -45,7 +29,6 @@ metadata:
   labels:
     dbName: openstack
 spec:
-  secret: osp-secret
   name: kuttldb_latin1
 status:
   conditions:

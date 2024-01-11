@@ -411,16 +411,19 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 
 			// remove local finalizer
 			controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
+
+			// galera DB does not exist, so return
+			return ctrl.Result{}, nil
+		} else {
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				databasev1beta1.MariaDBServerReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityError,
+				"Error retrieving MariaDB/Galera instance %s",
+				err))
+
+			return ctrl.Result{}, err
 		}
-
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			databasev1beta1.MariaDBServerReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityError,
-			"Error retrieving MariaDB/Galera instance %s",
-			err))
-
-		return ctrl.Result{}, err
 	}
 
 	var dbInstance, dbAdminSecret, dbContainerImage, serviceAccountName string

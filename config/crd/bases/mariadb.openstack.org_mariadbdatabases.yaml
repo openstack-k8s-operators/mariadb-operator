@@ -47,11 +47,8 @@ spec:
                 description: Name of the database in MariaDB
                 type: string
               secret:
-                description: Name of secret which contains DatabasePassword
+                description: Name of secret which contains DatabasePassword (deprecated)
                 type: string
-            required:
-            - defaultCharacterSet
-            - defaultCollation
             type: object
           status:
             description: MariaDBDatabaseStatus defines the observed state of MariaDBDatabase
