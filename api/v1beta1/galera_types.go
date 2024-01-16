@@ -18,13 +18,23 @@ package v1beta1
 
 import (
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
 	// CustomServiceConfigFile name of the additional mariadb config file
 	CustomServiceConfigFile = "galera_custom.cnf.in"
+
+	// GaleraContainerImage is the fall-back container image for Galera
+	GaleraContainerImage = "quay.io/podified-antelope-centos9/openstack-mariadb:current-podified"
 )
+
+// AdoptionRedirectSpec defines redirection to a different DB instance during Adoption
+type AdoptionRedirectSpec struct {
+	// MariaDB host to redirect to (IP or name)
+	Host string `json:"host,omitempty"`
+}
 
 // GaleraSpec defines the desired state of Galera
 type GaleraSpec struct {
@@ -129,4 +139,14 @@ func (instance Galera) RbacNamespace() string {
 // RbacResourceName - return the name to be used for rbac objects (serviceaccount, role, rolebinding)
 func (instance Galera) RbacResourceName() string {
 	return "galera-" + instance.Name
+}
+
+// SetupDefaults - initializes any CRD field defaults based on environment variables (the defaulting mechanism itself is implemented via webhooks)
+func SetupDefaults() {
+	// Acquire environmental defaults and initialize Keystone defaults with them
+	galeraDefaults := GaleraDefaults{
+		ContainerImageURL: util.GetEnvVar("RELATED_IMAGE_MARIADB_IMAGE_URL_DEFAULT", GaleraContainerImage),
+	}
+
+	SetupGaleraDefaults(galeraDefaults)
 }

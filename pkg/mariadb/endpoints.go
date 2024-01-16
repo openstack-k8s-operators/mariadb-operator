@@ -8,12 +8,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Endpoints func
-func Endpoints(db *databasev1beta1.MariaDB) *corev1.Endpoints {
-	adoption := &db.Spec.AdoptionRedirect
-	return EndpointsForAdoption(db, adoption)
-}
-
 // EndpointsForAdoption - create an endpoint based on the adoption configuration
 func EndpointsForAdoption(db metav1.Object, adoption *databasev1beta1.AdoptionRedirectSpec) *corev1.Endpoints {
 	adoptionHost := adoption.Host

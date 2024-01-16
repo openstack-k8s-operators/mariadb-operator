@@ -26,6 +26,13 @@ import (
 // log is for logging in this package.
 var galeralog = logf.Log.WithName("galera-resource")
 
+// GaleraDefaults -
+type GaleraDefaults struct {
+	ContainerImageURL string
+}
+
+var galeraDefaults GaleraDefaults
+
 // SetupWebhookWithManager sets up the webhook with the Manager
 func (r *Galera) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
@@ -47,7 +54,7 @@ func (r *Galera) Default() {
 // Default - set defaults for this MariaDB spec
 func (spec *GaleraSpec) Default() {
 	if spec.ContainerImage == "" {
-		spec.ContainerImage = mariaDBDefaults.ContainerImageURL
+		spec.ContainerImage = galeraDefaults.ContainerImageURL
 	}
 }
 
@@ -78,4 +85,10 @@ func (r *Galera) ValidateDelete() error {
 
 	// TODO(user): fill in your validation logic upon object deletion.
 	return nil
+}
+
+// SetupGaleraDefaults - initialize MariaDB spec defaults for use with either internal or external webhooks
+func SetupGaleraDefaults(defaults GaleraDefaults) {
+	galeraDefaults = defaults
+	galeralog.Info("Galera defaults initialized", "defaults", defaults)
 }

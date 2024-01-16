@@ -222,7 +222,7 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 	// referenced by the MariaDBDatabase which will lead us to the hostname
 	// and container image to target
 
-	db, err := r.getDatabaseObject(ctx, mariadbDatabase, instance)
+	dbGalera, err := r.getDatabaseObject(ctx, mariadbDatabase, instance)
 	if err != nil {
 
 		log.Error(err, "Error getting database object")
@@ -239,33 +239,15 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 
 	var dbInstance, dbAdminSecret, dbContainerImage, serviceAccountName string
 
-	dbGalera, isGalera := db.(*databasev1beta1.Galera)
-	dbMariadb, isMariaDB := db.(*databasev1beta1.MariaDB)
-
-	if isGalera {
-		if !dbGalera.Status.Bootstrapped {
-			log.Info("DB bootstrap not complete. Requeue...")
-			return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
-		}
-
-		dbInstance = dbGalera.Name
-		dbAdminSecret = dbGalera.Spec.Secret
-		dbContainerImage = dbGalera.Spec.ContainerImage
-		serviceAccountName = dbGalera.RbacResourceName()
-	} else if isMariaDB {
-		if dbMariadb.Status.DbInitHash == "" {
-			log.Info("DB initialization not complete. Requeue...")
-			return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
-		}
-
-		dbInstance = dbMariadb.Name
-		dbAdminSecret = dbMariadb.Spec.Secret
-		dbContainerImage = dbMariadb.Spec.ContainerImage
-		serviceAccountName = dbMariadb.RbacResourceName()
-	} else {
-		log.Error(err, "no mariadb or galera, should not be here")
-		return ctrl.Result{}, err
+	if !dbGalera.Status.Bootstrapped {
+		log.Info("DB bootstrap not complete. Requeue...")
+		return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
 	}
+
+	dbInstance = dbGalera.Name
+	dbAdminSecret = dbGalera.Spec.Secret
+	dbContainerImage = dbGalera.Spec.ContainerImage
+	serviceAccountName = dbGalera.RbacResourceName()
 
 	instance.Status.Conditions.MarkTrue(
 		databasev1beta1.MariaDBServerReadyCondition,
@@ -416,7 +398,7 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 	// referenced by the MariaDBDatabase which will lead us to the hostname
 	// and container image to target
 
-	db, err := r.getDatabaseObject(ctx, mariadbDatabase, instance)
+	dbGalera, err := r.getDatabaseObject(ctx, mariadbDatabase, instance)
 	if err != nil {
 
 		log.Error(err, "Error getting database object")
@@ -443,33 +425,15 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 
 	var dbInstance, dbAdminSecret, dbContainerImage, serviceAccountName string
 
-	dbGalera, isGalera := db.(*databasev1beta1.Galera)
-	dbMariadb, isMariaDB := db.(*databasev1beta1.MariaDB)
-
-	if isGalera {
-		if !dbGalera.Status.Bootstrapped {
-			log.Info("DB bootstrap not complete. Requeue...")
-			return ctrl.Result{RequeueAfter: time.Second * 10}, nil
-		}
-
-		dbInstance = dbGalera.Name
-		dbAdminSecret = dbGalera.Spec.Secret
-		dbContainerImage = dbGalera.Spec.ContainerImage
-		serviceAccountName = dbGalera.RbacResourceName()
-	} else if isMariaDB {
-		if dbMariadb.Status.DbInitHash == "" {
-			log.Info("DB initialization not complete. Requeue...")
-			return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
-		}
-
-		dbInstance = dbMariadb.Name
-		dbAdminSecret = dbMariadb.Spec.Secret
-		dbContainerImage = dbMariadb.Spec.ContainerImage
-		serviceAccountName = dbMariadb.RbacResourceName()
-	} else {
-		log.Error(err, "no mariadb or galera, should not be here")
-		return ctrl.Result{}, err
+	if !dbGalera.Status.Bootstrapped {
+		log.Info("DB bootstrap not complete. Requeue...")
+		return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 	}
+
+	dbInstance = dbGalera.Name
+	dbAdminSecret = dbGalera.Spec.Secret
+	dbContainerImage = dbGalera.Spec.ContainerImage
+	serviceAccountName = dbGalera.RbacResourceName()
 
 	instance.Status.Conditions.MarkTrue(
 		databasev1beta1.MariaDBServerReadyCondition,
@@ -524,7 +488,7 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 }
 
 // getDatabaseObject - returns either a Galera or MariaDB object (and an associated client.Object interface)
-func (r *MariaDBAccountReconciler) getDatabaseObject(ctx context.Context, mariaDBDatabase *databasev1beta1.MariaDBDatabase, instance *databasev1beta1.MariaDBAccount) (client.Object, error) {
+func (r *MariaDBAccountReconciler) getDatabaseObject(ctx context.Context, mariaDBDatabase *databasev1beta1.MariaDBDatabase, instance *databasev1beta1.MariaDBAccount) (*databasev1beta1.Galera, error) {
 	dbName := mariaDBDatabase.ObjectMeta.Labels["dbName"]
 	return GetDatabaseObject(
 		r.Client, ctx,
