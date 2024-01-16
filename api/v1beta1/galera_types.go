@@ -26,6 +26,7 @@ const (
 	CustomServiceConfigFile = "galera_custom.cnf.in"
 )
 
+
 // GaleraSpec defines the desired state of Galera
 type GaleraSpec struct {
 	// Name of the secret to look for password keys
@@ -56,7 +57,19 @@ type GaleraSpec struct {
 	// +kubebuilder:validation:Optional
 	// Adoption configuration
 	AdoptionRedirect AdoptionRedirectSpec `json:"adoptionRedirect"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=rsync
+	// +kubebuilder:validation:Enum=rsync;mariabackup
+	// Snapshot State Transfer method to use for full node synchronization
+	SST GaleraSST `json:"sst"`
 }
+
+// Supported SST type
+type GaleraSST string
+const (
+	RSync GaleraSST = "rsync"
+	MariaBackup     = "mariabackup"
+)
 
 // GaleraAttributes holds startup information for a Galera host
 type GaleraAttributes struct {

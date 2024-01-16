@@ -1,0 +1,3 @@
+[mysqld]
+wsrep_sst_method = mariabackup
+wsrep_sst_auth = root:{ MARIABACKUP_PASSWORD }
