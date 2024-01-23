@@ -19,11 +19,22 @@ fi
 # Generate the mariadb configs from the templates, these will get
 # copied by `kolla_start` when the pod's main container will start
 PODNAME=$(hostname -f | cut -d. -f1,2)
-PODIP=$(grep "${PODNAME}" /etc/hosts | cut -d$'\t' -f1)
+PODIPV4=$(grep "${PODNAME}" /etc/hosts | grep -v ':' | cut -d$'\t' -f1)
+PODIPV6=$(grep "${PODNAME}" /etc/hosts | grep ':' | cut -d$'\t' -f1)
+
 cd /var/lib/config-data
 for cfg in *.cnf.in; do
     if [ -s "${cfg}" ]; then
-        echo "Generating config file from template ${cfg}"
+
+        if [[ "" = "${PODIPV6}" ]]; then
+            PODIP="${PODIPV4}"
+            IPSTACK="IPV4"
+        else
+            PODIP="[::]"
+            IPSTACK="IPV6"
+        fi
+
+        echo "Generating config file from template ${cfg}, will use ${IPSTACK} listen address of ${PODIP}"
         sed -e "s/{ PODNAME }/${PODNAME}/" -e "s/{ PODIP }/${PODIP}/" "/var/lib/config-data/${cfg}" > "/var/lib/pod-config-data/${cfg%.in}"
     fi
 done
