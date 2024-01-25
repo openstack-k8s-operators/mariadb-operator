@@ -17,6 +17,7 @@ limitations under the License.
 package v1beta1
 
 import (
+	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -30,20 +31,23 @@ const (
 
 // MariaDBDatabaseSpec defines the desired state of MariaDBDatabase
 type MariaDBDatabaseSpec struct {
-	// Name of secret which contains DatabasePassword
-	Secret string `json:"secret,omitempty"`
+	// Name of secret which contains DatabasePassword (deprecated)
+	Secret *string `json:"secret,omitempty"`
 	// Name of the database in MariaDB
 	Name string `json:"name,omitempty"`
 	// +kubebuilder:default=utf8
 	// Default character set for this database
-	DefaultCharacterSet string `json:"defaultCharacterSet"`
+	DefaultCharacterSet string `json:"defaultCharacterSet,omitempty"`
 	// +kubebuilder:default=utf8_general_ci
 	// Default collation for this database
-	DefaultCollation string `json:"defaultCollation"`
+	DefaultCollation string `json:"defaultCollation,omitempty"`
 }
 
 // MariaDBDatabaseStatus defines the observed state of MariaDBDatabase
 type MariaDBDatabaseStatus struct {
+	// Deployment Conditions
+	Conditions condition.Conditions `json:"conditions,omitempty" optional:"true"`
+
 	Completed bool `json:"completed,omitempty"`
 	// Map of hashes to track e.g. job status
 	Hash map[string]string `json:"hash,omitempty"`
@@ -84,6 +88,7 @@ const (
 // Database -
 type Database struct {
 	database         *MariaDBDatabase
+	account          *MariaDBAccount
 	databaseHostname string
 	databaseName     string
 	databaseUser     string

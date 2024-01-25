@@ -1,14 +1,47 @@
----
-apiVersion: batch/v1
-kind: Job
+apiVersion: mariadb.openstack.org/v1beta1
+kind: MariaDBDatabase
 metadata:
-  name: kuttldb-utf8-db-create
+  name: kuttldb-utf8
+  labels:
+    dbName: openstack
+spec:
+  name: kuttldb_utf8
 status:
-  succeeded: 1
+  conditions:
+  - message: Setup complete
+    reason: Ready
+    status: "True"
+    type: Ready
+  - message: MariaDBDatabase ready
+    reason: Ready
+    status: "True"
+    type: MariaDBDatabaseReady
+  - message: MariaDB / Galera server ready
+    reason: Ready
+    status: "True"
+    type: MariaDBServerReady
+  completed: true
 ---
-apiVersion: batch/v1
-kind: Job
+apiVersion: mariadb.openstack.org/v1beta1
+kind: MariaDBDatabase
 metadata:
-  name: kuttldb-latin1-db-create
+  name: kuttldb-latin1
+  labels:
+    dbName: openstack
+spec:
+  name: kuttldb_latin1
 status:
-  succeeded: 1
+  conditions:
+  - message: Setup complete
+    reason: Ready
+    status: "True"
+    type: Ready
+  - message: MariaDBDatabase ready
+    reason: Ready
+    status: "True"
+    type: MariaDBDatabaseReady
+  - message: MariaDB / Galera server ready
+    reason: Ready
+    status: "True"
+    type: MariaDBServerReady
+  completed: true

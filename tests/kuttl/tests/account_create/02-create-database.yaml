@@ -5,5 +5,4 @@ metadata:
   labels:
     dbName: openstack
 spec:
-  secret: osp-secret
   name: kuttldb_accounttest

@@ -35,6 +35,51 @@ func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName s
 	labels := map[string]string{
 		"owner": "mariadb-operator", "cr": database.Spec.Name, "app": "mariadbschema",
 	}
+
+	var scriptEnv []corev1.EnvVar
+
+	if database.Spec.Secret != nil {
+		scriptEnv = []corev1.EnvVar{
+			{
+				Name: "MYSQL_PWD",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: databaseSecret,
+						},
+						Key: "DbRootPassword",
+					},
+				},
+			},
+			// send deprecated Secret field but only if non-nil
+			{
+				Name: "DatabasePassword",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: *database.Spec.Secret,
+						},
+						Key: "DatabasePassword",
+					},
+				},
+			},
+		}
+	} else {
+		scriptEnv = []corev1.EnvVar{
+			{
+				Name: "MYSQL_PWD",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: databaseSecret,
+						},
+						Key: "DbRootPassword",
+					},
+				},
+			},
+		}
+	}
+
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			// provided db name is used as metadata name where underscore is a not allowed
@@ -54,30 +99,7 @@ func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName s
 							Name:    "mariadb-database-create",
 							Image:   containerImage,
 							Command: []string{"/bin/sh", "-c", dbCmd},
-							Env: []corev1.EnvVar{
-								{
-									Name: "MYSQL_PWD",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: databaseSecret,
-											},
-											Key: "DbRootPassword",
-										},
-									},
-								},
-								{
-									Name: "DatabasePassword",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: database.Spec.Secret,
-											},
-											Key: "DatabasePassword",
-										},
-									},
-								},
-							},
+							Env:     scriptEnv,
 						},
 					},
 				},
@@ -105,6 +127,52 @@ func DeleteDbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHost
 	labels := map[string]string{
 		"owner": "mariadb-operator", "cr": database.Spec.Name, "app": "mariadbschema",
 	}
+
+	var scriptEnv []corev1.EnvVar
+
+	if database.Spec.Secret != nil {
+		scriptEnv = []corev1.EnvVar{
+			{
+				Name: "MYSQL_PWD",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: databaseSecret,
+						},
+						Key: "DbRootPassword",
+					},
+				},
+			},
+			// send deprecated Secret field but only if non-nil.  otherwise
+			// the script should not try to drop usernames from mysql.user
+			{
+				Name: "DatabasePassword",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: *database.Spec.Secret,
+						},
+						Key: "DatabasePassword",
+					},
+				},
+			},
+		}
+	} else {
+		scriptEnv = []corev1.EnvVar{
+			{
+				Name: "MYSQL_PWD",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: databaseSecret,
+						},
+						Key: "DbRootPassword",
+					},
+				},
+			},
+		}
+	}
+
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      strings.Replace(database.Spec.Name, "_", "", -1) + "-database-delete",
@@ -121,19 +189,7 @@ func DeleteDbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHost
 							Name:    "mariadb-database-create",
 							Image:   containerImage,
 							Command: []string{"/bin/sh", "-c", delCmd},
-							Env: []corev1.EnvVar{
-								{
-									Name: "MYSQL_PWD",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: databaseSecret,
-											},
-											Key: "DbRootPassword",
-										},
-									},
-								},
-							},
+							Env:     scriptEnv,
 						},
 					},
 				},

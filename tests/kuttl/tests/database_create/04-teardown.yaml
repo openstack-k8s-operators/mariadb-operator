@@ -10,6 +10,12 @@ delete:
 - apiVersion: mariadb.openstack.org/v1beta1
   kind: MariaDBDatabase
   name: kuttldb-utf8
+- apiVersion: mariadb.openstack.org/v1beta1
+  kind: MariaDBDatabase
+  name: kuttldb-legacy-secret
+- apiVersion: v1
+  kind: Secret
+  name: some-db-secret
 commands:
   - script: |
       oc delete -n $NAMESPACE pvc mysql-db-openstack-galera-0

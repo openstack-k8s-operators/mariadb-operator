@@ -121,6 +121,11 @@ func (d *Database) GetDatabase() *MariaDBDatabase {
 	return d.database
 }
 
+// GetAccount - returns the account
+func (d *Database) GetAccount() *MariaDBAccount {
+	return d.account
+}
+
 // CreateOrPatchDB - create or patch the service DB instance
 // Deprecated. Use CreateOrPatchDBByName instead. If you want to use the
 // default the DB service instance of the deployment then pass "openstack" as
@@ -162,6 +167,22 @@ func (d *Database) CreateOrPatchDBByName(
 		}
 	}
 
+	account := d.account
+	if account == nil {
+		account = &MariaDBAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      d.databaseUser,
+				Namespace: d.namespace,
+				Labels: map[string]string{
+					"mariaDBDatabaseName": d.name,
+				},
+			},
+			Spec: MariaDBAccountSpec{
+				UserName: d.databaseUser,
+				Secret:   d.secret,
+			},
+		}
+	}
 	// set the database hostname on the db instance
 	err := d.setDatabaseHostname(ctx, h, name)
 	if err != nil {
@@ -173,8 +194,6 @@ func (d *Database) CreateOrPatchDBByName(
 			db.GetLabels(),
 			d.labels,
 		)
-
-		db.Spec.Secret = d.secret
 
 		err := controllerutil.SetControllerReference(h.GetBeforeObject(), db, h.GetScheme())
 		if err != nil {
@@ -200,6 +219,36 @@ func (d *Database) CreateOrPatchDBByName(
 		return ctrl.Result{RequeueAfter: time.Second * 5}, nil
 	}
 
+	op_acc, err_acc := controllerutil.CreateOrPatch(ctx, h.GetClient(), account, func() error {
+		account.Labels = util.MergeStringMaps(
+			account.GetLabels(),
+			d.labels,
+		)
+
+		err := controllerutil.SetControllerReference(h.GetBeforeObject(), account, h.GetScheme())
+		if err != nil {
+			return err
+		}
+
+		// If the service object doesn't have our finalizer, add it.
+		controllerutil.AddFinalizer(account, h.GetFinalizer())
+
+		return nil
+	})
+
+	if err_acc != nil && !k8s_errors.IsNotFound(err_acc) {
+		return ctrl.Result{}, util.WrapErrorForObject(
+			fmt.Sprintf("Error create or update account object %s", account.Name),
+			account,
+			err_acc,
+		)
+	}
+
+	if op_acc != controllerutil.OperationResultNone {
+		util.LogForObject(h, fmt.Sprintf("Account object %s created or patched", account.Name), account)
+		return ctrl.Result{RequeueAfter: time.Second * 5}, nil
+	}
+
 	err = d.getDBWithName(
 		ctx,
 		h,
@@ -211,7 +260,9 @@ func (d *Database) CreateOrPatchDBByName(
 	return ctrl.Result{}, nil
 }
 
-// WaitForDBCreatedWithTimeout - wait until the MariaDBDatabase is initialized and reports Status.Completed == true
+// WaitForDBCreatedWithTimeout - wait until the MariaDBDatabase and MariaDBAccounts are
+// initialized and reports Status.Conditions.IsTrue(MariaDBDatabaseReadyCondition)
+// and Status.Conditions.IsTrue(MariaDBAccountReadyCondition)
 func (d *Database) WaitForDBCreatedWithTimeout(
 	ctx context.Context,
 	h *helper.Helper,
@@ -226,10 +277,30 @@ func (d *Database) WaitForDBCreatedWithTimeout(
 		return ctrl.Result{}, err
 	}
 
-	if !d.database.Status.Completed || k8s_errors.IsNotFound(err) {
+	if !d.database.Status.Conditions.IsTrue(MariaDBDatabaseReadyCondition) {
 		util.LogForObject(
 			h,
 			fmt.Sprintf("Waiting for service DB %s to be created", d.database.Name),
+			d.database,
+		)
+
+		return ctrl.Result{RequeueAfter: requeueAfter}, nil
+	}
+
+	if !d.account.Status.Conditions.IsTrue(MariaDBAccountReadyCondition) {
+		util.LogForObject(
+			h,
+			fmt.Sprintf("Waiting for service account %s to be created", d.account.Name),
+			d.account,
+		)
+
+		return ctrl.Result{RequeueAfter: requeueAfter}, nil
+	}
+
+	if k8s_errors.IsNotFound(err) {
+		util.LogForObject(
+			h,
+			fmt.Sprintf("DB or account objects not yet found %s", d.database.Name),
 			d.database,
 		)
 
@@ -262,6 +333,7 @@ func (d *Database) getDBWithName(
 	if namespace == "" {
 		namespace = h.GetBeforeObject().GetNamespace()
 	}
+
 	err := h.GetClient().Get(
 		ctx,
 		types.NamespacedName{
@@ -269,6 +341,7 @@ func (d *Database) getDBWithName(
 			Namespace: namespace,
 		},
 		db)
+
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
 			return util.WrapErrorForObject(
@@ -286,6 +359,35 @@ func (d *Database) getDBWithName(
 	}
 
 	d.database = db
+
+	account := &MariaDBAccount{}
+	username := d.databaseUser
+
+	err = h.GetClient().Get(
+		ctx,
+		types.NamespacedName{
+			Name:      username,
+			Namespace: namespace,
+		},
+		account)
+
+	if err != nil {
+		if k8s_errors.IsNotFound(err) {
+			return util.WrapErrorForObject(
+				fmt.Sprintf("Failed to get %s account %s ", username, namespace),
+				h.GetBeforeObject(),
+				err,
+			)
+		}
+
+		return util.WrapErrorForObject(
+			fmt.Sprintf("account error %s %s ", username, namespace),
+			h.GetBeforeObject(),
+			err,
+		)
+	}
+
+	d.account = account
 
 	return nil
 }

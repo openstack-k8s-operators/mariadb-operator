@@ -5,7 +5,6 @@ metadata:
   labels:
     dbName: openstack
 spec:
-  secret: osp-secret
   name: kuttldb_utf8
 ---
 apiVersion: mariadb.openstack.org/v1beta1
@@ -15,7 +14,25 @@ metadata:
   labels:
     dbName: openstack
 spec:
-  secret: osp-secret
   name: kuttldb_latin1
   defaultCharacterSet: latin1
   defaultCollation: latin1_general_ci
+---
+# test optional, deprecated secret field
+apiVersion: v1
+data:
+  DatabasePassword: ZGJzZWNyZXQx
+kind: Secret
+metadata:
+  name: some-db-secret
+type: Opaque
+---
+apiVersion: mariadb.openstack.org/v1beta1
+kind: MariaDBDatabase
+metadata:
+  name: kuttldb-legacy-secret
+  labels:
+    dbName: openstack
+spec:
+  name: kuttldb_legacy_secret
+  secret: some-db-secret

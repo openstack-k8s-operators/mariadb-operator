@@ -167,8 +167,8 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 			instance.Name, instance.ObjectMeta.Labels["mariaDBDatabaseName"]))
 
 		return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
-	} else if err == nil && !mariadbDatabase.Status.Completed {
-		// found but not in completed status.
+	} else if err == nil && !mariadbDatabase.Status.Conditions.IsTrue(databasev1beta1.MariaDBDatabaseReadyCondition) {
+		// found but database not ready
 
 		// for the create case, need to wait for the MariaDBDatabase to exists before we can continue;
 		// requeue
@@ -356,8 +356,8 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 		controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
 
 		return ctrl.Result{}, nil
-	} else if err == nil && !mariadbDatabase.Status.Completed {
-		// found but not in completed status.
+	} else if err == nil && !mariadbDatabase.Status.Conditions.IsTrue(databasev1beta1.MariaDBDatabaseReadyCondition) {
+		// found but database is not ready
 
 		// for the delete case, the database doesn't exist.  so
 		// that means we don't, either.   remove finalizer from
@@ -411,22 +411,33 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 
 			// remove local finalizer
 			controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
+
+			// galera DB does not exist, so return
+			return ctrl.Result{}, nil
+		} else {
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				databasev1beta1.MariaDBServerReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityError,
+				"Error retrieving MariaDB/Galera instance %s",
+				err))
+
+			return ctrl.Result{}, err
 		}
-
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			databasev1beta1.MariaDBServerReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityError,
-			"Error retrieving MariaDB/Galera instance %s",
-			err))
-
-		return ctrl.Result{}, err
 	}
 
 	var dbInstance, dbAdminSecret, dbContainerImage, serviceAccountName string
 
 	if !dbGalera.Status.Bootstrapped {
 		log.Info("DB bootstrap not complete. Requeue...")
+
+		instance.Status.Conditions.MarkFalse(
+			databasev1beta1.MariaDBServerReadyCondition,
+			databasev1beta1.ReasonDBWaitingInitialized,
+			condition.SeverityInfo,
+			databasev1beta1.MariaDBServerNotBootstrappedMessage,
+		)
+
 		return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 	}
 
