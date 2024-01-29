@@ -23,6 +23,7 @@ package v1beta1
 
 import (
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
+	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -52,6 +53,11 @@ func (in *Database) DeepCopyInto(out *Database) {
 	if in.account != nil {
 		in, out := &in.account, &out.account
 		*out = new(MariaDBAccount)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.secretObj != nil {
+		in, out := &in.secretObj, &out.secretObj
+		*out = new(v1.Secret)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.labels != nil {

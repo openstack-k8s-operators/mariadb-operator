@@ -86,9 +86,15 @@ const (
 
 	MariaDBAccountReadyMessage = "MariaDBAccount creation complete"
 
+	MariaDBAccountNotReadyMessage = "MariaDBAccount is not present: %s"
+
 	MariaDBAccountSecretNotReadyMessage = "MariaDBAccount secret is missing or incomplete: %s"
 
 	MariaDBErrorRetrievingMariaDBDatabaseMessage = "Error retrieving MariaDBDatabase instance %s"
 
 	MariaDBErrorRetrievingMariaDBGaleraMessage = "Error retrieving MariaDB/Galera instance %s"
+
+	MariaDBAccountFinalizersRemainMessage = "Waiting for finalizers %s to be removed before dropping username"
+
+	MariaDBAccountReadyForDeleteMessage = "MariaDBAccount ready for delete"
 )

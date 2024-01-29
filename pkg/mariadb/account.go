@@ -67,7 +67,7 @@ func CreateDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName st
 											LocalObjectReference: corev1.LocalObjectReference{
 												Name: databaseSecret,
 											},
-											Key: "DbRootPassword",
+											Key: databasev1beta1.DbRootPasswordSelector,
 										},
 									},
 								},
@@ -78,7 +78,7 @@ func CreateDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName st
 											LocalObjectReference: corev1.LocalObjectReference{
 												Name: account.Spec.Secret,
 											},
-											Key: "DatabasePassword",
+											Key: databasev1beta1.DatabasePasswordSelector,
 										},
 									},
 								},
@@ -128,7 +128,7 @@ func DeleteDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName st
 											LocalObjectReference: corev1.LocalObjectReference{
 												Name: databaseSecret,
 											},
-											Key: "DbRootPassword",
+											Key: databasev1beta1.DbRootPasswordSelector,
 										},
 									},
 								},
