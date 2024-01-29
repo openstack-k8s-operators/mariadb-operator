@@ -19,6 +19,7 @@ package v1beta1
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/openstack-k8s-operators/lib-common/modules/common/helper"
@@ -171,7 +172,7 @@ func (d *Database) CreateOrPatchDBByName(
 	if account == nil {
 		account = &MariaDBAccount{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      d.databaseUser,
+				Name:      strings.Replace(d.databaseUser, "_", "-", -1),
 				Namespace: d.namespace,
 				Labels: map[string]string{
 					"mariaDBDatabaseName": d.name,
@@ -366,7 +367,7 @@ func (d *Database) getDBWithName(
 	err = h.GetClient().Get(
 		ctx,
 		types.NamespacedName{
-			Name:      username,
+			Name:      strings.Replace(username, "_", "-", -1),
 			Namespace: namespace,
 		},
 		account)
