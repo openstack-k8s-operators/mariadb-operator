@@ -177,6 +177,7 @@ func (tc *TestHelper) SimulateMariaDBDatabaseCompleted(name types.NamespacedName
 	gomega.Eventually(func(g gomega.Gomega) {
 		db := tc.GetMariaDBDatabase(name)
 		db.Status.Completed = true
+		db.Status.Conditions.MarkTrue(mariadbv1.MariaDBDatabaseReadyCondition, "Ready")
 		// This can return conflict so we have the gomega.Eventually block to retry
 		g.Expect(tc.K8sClient.Status().Update(tc.Ctx, db)).To(gomega.Succeed())
 
@@ -192,4 +193,26 @@ func (tc *TestHelper) AssertMariaDBDatabaseDoesNotExist(name types.NamespacedNam
 		err := tc.K8sClient.Get(tc.Ctx, name, instance)
 		g.Expect(k8s_errors.IsNotFound(err)).To(gomega.BeTrue())
 	}, tc.Timeout, tc.Interval).Should(gomega.Succeed())
+}
+
+// GetMariaDBAccount waits for and retrieves a MariaDBAccount resource from the Kubernetes cluster
+func (tc *TestHelper) GetMariaDBAccount(name types.NamespacedName) *mariadbv1.MariaDBAccount {
+	instance := &mariadbv1.MariaDBAccount{}
+	gomega.Eventually(func(g gomega.Gomega) {
+		g.Expect(tc.K8sClient.Get(tc.Ctx, name, instance)).Should(gomega.Succeed())
+	}, tc.Timeout, tc.Interval).Should(gomega.Succeed())
+	return instance
+}
+
+// SimulateMariaDBAccountCompleted simulates that the MariaDBAccount is created in the DB
+func (tc *TestHelper) SimulateMariaDBAccountCompleted(name types.NamespacedName) {
+	gomega.Eventually(func(g gomega.Gomega) {
+		acc := tc.GetMariaDBAccount(name)
+		acc.Status.Conditions.MarkTrue(mariadbv1.MariaDBAccountReadyCondition, "Ready")
+		// This can return conflict so we have the gomega.Eventually block to retry
+		g.Expect(tc.K8sClient.Status().Update(tc.Ctx, acc)).To(gomega.Succeed())
+
+	}, tc.Timeout, tc.Interval).Should(gomega.Succeed())
+
+	tc.Logger.Info("Simulated DB Account completed", "on", name)
 }
