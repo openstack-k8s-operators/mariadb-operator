@@ -170,9 +170,12 @@ func (d *Database) CreateOrPatchDBByName(
 
 	account := d.account
 	if account == nil {
+		// no account is present in this Database, so for forwards compatibility,
+		// make one.  name it the same as the MariaDBDatabase so we can get it back
+		// again based on that name alone.
 		account = &MariaDBAccount{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      strings.Replace(d.databaseUser, "_", "-", -1),
+				Name:      d.name,
 				Namespace: d.namespace,
 				Labels: map[string]string{
 					"mariaDBDatabaseName": d.name,
@@ -288,7 +291,7 @@ func (d *Database) WaitForDBCreatedWithTimeout(
 		return ctrl.Result{RequeueAfter: requeueAfter}, nil
 	}
 
-	if !d.account.Status.Conditions.IsTrue(MariaDBAccountReadyCondition) {
+	if d.account != nil && !d.account.Status.Conditions.IsTrue(MariaDBAccountReadyCondition) {
 		util.LogForObject(
 			h,
 			fmt.Sprintf("Waiting for service account %s to be created", d.account.Name),
@@ -321,6 +324,9 @@ func (d *Database) WaitForDBCreated(
 }
 
 // getDBWithName - get DB object with name in namespace
+// note this is legacy as a new function will be added that allows for
+// lookup of Database based on mariadbdatabase name and mariadbaccount name
+// individually
 func (d *Database) getDBWithName(
 	ctx context.Context,
 	h *helper.Helper,
@@ -364,21 +370,40 @@ func (d *Database) getDBWithName(
 	account := &MariaDBAccount{}
 	username := d.databaseUser
 
-	err = h.GetClient().Get(
-		ctx,
-		types.NamespacedName{
-			Name:      strings.Replace(username, "_", "-", -1),
-			Namespace: namespace,
-		},
-		account)
+	if username == "" {
+		// no username, so this is a legacy lookup.  locate MariaDBAccount
+		// based on the same name as that of the MariaDBDatabase
+		err = h.GetClient().Get(
+			ctx,
+			types.NamespacedName{
+				Name:      d.name,
+				Namespace: namespace,
+			},
+			account)
+	} else {
+		// username is given.  locate MariaDBAccount based on that given
+		// username.  this is also legacy and in practice should not occur
+		// for any current controller.
+		err = h.GetClient().Get(
+			ctx,
+			types.NamespacedName{
+				Name:      strings.Replace(username, "_", "-", -1),
+				Namespace: namespace,
+			},
+			account)
+	}
 
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
-			return util.WrapErrorForObject(
-				fmt.Sprintf("Failed to get %s account %s ", username, namespace),
-				h.GetBeforeObject(),
-				err,
+			// if account can't be found, log it, but don't quit, still
+			// return the Database with MariaDBDatabase
+			util.LogForObject(
+				h,
+				fmt.Sprintf("Could not find account %s for Database named %s", username, namespace),
+				d.account,
 			)
+
+			// note that d.account remains nil in this case
 		}
 
 		return util.WrapErrorForObject(
@@ -386,9 +411,9 @@ func (d *Database) getDBWithName(
 			h.GetBeforeObject(),
 			err,
 		)
+	} else {
+		d.account = account
 	}
-
-	d.account = account
 
 	return nil
 }
@@ -415,11 +440,21 @@ func (d *Database) DeleteFinalizer(
 	ctx context.Context,
 	h *helper.Helper,
 ) error {
+
+	if d.account != nil && controllerutil.RemoveFinalizer(d.account, h.GetFinalizer()) {
+		err := h.GetClient().Update(ctx, d.account)
+		if err != nil && !k8s_errors.IsNotFound(err) {
+			return err
+		}
+		util.LogForObject(h, fmt.Sprintf("Removed finalizer %s from MariaDBAccount object", h.GetFinalizer()), d.account)
+	}
+
 	if controllerutil.RemoveFinalizer(d.database, h.GetFinalizer()) {
 		err := h.GetClient().Update(ctx, d.database)
 		if err != nil && !k8s_errors.IsNotFound(err) {
 			return err
 		}
+		util.LogForObject(h, fmt.Sprintf("Removed finalizer %s from MariaDBDatabase object", h.GetFinalizer()), d.database)
 	}
 	return nil
 }
