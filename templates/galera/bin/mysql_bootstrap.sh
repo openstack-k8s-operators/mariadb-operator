@@ -7,7 +7,7 @@ else
     echo -e "Creating new mariadb database."
     # we need the right perm on the persistent directory,
     # so use Kolla to set it up before bootstrapping the DB
-    cat <<EOF >/var/lib/pod-config-data/galera.cnf
+    cat <<EOF >/var/lib/config-data/generated/galera.cnf
 [mysqld]
 bind_address=localhost
 wsrep_provider=none
@@ -22,7 +22,7 @@ PODNAME=$(hostname -f | cut -d. -f1,2)
 PODIPV4=$(grep "${PODNAME}" /etc/hosts | grep -v ':' | cut -d$'\t' -f1)
 PODIPV6=$(grep "${PODNAME}" /etc/hosts | grep ':' | cut -d$'\t' -f1)
 
-cd /var/lib/config-data
+cd /var/lib/config-data/default
 for cfg in *.cnf.in; do
     if [ -s "${cfg}" ]; then
 
@@ -35,6 +35,6 @@ for cfg in *.cnf.in; do
         fi
 
         echo "Generating config file from template ${cfg}, will use ${IPSTACK} listen address of ${PODIP}"
-        sed -e "s/{ PODNAME }/${PODNAME}/" -e "s/{ PODIP }/${PODIP}/" "/var/lib/config-data/${cfg}" > "/var/lib/pod-config-data/${cfg%.in}"
+        sed -e "s/{ PODNAME }/${PODNAME}/" -e "s/{ PODIP }/${PODIP}/" "/var/lib/config-data/default/${cfg}" > "/var/lib/config-data/generated/${cfg%.in}"
     fi
 done

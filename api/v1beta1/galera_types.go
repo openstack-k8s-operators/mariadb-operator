@@ -18,6 +18,7 @@ package v1beta1
 
 import (
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/tls"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -66,6 +67,13 @@ type GaleraSpec struct {
 	// +kubebuilder:validation:Optional
 	// Adoption configuration
 	AdoptionRedirect AdoptionRedirectSpec `json:"adoptionRedirect"`
+	// +kubebuilder:validation:Optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	// TLS settings for MySQL service and internal Galera replication
+	TLS tls.SimpleService `json:"tls,omitempty"`
+	// +kubebuilder:validation:Optional
+	// When TLS is configured, only allow connections to the DB over TLS
+	DisableNonTLSListeners bool `json:"disableNonTLSListeners,omitempty"`
 }
 
 // GaleraAttributes holds startup information for a Galera host
@@ -87,9 +95,8 @@ type GaleraStatus struct {
 	// Is the galera cluster currently running
 	// +kubebuilder:default=false
 	Bootstrapped bool `json:"bootstrapped"`
-	// Hash of the configuration files
-	// +kubebuilder:default=""
-	ConfigHash string `json:"configHash"`
+	// Map of hashes to track input changes
+	Hash map[string]string `json:"hash,omitempty"`
 	// Deployment Conditions
 	Conditions condition.Conditions `json:"conditions,omitempty" optional:"true"`
 }

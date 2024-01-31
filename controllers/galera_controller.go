@@ -17,18 +17,23 @@ limitations under the License.
 package controllers
 
 import (
+	"github.com/openstack-k8s-operators/lib-common/modules/common"
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	configmap "github.com/openstack-k8s-operators/lib-common/modules/common/configmap"
 	env "github.com/openstack-k8s-operators/lib-common/modules/common/env"
 	helper "github.com/openstack-k8s-operators/lib-common/modules/common/helper"
 	common_rbac "github.com/openstack-k8s-operators/lib-common/modules/common/rbac"
+	secret "github.com/openstack-k8s-operators/lib-common/modules/common/secret"
 	commonstatefulset "github.com/openstack-k8s-operators/lib-common/modules/common/statefulset"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/tls"
 	util "github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/kubectl/pkg/util/podutils"
@@ -46,13 +51,31 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	mariadb "github.com/openstack-k8s-operators/mariadb-operator/pkg/mariadb"
+)
+
+// fields to index to reconcile on CR change
+const (
+	serviceSecretNameField = ".spec.tls.genericService.SecretName"
+	caSecretNameField      = ".spec.tls.ca.caBundleSecretName"
+)
+
+var (
+	allWatchFields = []string{
+		serviceSecretNameField,
+		caSecretNameField,
+	}
 )
 
 // GaleraReconciler reconciles a Galera object
@@ -97,7 +120,8 @@ func buildGcommURI(instance *mariadbv1.Galera) string {
 	res := []string{}
 
 	for i := 0; i < replicas; i++ {
-		res = append(res, basename+"-"+strconv.Itoa(i)+"."+basename)
+		// Generate Gcomm with subdomains for TLS validation
+		res = append(res, basename+"-"+strconv.Itoa(i)+"."+basename+"."+instance.Namespace+".svc")
 	}
 	uri := "gcomm://" + strings.Join(res, ",")
 	return uri
@@ -257,15 +281,17 @@ func assertPodsAttributesValidity(helper *helper.Helper, instance *mariadbv1.Gal
 		if !found {
 			continue
 		}
-		ci := instance.Status.Attributes[pod.Name].ContainerID
-		pci := pod.Status.ContainerStatuses[0].ContainerID
-		if ci != pci {
+		// A node can have various attributes depending on its known state.
+		// A ContainerID attribute is only present if the node is being started.
+		attrCID := instance.Status.Attributes[pod.Name].ContainerID
+		podCID := pod.Status.ContainerStatuses[0].ContainerID
+		if attrCID != "" && attrCID != podCID {
 			// This gcomm URI was pushed in a pod which was restarted
 			// before the attribute got cleared, which means the pod
 			// failed to start galera. Clear the attribute here, and
 			// reprobe the pod's state in the next reconcile loop
 			clearPodAttributes(instance, pod.Name)
-			util.LogForObject(helper, "Pod restarted while galera was starting", instance, "pod", pod.Name)
+			util.LogForObject(helper, "Pod restarted while galera was starting", instance, "pod", pod.Name, "current pod ID", podCID, "recorded ID", attrCID)
 		}
 	}
 }
@@ -282,6 +308,9 @@ func assertPodsAttributesValidity(helper *helper.Helper, instance *mariadbv1.Gal
 // RBAC for pods
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete;
 // +kubebuilder:rbac:groups=core,resources=pods/exec,verbs=create
+
+// RBAC for secrets
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete;
 
 // RBAC for services and endpoints
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete;
@@ -361,6 +390,10 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		instance.Status.Conditions = condition.Conditions{}
 		// initialize conditions used later as Status=Unknown
 		cl := condition.CreateList(
+			// DB Root password
+			condition.UnknownCondition(condition.InputReadyCondition, condition.InitReason, condition.InputReadyInitMessage),
+			// TLS cert secrets
+			condition.UnknownCondition(condition.TLSInputReadyCondition, condition.InitReason, condition.InputReadyInitMessage),
 			// endpoint for adoption redirect
 			condition.UnknownCondition(condition.ExposeServiceReadyCondition, condition.InitReason, condition.ExposeServiceReadyInitMessage),
 			// configmap generation
@@ -470,9 +503,52 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		log.Info("", "Kind", instance.Kind, "Name", instance.Name, "database service", service.Name, "operation", string(op))
 	}
 
-	// Generate the config maps for the various services
-	configMapVars := make(map[string]env.Setter)
-	err = r.generateConfigMaps(ctx, helper, instance, &configMapVars)
+	// Hash of all resources that may cause a service restart
+	inputHashEnv := make(map[string]env.Setter)
+
+	// Check and hash inputs
+	secretName := instance.Spec.Secret
+	// NOTE do not hash the db root password, as its change requires
+	// more orchestration than a simple rolling restart
+	_, _, err = secret.GetSecret(ctx, helper, secretName, instance.Namespace)
+	if err != nil {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.InputReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			condition.InputReadyErrorMessage,
+			err.Error()))
+		return ctrl.Result{}, fmt.Errorf("error calculating input hash: %w", err)
+	}
+	instance.Status.Conditions.MarkTrue(condition.InputReadyCondition, condition.InputReadyMessage)
+
+	var certHash, caHash string
+	specTLS := &instance.Spec.TLS
+	if err == nil && specTLS.Enabled() {
+		certHash, _, err = specTLS.GenericService.ValidateCertSecret(ctx, helper, instance.Namespace)
+		inputHashEnv["Cert"] = env.SetValue(certHash)
+	}
+	if err == nil && specTLS.Ca.CaBundleSecretName != "" {
+		caName := types.NamespacedName{
+			Name:      specTLS.Ca.CaBundleSecretName,
+			Namespace: instance.Namespace,
+		}
+		caHash, _, err = tls.ValidateCACertSecret(ctx, helper.GetClient(), caName)
+		inputHashEnv["CA"] = env.SetValue(caHash)
+	}
+	if err != nil {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.TLSInputReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			condition.TLSInputErrorMessage,
+			err.Error()))
+		return ctrl.Result{}, fmt.Errorf("error calculating input hash: %w", err)
+	}
+	instance.Status.Conditions.MarkTrue(condition.TLSInputReadyCondition, condition.InputReadyMessage)
+
+	// Generate and hash config maps
+	err = r.generateConfigMaps(ctx, helper, instance, &inputHashEnv)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.ServiceConfigReadyCondition,
@@ -482,16 +558,36 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 			err.Error()))
 		return ctrl.Result{}, fmt.Errorf("error calculating configmap hash: %w", err)
 	}
-	// From hereon, configMapVars holds a hash of the config generated for this instance
-	// This is used in an envvar in the statefulset to restart it on config change
-	envHash := &corev1.EnvVar{}
-	configMapVars[configMapNameForConfig(instance)](envHash)
-	instance.Status.ConfigHash = envHash.Value
 	instance.Status.Conditions.MarkTrue(condition.ServiceConfigReadyCondition, condition.ServiceConfigReadyMessage)
 
-	commonstatefulset := commonstatefulset.NewStatefulSet(mariadb.StatefulSet(instance), 5)
+	//
+	// create hash over all the different input resources to identify if any those changed
+	// and a restart/recreate is required.
+	//
+	hashOfHashes, err := util.HashOfInputHashes(inputHashEnv)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if hashMap, changed := util.SetHash(instance.Status.Hash, common.InputHashName, hashOfHashes); changed {
+		// Hash changed and instance status should be updated (which will be done by main defer func),
+		// so update all the input hashes and return to reconcile again
+		instance.Status.Hash = hashMap
+		for k, s := range inputHashEnv {
+			var envVar corev1.EnvVar
+			s(&envVar)
+			instance.Status.Hash[k] = envVar.Value
+		}
+		util.LogForObject(helper, fmt.Sprintf("Input hash changed %s", hashOfHashes), instance)
+		return ctrl.Result{}, nil
+	}
+
+	// The statefulset that manages galera pod
+	commonstatefulset := commonstatefulset.NewStatefulSet(mariadb.StatefulSet(instance, hashOfHashes), 5)
 	sfres, sferr := commonstatefulset.CreateOrPatch(ctx, helper)
 	if sferr != nil {
+		if k8s_errors.IsNotFound(sferr) {
+			return ctrl.Result{RequeueAfter: time.Duration(3) * time.Second}, nil
+		}
 		return sfres, sferr
 	}
 	statefulset := commonstatefulset.GetStatefulSet()
@@ -664,6 +760,34 @@ func (r *GaleraReconciler) generateConfigMaps(
 // SetupWithManager sets up the controller with the Manager.
 func (r *GaleraReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.config = mgr.GetConfig()
+
+	// Various CR fields need to be indexed to filter watch events
+	// for the secret changes we want to be notified of
+	// index caBundleSecretName
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &mariadbv1.Galera{}, caSecretNameField, func(rawObj client.Object) []string {
+		// Extract the secret name from the spec, if one is provided
+		cr := rawObj.(*mariadbv1.Galera)
+		tls := &cr.Spec.TLS
+		if tls.Ca.CaBundleSecretName != "" {
+			return []string{tls.Ca.CaBundleSecretName}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	// index secretName
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &mariadbv1.Galera{}, serviceSecretNameField, func(rawObj client.Object) []string {
+		// Extract the secret name from the spec, if one is provided
+		cr := rawObj.(*mariadbv1.Galera)
+		tls := &cr.Spec.TLS
+		if tls.Enabled() {
+			return []string{*tls.GenericService.SecretName}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&mariadbv1.Galera{}).
 		Owns(&appsv1.StatefulSet{}).
@@ -673,6 +797,11 @@ func (r *GaleraReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&rbacv1.Role{}).
 		Owns(&rbacv1.RoleBinding{}).
+		Watches(
+			&source.Kind{Type: &corev1.Secret{}},
+			handler.EnqueueRequestsFromMapFunc(r.findObjectsForSrc),
+			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+		).
 		Complete(r)
 }
 
@@ -698,4 +827,34 @@ func GetDatabaseObject(clientObj client.Client, ctx context.Context, name string
 		return dbGalera, err
 	}
 
+}
+
+// findObjectsForSrc - returns a reconcile request if the object is referenced by a Galera CR
+func (r *GaleraReconciler) findObjectsForSrc(src client.Object) []reconcile.Request {
+	requests := []reconcile.Request{}
+
+	for _, field := range allWatchFields {
+		crList := &mariadbv1.GaleraList{}
+		listOps := &client.ListOptions{
+			FieldSelector: fields.OneTermEqualSelector(field, src.GetName()),
+			Namespace:     src.GetNamespace(),
+		}
+		err := r.List(context.TODO(), crList, listOps)
+		if err != nil {
+			return []reconcile.Request{}
+		}
+
+		for _, item := range crList.Items {
+			requests = append(requests,
+				reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Name:      item.GetName(),
+						Namespace: item.GetNamespace(),
+					},
+				},
+			)
+		}
+	}
+
+	return requests
 }

@@ -1,0 +1,8 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+commands:
+  - script: |
+      # ensure galera does not encrypt WSREP traffic
+      oc rsh -n ${NAMESPACE} -c galera openstack-galera-0 /bin/sh -c 'mysql -uroot -p${DB_ROOT_PASSWORD} -Nse "select @@global.wsrep_provider_options;"' | grep -o -w 'gmcast.listen_addr = tcp'
+      # ensure mysql/SQL traffic uses encryption
+      oc rsh -n ${NAMESPACE} -c galera openstack-galera-0 /bin/sh -c 'mysql -uroot -p${DB_ROOT_PASSWORD} -Nse "select @@global.ssl_cipher;"' | grep -v '^NULL$'

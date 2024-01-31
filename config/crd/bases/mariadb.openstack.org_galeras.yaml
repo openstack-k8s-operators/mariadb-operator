@@ -60,6 +60,10 @@ spec:
                   defaults, or overwrite rendered information using raw MariaDB config
                   format. The content gets added to /etc/my.cnf.d/galera_custom.cnf
                 type: string
+              disableNonTLSListeners:
+                description: When TLS is configured, only allow connections to the
+                  DB over TLS
+                type: boolean
               nodeSelector:
                 additionalProperties:
                   type: string
@@ -84,6 +88,17 @@ spec:
               storageRequest:
                 description: Storage size allocated for the mariadb databases
                 type: string
+              tls:
+                description: TLS settings for MySQL service and internal Galera replication
+                properties:
+                  caBundleSecretName:
+                    description: CaBundleSecretName - holding the CA certs in a pre-created
+                      bundle file
+                    type: string
+                  secretName:
+                    description: SecretName - holding the cert, key for the service
+                    type: string
+                type: object
             required:
             - containerImage
             - replicas
@@ -162,16 +177,16 @@ spec:
                   - type
                   type: object
                 type: array
-              configHash:
-                default: ""
-                description: Hash of the configuration files
-                type: string
+              hash:
+                additionalProperties:
+                  type: string
+                description: Map of hashes to track input changes
+                type: object
               safeToBootstrap:
                 description: Name of the node that can safely bootstrap a cluster
                 type: string
             required:
             - bootstrapped
-            - configHash
             type: object
         type: object
     served: true

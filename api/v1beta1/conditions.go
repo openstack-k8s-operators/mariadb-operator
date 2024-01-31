@@ -69,6 +69,9 @@ const (
 	// MariaDBInitializedErrorMessage
 	MariaDBInitializedErrorMessage = "MariaDB dbinit error occured %s"
 
+	// MariaDBInputSecretNotFoundMessage
+	MariaDBInputSecretNotFoundMessage = "Input secret not found: %s"
+
 	MariaDBDatabaseReadyInitMessage = "MariaDBDatabase not yet available"
 
 	MariaDBDatabaseReadyMessage = "MariaDBDatabase ready"

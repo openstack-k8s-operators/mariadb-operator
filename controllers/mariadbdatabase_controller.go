@@ -167,6 +167,9 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// Non-deletion (normal) flow follows
 	//
 	var dbName, dbSecret, dbContainerImage, serviceAccount string
+	// NOTE(dciabrin) When configured to only allow TLS connections, all clients
+	// accessing this DB must support client connection via TLS.
+	useTLS := dbGalera.Spec.TLS.Enabled() && dbGalera.Spec.DisableNonTLSListeners
 
 	if !dbGalera.Status.Bootstrapped {
 		log.Info("DB bootstrap not complete. Requeue...")
@@ -192,7 +195,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	)
 
 	// Define a new Job object (hostname, password, containerImage)
-	jobDef, err := mariadb.DbDatabaseJob(instance, dbName, dbSecret, dbContainerImage, serviceAccount)
+	jobDef, err := mariadb.DbDatabaseJob(instance, dbName, dbSecret, dbContainerImage, serviceAccount, useTLS)
 	if err != nil {
 		return ctrl.Result{}, err
 	}

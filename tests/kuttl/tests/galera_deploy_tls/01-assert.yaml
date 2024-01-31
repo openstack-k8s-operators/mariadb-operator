@@ -1,0 +1,54 @@
+apiVersion: mariadb.openstack.org/v1beta1
+kind: Galera
+metadata:
+  name: openstack
+spec:
+  replicas: 3
+  secret: osp-secret
+  storageRequest: 500M
+  tls:
+    secretName: kuttl-galera-tls
+    caBundleSecretName: kuttl-galera-tls
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: openstack-galera
+status:
+  availableReplicas: 3
+  readyReplicas: 3
+  replicas: 3
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: openstack-galera-0
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: openstack-galera-1
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: openstack-galera-2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openstack-galera
+spec:
+  ports:
+  - name: mysql
+    port: 3306
+    protocol: TCP
+    targetPort: 3306
+  selector:
+    app: galera
+    cr: galera-openstack
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: openstack-galera

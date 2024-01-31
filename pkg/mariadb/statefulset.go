@@ -11,9 +11,12 @@ import (
 )
 
 // StatefulSet returns a StatefulSet object for the galera cluster
-func StatefulSet(g *mariadbv1.Galera) *appsv1.StatefulSet {
+func StatefulSet(g *mariadbv1.Galera, configHash string) *appsv1.StatefulSet {
 	ls := StatefulSetLabels(g)
 	name := StatefulSetName(g.Name)
+	replicas := g.Spec.Replicas
+	storage := g.Spec.StorageClass
+	storageRequest := resource.MustParse(g.Spec.StorageRequest)
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -21,7 +24,7 @@ func StatefulSet(g *mariadbv1.Galera) *appsv1.StatefulSet {
 		},
 		Spec: appsv1.StatefulSetSpec{
 			ServiceName: name,
-			Replicas:    g.Spec.Replicas,
+			Replicas:    replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: ls,
 			},
@@ -53,25 +56,7 @@ func StatefulSet(g *mariadbv1.Galera) *appsv1.StatefulSet {
 								},
 							},
 						}},
-						VolumeMounts: []corev1.VolumeMount{{
-							MountPath: "/var/lib/mysql",
-							Name:      "mysql-db",
-						}, {
-							MountPath: "/var/lib/config-data",
-							ReadOnly:  true,
-							Name:      "config-data",
-						}, {
-							MountPath: "/var/lib/pod-config-data",
-							Name:      "pod-config-data",
-						}, {
-							MountPath: "/var/lib/operator-scripts",
-							ReadOnly:  true,
-							Name:      "operator-scripts",
-						}, {
-							MountPath: "/var/lib/kolla/config_files",
-							ReadOnly:  true,
-							Name:      "kolla-config",
-						}},
+						VolumeMounts: getGaleraInitVolumeMounts(g),
 					}},
 					Containers: []corev1.Container{{
 						Image: g.Spec.ContainerImage,
@@ -80,7 +65,7 @@ func StatefulSet(g *mariadbv1.Galera) *appsv1.StatefulSet {
 						Command: []string{"/usr/bin/dumb-init", "--", "/usr/local/bin/kolla_start"},
 						Env: []corev1.EnvVar{{
 							Name:  "CR_CONFIG_HASH",
-							Value: g.Status.ConfigHash,
+							Value: configHash,
 						}, {
 							Name:  "KOLLA_CONFIG_STRATEGY",
 							Value: "COPY_ALWAYS",
@@ -102,29 +87,7 @@ func StatefulSet(g *mariadbv1.Galera) *appsv1.StatefulSet {
 							ContainerPort: 4567,
 							Name:          "galera",
 						}},
-						VolumeMounts: []corev1.VolumeMount{{
-							MountPath: "/var/lib/mysql",
-							Name:      "mysql-db",
-						}, {
-							MountPath: "/var/lib/config-data",
-							ReadOnly:  true,
-							Name:      "config-data",
-						}, {
-							MountPath: "/var/lib/pod-config-data",
-							Name:      "pod-config-data",
-						}, {
-							MountPath: "/var/lib/secrets",
-							ReadOnly:  true,
-							Name:      "secrets",
-						}, {
-							MountPath: "/var/lib/operator-scripts",
-							ReadOnly:  true,
-							Name:      "operator-scripts",
-						}, {
-							MountPath: "/var/lib/kolla/config_files",
-							ReadOnly:  true,
-							Name:      "kolla-config",
-						}},
+						VolumeMounts: getGaleraVolumeMounts(g),
 						StartupProbe: &corev1.Probe{
 							ProbeHandler: corev1.ProbeHandler{
 								Exec: &corev1.ExecAction{
@@ -149,92 +112,7 @@ func StatefulSet(g *mariadbv1.Galera) *appsv1.StatefulSet {
 							},
 						},
 					}},
-					Volumes: []corev1.Volume{
-						{
-							Name: "secrets",
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: g.Spec.Secret,
-									Items: []corev1.KeyToPath{
-										{
-											Key:  "DbRootPassword",
-											Path: "dbpassword",
-										},
-									},
-								},
-							},
-						},
-						{
-							Name: "kolla-config",
-							VolumeSource: corev1.VolumeSource{
-								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: g.Name + "-config-data",
-									},
-									Items: []corev1.KeyToPath{
-										{
-											Key:  "config.json",
-											Path: "config.json",
-										},
-									},
-								},
-							},
-						},
-						{
-							Name: "pod-config-data",
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
-							},
-						},
-						{
-							Name: "config-data",
-							VolumeSource: corev1.VolumeSource{
-								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: g.Name + "-config-data",
-									},
-									Items: []corev1.KeyToPath{
-										{
-											Key:  "galera.cnf.in",
-											Path: "galera.cnf.in",
-										},
-										{
-											Key:  mariadbv1.CustomServiceConfigFile,
-											Path: mariadbv1.CustomServiceConfigFile,
-										},
-									},
-								},
-							},
-						},
-						{
-							Name: "operator-scripts",
-							VolumeSource: corev1.VolumeSource{
-								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: g.Name + "-scripts",
-									},
-									Items: []corev1.KeyToPath{
-										{
-											Key:  "mysql_bootstrap.sh",
-											Path: "mysql_bootstrap.sh",
-										},
-										{
-											Key:  "mysql_probe.sh",
-											Path: "mysql_probe.sh",
-										},
-										{
-											Key:  "detect_last_commit.sh",
-											Path: "detect_last_commit.sh",
-										},
-										{
-											Key:  "detect_gcomm_and_start.sh",
-											Path: "detect_gcomm_and_start.sh",
-										},
-									},
-								},
-							},
-						},
-					},
+					Volumes: getGaleraVolumes(g),
 				},
 			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
@@ -247,10 +125,10 @@ func StatefulSet(g *mariadbv1.Galera) *appsv1.StatefulSet {
 						AccessModes: []corev1.PersistentVolumeAccessMode{
 							"ReadWriteOnce",
 						},
-						StorageClassName: &g.Spec.StorageClass,
+						StorageClassName: &storage,
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
-								"storage": resource.MustParse(g.Spec.StorageRequest),
+								"storage": storageRequest,
 							},
 						},
 					},

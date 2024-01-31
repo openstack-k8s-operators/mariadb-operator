@@ -1,0 +1,13 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+commands:
+  - script: |
+      # ensure db users are configured to TLS restriction
+      oc rsh -n ${NAMESPACE} -c galera openstack-galera-0 /bin/sh -c 'mysql -uroot -p${DB_ROOT_PASSWORD} -e "show grants for \`kuttldb\`@\`%\`;"' | grep 'REQUIRE SSL'
+---
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+commands:
+  - script: |
+      # ensure db users are configured to TLS restriction
+      oc rsh -n ${NAMESPACE} -c galera openstack-galera-0 /bin/sh -c 'mysql -uroot -p${DB_ROOT_PASSWORD} -e "show grants for \`anotheruser\`@\`%\`;"' | grep 'REQUIRE SSL'

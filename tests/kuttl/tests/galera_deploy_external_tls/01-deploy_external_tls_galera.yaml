@@ -1,0 +1,19 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+delete:
+  - apiVersion: mariadb.openstack.org/v1beta1
+    kind: Galera
+    name: openstack
+---
+# galera resource with external TLS only (no TLS for galera WSREP traffic)
+apiVersion: mariadb.openstack.org/v1beta1
+kind: Galera
+metadata:
+  name: openstack
+spec:
+  secret: osp-secret
+  storageClass: local-storage
+  storageRequest: 500M
+  replicas: 3
+  tls:
+    secretName: kuttl-galera-tls

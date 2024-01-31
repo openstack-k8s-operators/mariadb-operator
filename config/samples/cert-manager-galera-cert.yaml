@@ -1,0 +1,75 @@
+# the cluster-wide issuer, used to generate a root certificate
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-issuer
+spec:
+  selfSigned: {}
+---
+# The root certificate. they cert/key/ca will be generated in the secret 'root-secret'
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: my-selfsigned-ca
+  namespace: openstack
+spec:
+  isCA: true
+  commonName: my-selfsigned-ca
+  secretName: root-secret
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: selfsigned-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+# The CA issuer for galera, uses the certificate from `my-selfsigned-ca`
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: my-ca-issuer
+  namespace: openstack
+spec:
+  ca:
+    secretName: root-secret
+---
+# The certificate used by all galera replicas for GCOMM and SST.
+# The replicas in the galera statefulset all share the same
+# certificate, so the latter requires wildcard in dnsNames for TLS
+# validation.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: galera-cert
+spec:
+  secretName: galera-tls
+  secretTemplate:
+    labels:
+       mariadb-ref: openstack
+  duration: 6h
+  renewBefore: 1h
+  subject:
+    organizations:
+      - cluster.local
+  commonName: openstack-galera
+  isCA: false
+  privateKey:
+    algorithm: RSA
+    encoding: PKCS8
+    size: 2048
+  usages:
+    - server auth
+    - client auth
+  dnsNames:
+    - "openstack.openstack.svc"
+    - "openstack.openstack.svc.cluster.local"
+    - "*.openstack-galera"
+    - "*.openstack-galera.openstack"
+    - "*.openstack-galera.openstack.svc"
+    - "*.openstack-galera.openstack.svc.cluster"
+    - "*.openstack-galera.openstack.svc.cluster.local"
+  issuerRef:
+    name: my-ca-issuer
+    group: cert-manager.io
+    kind: Issuer

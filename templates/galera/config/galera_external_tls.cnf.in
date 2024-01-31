@@ -1,0 +1,8 @@
+[mysqld]
+ssl
+ssl-cert = /etc/pki/tls/certs/galera.crt
+ssl-key = /etc/pki/tls/private/galera.key
+ssl-cipher = !SSLv2:kEECDH:kRSA:kEDH:kPSK:+3DES:!aNULL:!eNULL:!MD5:!EXP:!RC4:!SEED:!IDEA:!DES:!SSLv3:!TLSv1
+
+[sst]
+ssl-mode = DISABLED
