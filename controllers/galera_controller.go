@@ -17,6 +17,14 @@ limitations under the License.
 package controllers
 
 import (
+	"bytes"
+	"context"
+	"fmt"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/openstack-k8s-operators/lib-common/modules/common"
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	configmap "github.com/openstack-k8s-operators/lib-common/modules/common/configmap"
@@ -38,14 +46,6 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/kubectl/pkg/util/podutils"
 
-	"bytes"
-	"context"
-	"fmt"
-	"sort"
-	"strconv"
-	"strings"
-	"time"
-
 	"golang.org/x/exp/maps"
 
 	"github.com/go-logr/logr"
@@ -58,7 +58,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
@@ -71,12 +70,10 @@ const (
 	caSecretNameField      = ".spec.tls.ca.caBundleSecretName"
 )
 
-var (
-	allWatchFields = []string{
-		serviceSecretNameField,
-		caSecretNameField,
-	}
-)
+var allWatchFields = []string{
+	serviceSecretNameField,
+	caSecretNameField,
+}
 
 // GaleraReconciler reconciles a Galera object
 type GaleraReconciler struct {
@@ -798,7 +795,7 @@ func (r *GaleraReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&rbacv1.Role{}).
 		Owns(&rbacv1.RoleBinding{}).
 		Watches(
-			&source.Kind{Type: &corev1.Secret{}},
+			&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForSrc),
 			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
 		).
@@ -810,7 +807,6 @@ func (r *GaleraReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // this will later return only Galera objects, so as a lookup it's part of the galera controller
 
 func GetDatabaseObject(clientObj client.Client, ctx context.Context, name string, namespace string) (*databasev1beta1.Galera, error) {
-
 	dbGalera := &databasev1beta1.Galera{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -826,11 +822,10 @@ func GetDatabaseObject(clientObj client.Client, ctx context.Context, name string
 	} else {
 		return dbGalera, err
 	}
-
 }
 
 // findObjectsForSrc - returns a reconcile request if the object is referenced by a Galera CR
-func (r *GaleraReconciler) findObjectsForSrc(src client.Object) []reconcile.Request {
+func (r *GaleraReconciler) findObjectsForSrc(ctx context.Context, src client.Object) []reconcile.Request {
 	requests := []reconcile.Request{}
 
 	for _, field := range allWatchFields {
