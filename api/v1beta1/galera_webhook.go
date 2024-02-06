@@ -21,6 +21,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 // log is for logging in this package.
@@ -64,27 +65,27 @@ func (spec *GaleraSpec) Default() {
 var _ webhook.Validator = &Galera{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (r *Galera) ValidateCreate() error {
+func (r *Galera) ValidateCreate() (admission.Warnings, error) {
 	galeralog.Info("validate create", "name", r.Name)
 
 	// TODO(user): fill in your validation logic upon object creation.
-	return nil
+	return nil, nil
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (r *Galera) ValidateUpdate(old runtime.Object) error {
+func (r *Galera) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
 	galeralog.Info("validate update", "name", r.Name)
 
 	// TODO(user): fill in your validation logic upon object update.
-	return nil
+	return nil, nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (r *Galera) ValidateDelete() error {
+func (r *Galera) ValidateDelete() (admission.Warnings, error) {
 	galeralog.Info("validate delete", "name", r.Name)
 
 	// TODO(user): fill in your validation logic upon object deletion.
-	return nil
+	return nil, nil
 }
 
 // SetupGaleraDefaults - initialize MariaDB spec defaults for use with either internal or external webhooks
