@@ -103,6 +103,9 @@ spec:
                   type: string
                 description: Map of hashes to track e.g. job status
                 type: object
+              tlsSupport:
+                description: Whether TLS is supported by the DB instance
+                type: boolean
             type: object
         type: object
     served: true

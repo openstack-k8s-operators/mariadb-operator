@@ -24,6 +24,7 @@ import (
 
 	"github.com/openstack-k8s-operators/lib-common/modules/common/helper"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/tls"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
 
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
@@ -111,6 +112,11 @@ func (d *Database) setDatabaseHostname(
 	d.databaseHostname = svc.GetName() + "." + svc.GetNamespace() + ".svc"
 
 	return nil
+}
+
+// GetTLSSupport - returns the secret name holding the database connection and client config
+func (d *Database) GetTLSSupport() bool {
+	return d.tlsSupport
 }
 
 // GetDatabaseHostname - returns the DB hostname which host the DB
@@ -224,7 +230,7 @@ func (d *Database) CreateOrPatchDBByName(
 		return ctrl.Result{RequeueAfter: time.Second * 5}, nil
 	}
 
-	op_acc, err_acc := controllerutil.CreateOrPatch(ctx, h.GetClient(), account, func() error {
+	opAcc, errAacc := controllerutil.CreateOrPatch(ctx, h.GetClient(), account, func() error {
 		account.Labels = util.MergeStringMaps(
 			account.GetLabels(),
 			d.labels,
@@ -241,15 +247,15 @@ func (d *Database) CreateOrPatchDBByName(
 		return nil
 	})
 
-	if err_acc != nil && !k8s_errors.IsNotFound(err_acc) {
+	if errAacc != nil && !k8s_errors.IsNotFound(errAacc) {
 		return ctrl.Result{}, util.WrapErrorForObject(
 			fmt.Sprintf("Error create or update account object %s", account.Name),
 			account,
-			err_acc,
+			errAacc,
 		)
 	}
 
-	if op_acc != controllerutil.OperationResultNone {
+	if opAcc != controllerutil.OperationResultNone {
 		util.LogForObject(h, fmt.Sprintf("Account object %s created or patched", account.Name), account)
 		return ctrl.Result{RequeueAfter: time.Second * 5}, nil
 	}
@@ -261,6 +267,8 @@ func (d *Database) CreateOrPatchDBByName(
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+
+	d.tlsSupport = db.Status.TLSSupport
 
 	return ctrl.Result{}, nil
 }
@@ -367,6 +375,7 @@ func (d *Database) getDBWithName(
 	}
 
 	d.database = db
+	d.tlsSupport = db.Status.TLSSupport
 
 	account := &MariaDBAccount{}
 	username := d.databaseUser
@@ -456,4 +465,34 @@ func (d *Database) DeleteFinalizer(
 		util.LogForObject(h, fmt.Sprintf("Removed finalizer %s from MariaDBDatabase object", h.GetFinalizer()), d.database)
 	}
 	return nil
+}
+
+// GetDatabaseClientConfig returns my.cnf client config
+func (d *Database) GetDatabaseClientConfig(s *tls.Service) string {
+	conn := []string{}
+	conn = append(conn, "[client]")
+
+	if s != nil && d.GetTLSSupport() {
+		if s.CertMount != nil && s.KeyMount != nil {
+			conn = append(conn,
+				fmt.Sprintf("ssl-cert=%s", *s.CertMount),
+				fmt.Sprintf("ssl-key=%s", *s.KeyMount),
+			)
+		}
+
+		// Default to the env global bundle if not specified via CaMount
+		caPath := tls.DownstreamTLSCABundlePath
+		if s.CaMount != nil {
+			caPath = *s.CaMount
+		}
+		conn = append(conn, fmt.Sprintf("ssl-ca=%s", caPath))
+
+		if len(conn) > 0 {
+			conn = append(conn, "ssl=1")
+		}
+	} else {
+		conn = append(conn, "ssl=0")
+	}
+
+	return strings.Join(conn, "\n")
 }

@@ -231,6 +231,9 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		databasev1beta1.MariaDBDatabaseReadyMessage,
 	)
 
+	// DB instances supports TLS
+	instance.Status.TLSSupport = dbGalera.Spec.TLS.Enabled()
+
 	return ctrl.Result{}, nil
 }
 
