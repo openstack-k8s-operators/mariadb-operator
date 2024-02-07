@@ -398,10 +398,8 @@ func (d *Database) getDBWithName(
 		if k8s_errors.IsNotFound(err) {
 			// if account can't be found, log it, but don't quit, still
 			// return the Database with MariaDBDatabase
-			util.LogForObject(
-				h,
+			h.GetLogger().Info(
 				fmt.Sprintf("Could not find account %s for Database named %s", username, namespace),
-				d.account,
 			)
 
 			// note that d.account remains nil in this case
