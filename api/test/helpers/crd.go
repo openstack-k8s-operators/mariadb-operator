@@ -186,6 +186,29 @@ func (tc *TestHelper) SimulateMariaDBDatabaseCompleted(name types.NamespacedName
 	tc.Logger.Info("Simulated DB completed", "on", name)
 }
 
+// SimulateMariaDBTLSDatabaseCompleted simulates a completed state for a MariaDBDatabase resource in a Kubernetes cluster.
+//
+// Example:
+//
+//	th.SimulateMariaDBDatabaseCompleted(types.NamespacedName{Name: "my-mariadb-database", Namespace: "my-namespace"})
+//
+// or
+//
+//	DeferCleanup(th.SimulateMariaDBTLSDatabaseCompleted, types.NamespacedName{Name: "my-mariadb-database", Namespace: "my-namespace"})
+func (tc *TestHelper) SimulateMariaDBTLSDatabaseCompleted(name types.NamespacedName) {
+	gomega.Eventually(func(g gomega.Gomega) {
+		db := tc.GetMariaDBDatabase(name)
+		db.Status.Completed = true
+		db.Status.TLSSupport = true
+		db.Status.Conditions.MarkTrue(mariadbv1.MariaDBDatabaseReadyCondition, "Ready")
+		// This can return conflict so we have the gomega.Eventually block to retry
+		g.Expect(tc.K8sClient.Status().Update(tc.Ctx, db)).To(gomega.Succeed())
+
+	}, tc.Timeout, tc.Interval).Should(gomega.Succeed())
+
+	tc.Logger.Info("Simulated DB completed", "on", name)
+}
+
 // AssertMariaDBDatabaseDoesNotExist ensures the MariaDBDatabase resource does not exist in a k8s cluster.
 func (tc *TestHelper) AssertMariaDBDatabaseDoesNotExist(name types.NamespacedName) {
 	instance := &mariadbv1.MariaDBDatabase{}
