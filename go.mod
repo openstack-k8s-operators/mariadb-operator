@@ -7,7 +7,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.14.0
 	github.com/onsi/gomega v1.30.0
 	github.com/openstack-k8s-operators/lib-common/modules/common v0.3.1-0.20240124141114-55d029e4658b
-	github.com/openstack-k8s-operators/mariadb-operator/api v0.1.1-0.20230823144333-b9363c5be8d2
+	github.com/openstack-k8s-operators/mariadb-operator/api v0.1.1-0.20230913081601-9e4fc8aadad5
 	golang.org/x/exp v0.0.0-20240119083558-1b970713d09a
 	k8s.io/api v0.26.13
 	k8s.io/apimachinery v0.26.13

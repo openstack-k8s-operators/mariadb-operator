@@ -51,6 +51,9 @@ type MariaDBDatabaseStatus struct {
 	Completed bool `json:"completed,omitempty"`
 	// Map of hashes to track e.g. job status
 	Hash map[string]string `json:"hash,omitempty"`
+
+	// Whether TLS is supported by the DB instance
+	TLSSupport bool `json:"tlsSupport,omitempty"`
 }
 
 //+kubebuilder:object:root=true
@@ -96,4 +99,5 @@ type Database struct {
 	labels           map[string]string
 	name             string
 	namespace        string
+	tlsSupport       bool
 }
