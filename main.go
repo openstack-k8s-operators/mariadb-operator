@@ -34,6 +34,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
+
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	mariadbv1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/mariadb-operator/controllers"
@@ -79,12 +82,18 @@ func main() {
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
-		Port:                   9443,
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: metricsAddr,
+		},
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "7c2a6c6b.openstack.org",
+		LeaderElectionID:       "c8c223a1.openstack.org",
+		WebhookServer: webhook.NewServer(
+			webhook.Options{
+				Port:    9443,
+				TLSOpts: []func(config *tls.Config){disableHTTP2},
+			}),
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -125,9 +134,6 @@ func main() {
 	checker := healthz.Ping
 	// Setup webhooks if requested
 	if strings.ToLower(os.Getenv("ENABLE_WEBHOOKS")) != "false" {
-		// overriding the default values
-		srv := mgr.GetWebhookServer()
-		srv.TLSOpts = []func(config *tls.Config){disableHTTP2}
 
 		if err = (&mariadbv1beta1.Galera{}).SetupWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Galera")
