@@ -151,6 +151,30 @@ func (tc *TestHelper) DeleteDBService(name types.NamespacedName) {
 	}, tc.Timeout, tc.Interval).Should(gomega.Succeed())
 }
 
+// CreateMariaDBDatabase creates a new MariaDBDatabase instance with the specified namespace in the Kubernetes cluster.
+func (tc *TestHelper) CreateMariaDBDatabase(namespace string, dbName string, spec mariadbv1.MariaDBDatabaseSpec) types.NamespacedName {
+	name := types.NamespacedName{
+		Name:      dbName,
+		Namespace: namespace,
+	}
+
+	db := &mariadbv1.MariaDBDatabase{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "mariadb.openstack.org/v1beta1",
+			Kind:       "MariaDBDatabase",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      dbName,
+			Namespace: namespace,
+		},
+		Spec: spec,
+	}
+
+	gomega.Expect(tc.K8sClient.Create(tc.Ctx, db)).Should(gomega.Succeed())
+
+	return name
+}
+
 // GetMariaDBDatabase waits for and retrieves a MariaDBDatabase resource from the Kubernetes cluster
 //
 // Example:
@@ -216,6 +240,30 @@ func (tc *TestHelper) AssertMariaDBDatabaseDoesNotExist(name types.NamespacedNam
 		err := tc.K8sClient.Get(tc.Ctx, name, instance)
 		g.Expect(k8s_errors.IsNotFound(err)).To(gomega.BeTrue())
 	}, tc.Timeout, tc.Interval).Should(gomega.Succeed())
+}
+
+// CreateMariaDBAccount creates a new MariaDBAccount instance with the specified namespace in the Kubernetes cluster.
+func (tc *TestHelper) CreateMariaDBAccount(namespace string, acctName string, spec mariadbv1.MariaDBAccountSpec) types.NamespacedName {
+	name := types.NamespacedName{
+		Name:      acctName,
+		Namespace: namespace,
+	}
+
+	db := &mariadbv1.MariaDBAccount{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "mariadb.openstack.org/v1beta1",
+			Kind:       "MariaDBAccount",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      acctName,
+			Namespace: namespace,
+		},
+		Spec: spec,
+	}
+
+	gomega.Expect(tc.K8sClient.Create(tc.Ctx, db)).Should(gomega.Succeed())
+
+	return name
 }
 
 // GetMariaDBAccount waits for and retrieves a MariaDBAccount resource from the Kubernetes cluster
