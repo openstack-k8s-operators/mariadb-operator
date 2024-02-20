@@ -100,6 +100,11 @@ type GaleraStatus struct {
 	// Is the galera cluster currently running
 	// +kubebuilder:default=false
 	Bootstrapped bool `json:"bootstrapped"`
+	// Does the galera cluster requires to be stopped globally
+	// +kubebuilder:default=false
+	StopRequired bool `json:"stopRequired"`
+	// Map of properties that require full cluster restart if changed
+	ClusterProperties map[string]string `json:"clusterProperties,omitempty"`
 	// Map of hashes to track input changes
 	Hash map[string]string `json:"hash,omitempty"`
 	// Deployment Conditions

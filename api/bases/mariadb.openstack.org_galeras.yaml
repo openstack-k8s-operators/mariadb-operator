@@ -134,6 +134,12 @@ spec:
                 default: false
                 description: Is the galera cluster currently running
                 type: boolean
+              clusterProperties:
+                additionalProperties:
+                  type: string
+                description: Map of properties that require full cluster restart if
+                  changed
+                type: object
               conditions:
                 description: Deployment Conditions
                 items:
@@ -193,8 +199,13 @@ spec:
               safeToBootstrap:
                 description: Name of the node that can safely bootstrap a cluster
                 type: string
+              stopRequired:
+                default: false
+                description: Does the galera cluster requires to be stopped globally
+                type: boolean
             required:
             - bootstrapped
+            - stopRequired
             type: object
         type: object
     served: true

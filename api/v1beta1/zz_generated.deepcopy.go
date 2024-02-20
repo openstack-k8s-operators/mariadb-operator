@@ -223,6 +223,13 @@ func (in *GaleraStatus) DeepCopyInto(out *GaleraStatus) {
 			(*out)[key] = val
 		}
 	}
+	if in.ClusterProperties != nil {
+		in, out := &in.ClusterProperties, &out.ClusterProperties
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
 	if in.Hash != nil {
 		in, out := &in.Hash, &out.Hash
 		*out = make(map[string]string, len(*in))
