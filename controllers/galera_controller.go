@@ -254,7 +254,7 @@ func clearPodAttributes(instance *mariadbv1.Galera, podName string) {
 
 // clearOldPodsAttributesOnScaleDown removes known information from old pods
 // that no longer exist after a scale down of the galera CR
-func clearOldPodsAttributesOnScaleDown(helper *helper.Helper, instance *mariadbv1.Galera, ctx context.Context) {
+func clearOldPodsAttributesOnScaleDown(ctx context.Context, instance *mariadbv1.Galera) {
 	log := GetLog(ctx, "galera")
 	replicas := int(*instance.Spec.Replicas)
 
@@ -608,7 +608,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 
 	// Ensure status is cleaned up in case of scale down
 	if *statefulset.Spec.Replicas < statefulset.Status.Replicas {
-		clearOldPodsAttributesOnScaleDown(helper, instance, ctx)
+		clearOldPodsAttributesOnScaleDown(ctx, instance)
 	}
 
 	// Ensure that all the ongoing galera start actions are still running
@@ -814,7 +814,7 @@ func (r *GaleraReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // used by both MariaDBDatabaseReconciler and MariaDBAccountReconciler
 // this will later return only Galera objects, so as a lookup it's part of the galera controller
 
-func GetDatabaseObject(clientObj client.Client, ctx context.Context, name string, namespace string) (*databasev1beta1.Galera, error) {
+func GetDatabaseObject(ctx context.Context, clientObj client.Client, name string, namespace string) (*databasev1beta1.Galera, error) {
 	dbGalera := &databasev1beta1.Galera{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -827,9 +827,9 @@ func GetDatabaseObject(clientObj client.Client, ctx context.Context, name string
 	err := clientObj.Get(ctx, objectKey, dbGalera)
 	if err != nil {
 		return nil, err
-	} else {
-		return dbGalera, err
 	}
+
+	return dbGalera, err
 }
 
 // findObjectsForSrc - returns a reconcile request if the object is referenced by a Galera CR
@@ -842,7 +842,7 @@ func (r *GaleraReconciler) findObjectsForSrc(ctx context.Context, src client.Obj
 			FieldSelector: fields.OneTermEqualSelector(field, src.GetName()),
 			Namespace:     src.GetNamespace(),
 		}
-		err := r.List(context.TODO(), crList, listOps)
+		err := r.List(ctx, crList, listOps)
 		if err != nil {
 			return []reconcile.Request{}
 		}

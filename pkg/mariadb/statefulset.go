@@ -56,7 +56,7 @@ func StatefulSet(g *mariadbv1.Galera, configHash string) *appsv1.StatefulSet {
 								},
 							},
 						}},
-						VolumeMounts: getGaleraInitVolumeMounts(g),
+						VolumeMounts: getGaleraInitVolumeMounts(),
 					}},
 					Containers: []corev1.Container{{
 						Image: g.Spec.ContainerImage,

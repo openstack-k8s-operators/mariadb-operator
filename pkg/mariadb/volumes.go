@@ -178,7 +178,7 @@ func getGaleraVolumeMounts(g *mariadbv1.Galera) []corev1.VolumeMount {
 	return volumeMounts
 }
 
-func getGaleraInitVolumeMounts(g *mariadbv1.Galera) []corev1.VolumeMount {
+func getGaleraInitVolumeMounts() []corev1.VolumeMount {
 	volumeMounts := []corev1.VolumeMount{
 		{
 			MountPath: "/var/lib/mysql",

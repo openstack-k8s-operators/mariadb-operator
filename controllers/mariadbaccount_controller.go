@@ -119,17 +119,17 @@ func (r *MariaDBAccountReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	instance.Status.Conditions.Init(&cl)
 
-	if instance.DeletionTimestamp.IsZero() || isNewInstance {
-		return r.reconcileCreate(ctx, req, log, helper, instance)
+	if instance.DeletionTimestamp.IsZero() || isNewInstance { //revive:disable:indent-error-flow
+		return r.reconcileCreate(ctx, log, helper, instance)
 	} else {
-		return r.reconcileDelete(ctx, req, log, helper, instance)
+		return r.reconcileDelete(ctx, log, helper, instance)
 	}
 
 }
 
 // reconcileDelete - run reconcile for case where delete timestamp is zero
 func (r *MariaDBAccountReconciler) reconcileCreate(
-	ctx context.Context, req ctrl.Request, log logr.Logger,
+	ctx context.Context, log logr.Logger,
 	helper *helper.Helper, instance *databasev1beta1.MariaDBAccount) (result ctrl.Result, _err error) {
 
 	// this is following from how the MariaDBDatabase CRD works.
@@ -262,7 +262,7 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 	// account create
 
 	// ensure secret is present before running a job
-	_, secret_result, err := secret.VerifySecret(
+	_, secretResult, err := secret.VerifySecret(
 		ctx,
 		types.NamespacedName{Name: instance.Spec.Secret, Namespace: instance.Namespace},
 		[]string{databasev1beta1.DatabasePasswordSelector},
@@ -278,7 +278,7 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 			databasev1beta1.MariaDBAccountSecretNotReadyMessage, err))
 
 		if k8s_errors.IsNotFound(err) {
-			return secret_result, nil
+			return secretResult, nil
 		}
 
 		return ctrl.Result{}, err
@@ -337,7 +337,7 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 
 // reconcileDelete - run reconcile for case where delete timestamp is non zero
 func (r *MariaDBAccountReconciler) reconcileDelete(
-	ctx context.Context, req ctrl.Request, log logr.Logger,
+	ctx context.Context, log logr.Logger,
 	helper *helper.Helper, instance *databasev1beta1.MariaDBAccount) (result ctrl.Result, _err error) {
 
 	// this is following from how the MariaDBDatabase CRD works.
@@ -429,12 +429,12 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 			strings.Join(finalizersWeCareAbout, ", "),
 		)
 		return ctrl.Result{}, err
-	} else {
-		instance.Status.Conditions.MarkTrue(
-			databasev1beta1.MariaDBAccountReadyCondition,
-			databasev1beta1.MariaDBAccountReadyForDeleteMessage,
-		)
 	}
+
+	instance.Status.Conditions.MarkTrue(
+		databasev1beta1.MariaDBAccountReadyCondition,
+		databasev1beta1.MariaDBAccountReadyForDeleteMessage,
+	)
 
 	instance.Status.Conditions.MarkTrue(
 		databasev1beta1.MariaDBDatabaseReadyCondition,
@@ -559,7 +559,7 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 func (r *MariaDBAccountReconciler) getDatabaseObject(ctx context.Context, mariaDBDatabase *databasev1beta1.MariaDBDatabase, instance *databasev1beta1.MariaDBAccount) (*databasev1beta1.Galera, error) {
 	dbName := mariaDBDatabase.ObjectMeta.Labels["dbName"]
 	return GetDatabaseObject(
-		r.Client, ctx,
+		ctx, r.Client,
 		dbName,
 		instance.Namespace,
 	)

@@ -253,7 +253,7 @@ func (r *MariaDBDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // getDatabaseObject - returns a Galera object
 func (r *MariaDBDatabaseReconciler) getDatabaseObject(ctx context.Context, instance *databasev1beta1.MariaDBDatabase) (*databasev1beta1.Galera, error) {
 	return GetDatabaseObject(
-		r.Client, ctx,
+		ctx, r.Client,
 		instance.ObjectMeta.Labels["dbName"],
 		instance.Namespace,
 	)
