@@ -119,17 +119,17 @@ func (r *MariaDBAccountReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, nil
 	}
 
-	if instance.DeletionTimestamp.IsZero() {
-		return r.reconcileCreate(ctx, req, log, helper, instance)
+	if instance.DeletionTimestamp.IsZero() { //revive:disable:indent-error-flow
+		return r.reconcileCreate(ctx, log, helper, instance)
 	} else {
-		return r.reconcileDelete(ctx, req, log, helper, instance)
+		return r.reconcileDelete(ctx, log, helper, instance)
 	}
 
 }
 
 // reconcileDelete - run reconcile for case where delete timestamp is zero
 func (r *MariaDBAccountReconciler) reconcileCreate(
-	ctx context.Context, req ctrl.Request, log logr.Logger,
+	ctx context.Context, log logr.Logger,
 	helper *helper.Helper, instance *databasev1beta1.MariaDBAccount) (result ctrl.Result, _err error) {
 
 	// this is following from how the MariaDBDatabase CRD works.
@@ -257,7 +257,7 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 	// account create
 
 	// ensure secret is present before running a job
-	_, secret_result, err := secret.VerifySecret(
+	_, secretResult, err := secret.VerifySecret(
 		ctx,
 		types.NamespacedName{Name: instance.Spec.Secret, Namespace: instance.Namespace},
 		[]string{"DatabasePassword"},
@@ -272,7 +272,7 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 			condition.SeverityInfo,
 			databasev1beta1.MariaDBAccountSecretNotReadyMessage, err))
 
-		return secret_result, err
+		return secretResult, err
 	}
 
 	log.Info(fmt.Sprintf("Running account create '%s' MariaDBDatabase '%s'", instance.Name, mariadbDatabaseName))
@@ -321,7 +321,7 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 
 // reconcileDelete - run reconcile for case where delete timestamp is non zero
 func (r *MariaDBAccountReconciler) reconcileDelete(
-	ctx context.Context, req ctrl.Request, log logr.Logger,
+	ctx context.Context, log logr.Logger,
 	helper *helper.Helper, instance *databasev1beta1.MariaDBAccount) (result ctrl.Result, _err error) {
 
 	// this is following from how the MariaDBDatabase CRD works.
@@ -402,19 +402,7 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 	if err != nil {
 
 		log.Error(err, "Error getting database object")
-
-		if k8s_errors.IsNotFound(err) {
-			// remove finalizer from the MariaDBDatabase instance
-			if controllerutil.RemoveFinalizer(mariadbDatabase, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
-				err = r.Update(ctx, mariadbDatabase)
-			}
-
-			// remove local finalizer
-			controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
-
-			// galera DB does not exist, so return
-			return ctrl.Result{}, nil
-		} else {
+		if !k8s_errors.IsNotFound(err) {
 			instance.Status.Conditions.Set(condition.FalseCondition(
 				databasev1beta1.MariaDBServerReadyCondition,
 				condition.ErrorReason,
@@ -424,6 +412,20 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 
 			return ctrl.Result{}, err
 		}
+
+		// remove finalizer from the MariaDBDatabase instance
+		if controllerutil.RemoveFinalizer(mariadbDatabase, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
+			if err = r.Update(ctx, mariadbDatabase); err != nil && !k8s_errors.IsNotFound(err) {
+				return ctrl.Result{}, err
+			}
+		}
+
+		// remove local finalizer
+		controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
+
+		// galera DB does not exist, so return
+		return ctrl.Result{}, nil
+
 	}
 
 	var dbInstance, dbAdminSecret, dbContainerImage, serviceAccountName string
@@ -502,7 +504,7 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 func (r *MariaDBAccountReconciler) getDatabaseObject(ctx context.Context, mariaDBDatabase *databasev1beta1.MariaDBDatabase, instance *databasev1beta1.MariaDBAccount) (*databasev1beta1.Galera, error) {
 	dbName := mariaDBDatabase.ObjectMeta.Labels["dbName"]
 	return GetDatabaseObject(
-		r.Client, ctx,
+		ctx, r.Client,
 		dbName,
 		instance.Namespace,
 	)
