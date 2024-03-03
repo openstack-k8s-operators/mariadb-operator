@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -260,7 +261,7 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 	_, secret_result, err := secret.VerifySecret(
 		ctx,
 		types.NamespacedName{Name: instance.Spec.Secret, Namespace: instance.Namespace},
-		[]string{"DatabasePassword"},
+		[]string{databasev1beta1.DatabasePasswordSelector},
 		r.Client,
 		time.Duration(30)*time.Second,
 	)
@@ -387,6 +388,32 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 			err))
 
 		return ctrl.Result{}, err
+	}
+
+	// dont do actual DROP USER until finalizers from downstream controllers
+	// are removed from the CR.
+	finalizers := instance.GetFinalizers()
+	finalizersWeCareAbout := []string{}
+
+	for _, f := range finalizers {
+		if f != helper.GetFinalizer() {
+			finalizersWeCareAbout = append(finalizersWeCareAbout, f)
+		}
+	}
+	if len(finalizersWeCareAbout) > 0 {
+		instance.Status.Conditions.MarkFalse(
+			databasev1beta1.MariaDBAccountReadyCondition,
+			condition.DeletingReason,
+			condition.SeverityInfo,
+			databasev1beta1.MariaDBAccountFinalizersRemainMessage,
+			strings.Join(finalizersWeCareAbout, ", "),
+		)
+		return ctrl.Result{}, err
+	} else {
+		instance.Status.Conditions.MarkTrue(
+			databasev1beta1.MariaDBAccountReadyCondition,
+			databasev1beta1.MariaDBAccountReadyForDeleteMessage,
+		)
 	}
 
 	instance.Status.Conditions.MarkTrue(

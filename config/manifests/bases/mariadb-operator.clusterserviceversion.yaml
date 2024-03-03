@@ -19,6 +19,10 @@ spec:
       displayName: Galera
       kind: Galera
       name: galeras.mariadb.openstack.org
+      specDescriptors:
+      - description: TLS settings for MySQL service and internal Galera replication
+        displayName: TLS
+        path: tls
       version: v1beta1
     - description: MariaDBAccount is the Schema for the mariadbaccounts API
       displayName: Maria DBAccount

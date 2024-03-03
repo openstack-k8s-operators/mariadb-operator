@@ -148,7 +148,7 @@ func DeleteDbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHost
 						LocalObjectReference: corev1.LocalObjectReference{
 							Name: databaseSecret,
 						},
-						Key: "DbRootPassword",
+						Key: databasev1beta1.DbRootPasswordSelector,
 					},
 				},
 			},
@@ -161,7 +161,7 @@ func DeleteDbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHost
 						LocalObjectReference: corev1.LocalObjectReference{
 							Name: *database.Spec.Secret,
 						},
-						Key: "DatabasePassword",
+						Key: databasev1beta1.DatabasePasswordSelector,
 					},
 				},
 			},
@@ -175,7 +175,7 @@ func DeleteDbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHost
 						LocalObjectReference: corev1.LocalObjectReference{
 							Name: databaseSecret,
 						},
-						Key: "DbRootPassword",
+						Key: databasev1beta1.DbRootPasswordSelector,
 					},
 				},
 			},

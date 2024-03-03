@@ -15,6 +15,8 @@ package helpers
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -264,6 +266,38 @@ func (tc *TestHelper) CreateMariaDBAccount(namespace string, acctName string, sp
 	gomega.Expect(tc.K8sClient.Create(tc.Ctx, db)).Should(gomega.Succeed())
 
 	return name
+}
+
+// CreateMariaDBAccountAndSecret creates a new MariaDBAccount and Secret with the specified namespace in the Kubernetes cluster.
+func (tc *TestHelper) CreateMariaDBAccountAndSecret(name types.NamespacedName, spec mariadbv1.MariaDBAccountSpec) (*mariadbv1.MariaDBAccount, *corev1.Secret) {
+	secretName := fmt.Sprintf("%s-db-secret", name.Name)
+	secret := tc.CreateSecret(
+		types.NamespacedName{Namespace: name.Namespace, Name: secretName},
+		map[string][]byte{
+			"DatabasePassword": []byte(fmt.Sprintf("%s123", name.Name)),
+		},
+	)
+
+	if spec.UserName == "" {
+		spec.UserName = fmt.Sprintf("%s_account", strings.Replace(name.Name, "-", "_", -1))
+	}
+	spec.Secret = secretName
+
+	instance := &mariadbv1.MariaDBAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name.Name,
+			Namespace: name.Namespace,
+		},
+		Spec: spec,
+	}
+
+	gomega.Eventually(func(g gomega.Gomega) {
+		g.Expect(tc.K8sClient.Create(tc.Ctx, instance)).Should(gomega.Succeed())
+	}, tc.Timeout, tc.Interval).Should(gomega.Succeed())
+
+	tc.Logger.Info(fmt.Sprintf("Created MariaDBAccount %s, username %s, secret %s", name.Name, instance.Spec.UserName, instance.Spec.Secret))
+
+	return instance, secret
 }
 
 // GetMariaDBAccount waits for and retrieves a MariaDBAccount resource from the Kubernetes cluster
