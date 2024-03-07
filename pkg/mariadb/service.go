@@ -15,14 +15,14 @@ func ServiceForAdoption(db metav1.Object, dbType string, adoption *databasev1bet
 
 	if adoptionHost != "" {
 		if adoptionHostIsIP {
-			return externalServiceFromIP(db, adoption)
+			return externalServiceFromIP(db)
 		}
 		return externalServiceFromName(db, adoption)
 	}
-	return internalService(db, dbType, adoption)
+	return internalService(db, dbType)
 }
 
-func internalService(db metav1.Object, dbType string, adoption *databasev1beta1.AdoptionRedirectSpec) *corev1.Service {
+func internalService(db metav1.Object, dbType string) *corev1.Service {
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      db.GetName(),
@@ -39,7 +39,7 @@ func internalService(db metav1.Object, dbType string, adoption *databasev1beta1.
 	return svc
 }
 
-func externalServiceFromIP(db metav1.Object, adoption *databasev1beta1.AdoptionRedirectSpec) *corev1.Service {
+func externalServiceFromIP(db metav1.Object) *corev1.Service {
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      db.GetName(),
