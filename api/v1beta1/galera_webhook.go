@@ -52,11 +52,18 @@ func (r *Galera) Default() {
 	r.Spec.Default()
 }
 
-// Default - set defaults for this MariaDB spec
+// Default - set defaults for this GaleraSpec
 func (spec *GaleraSpec) Default() {
+	// only image validations go here
 	if spec.ContainerImage == "" {
 		spec.ContainerImage = galeraDefaults.ContainerImageURL
 	}
+	spec.GaleraSpecCore.Default()
+}
+
+// Default - set defaults for the GaleraSpecCore. This version is used by OpenStackControlplane
+func (spec *GaleraSpecCore) Default() {
+	// nothing here yet
 }
 
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.

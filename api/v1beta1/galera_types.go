@@ -39,6 +39,14 @@ type AdoptionRedirectSpec struct {
 
 // GaleraSpec defines the desired state of Galera
 type GaleraSpec struct {
+	GaleraSpecCore `json:",inline"`
+	// Name of the galera container image to run (will be set to environmental default if empty)
+	// +kubebuilder:validation:Required
+	ContainerImage string `json:"containerImage"`
+}
+
+// GaleraSpec defines the desired state of Galera
+type GaleraSpecCore struct {
 	// Name of the secret to look for password keys
 	// +kubebuilder:validation:Required
 	Secret string `json:"secret"`
@@ -48,9 +56,6 @@ type GaleraSpec struct {
 	// Storage size allocated for the mariadb databases
 	// +kubebuilder:validation:Required
 	StorageRequest string `json:"storageRequest"`
-	// Name of the galera container image to run (will be set to environmental default if empty)
-	// +kubebuilder:validation:Required
-	ContainerImage string `json:"containerImage"`
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:default=1
 	// +kubebuilder:validation:Enum=1;3
