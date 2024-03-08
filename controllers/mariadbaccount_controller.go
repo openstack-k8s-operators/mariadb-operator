@@ -370,12 +370,17 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 		// first, remove finalizer from the MariaDBDatabase instance
 		if controllerutil.RemoveFinalizer(mariadbDatabase, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
 			err = r.Update(ctx, mariadbDatabase)
+
+			if err != nil && !k8s_errors.IsNotFound(err) {
+				return ctrl.Result{}, err
+			}
+
 		}
 
 		// then remove finalizer from our own instance
 		controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
 
-		return ctrl.Result{}, err
+		return ctrl.Result{}, nil
 	} else if err != nil {
 		// unhandled error; exit
 		log.Error(err, "unhandled error retrieving MariaDBDatabase instance")
@@ -434,6 +439,11 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 			// remove finalizer from the MariaDBDatabase instance
 			if controllerutil.RemoveFinalizer(mariadbDatabase, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
 				err = r.Update(ctx, mariadbDatabase)
+
+				if err != nil && !k8s_errors.IsNotFound(err) {
+					return ctrl.Result{}, err
+				}
+
 			}
 
 			// remove local finalizer
