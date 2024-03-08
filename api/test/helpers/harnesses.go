@@ -250,8 +250,24 @@ func (harness *MariaDBTestHarness) RunBasicSuite() {
 			}
 
 			harness.UpdateAccount(newAccountName)
+			harness.mariaDBHelper.SimulateMariaDBAccountCompleted(newAccountName)
 
-			harness.runAccountUpdateWithWait(oldAccountName, newAccountName)
+			mariaDBHelper.Logger.Info(
+				fmt.Sprintf("Service should move to run fully off MariaDBAccount %s and remove finalizer from %s",
+					newAccountName, oldAccountName),
+			)
+
+			// finalizer is attached to new account
+			Eventually(func() []string {
+				newMariadbAccount := mariaDBHelper.GetMariaDBAccount(newAccountName)
+				return newMariadbAccount.Finalizers
+			}, timeout, interval).Should(ContainElement(harness.finalizerName))
+
+			// finalizer removed from old account
+			Eventually(func() []string {
+				oldMariadbAccount := mariaDBHelper.GetMariaDBAccount(oldAccountName)
+				return oldMariadbAccount.Finalizers
+			}, timeout, interval).ShouldNot(ContainElement(harness.finalizerName))
 
 			// CreateOrPatchDBByName will add a label referring to the database
 			Eventually(func() string {
@@ -322,7 +338,8 @@ func (harness *MariaDBTestHarness) RunBasicSuite() {
 }
 
 // RunURLAssertSuite asserts that a database URL is set up with the correct
-// username and password, and that this is updated when the account changes
+// username and password, and that this is updated when the account changes.
+// account change is detected via finalizer
 func (harness *MariaDBTestHarness) RunURLAssertSuite(assertURL assertsURL) {
 	When(fmt.Sprintf("The %s service is fully running", harness.description), func() {
 		BeforeEach(func() {
@@ -330,24 +347,26 @@ func (harness *MariaDBTestHarness) RunURLAssertSuite(assertURL assertsURL) {
 		})
 
 		BeforeEach(func() {
-			mariaDBHelper, timeout, interval := harness.mariaDBHelper, harness.timeout, harness.interval
+			mariaDBHelper := harness.mariaDBHelper
 
 			oldAccountName := types.NamespacedName{
 				Name:      "some-old-account",
 				Namespace: harness.namespace,
 			}
 
+			k8sClient := mariaDBHelper.K8sClient
+
+			// create MariaDBAccount / secret ahead of time, to suit controllers
+			// that dont directly do EnsureMariaDBAccount
+			mariadbAccount, mariadbSecret := mariaDBHelper.CreateMariaDBAccountAndSecret(oldAccountName, mariadbv1.MariaDBAccountSpec{})
+			DeferCleanup(k8sClient.Delete, mariaDBHelper.Ctx, mariadbSecret)
+			DeferCleanup(k8sClient.Delete, mariaDBHelper.Ctx, mariadbAccount)
+
 			// create the CR with old account
 			harness.SetupCR(oldAccountName)
 
 			// also simulate that it got completed
 			mariaDBHelper.SimulateMariaDBAccountCompleted(oldAccountName)
-
-			// wait for finalizer to be set on the account
-			Eventually(func() []string {
-				oldMariadbAccount := mariaDBHelper.GetMariaDBAccount(oldAccountName)
-				return oldMariadbAccount.Finalizers
-			}, timeout, interval).Should(ContainElement(harness.finalizerName))
 
 		})
 		It("Sets the correct database URL for the MariaDBAccount", func() {
@@ -368,25 +387,24 @@ func (harness *MariaDBTestHarness) RunURLAssertSuite(assertURL assertsURL) {
 
 		It("Updates the database URL when the MariaDBAccount changes", func() {
 
-			oldAccountName := types.NamespacedName{
-				Name:      "some-old-account",
-				Namespace: harness.namespace,
-			}
-
 			newAccountName := types.NamespacedName{
 				Name:      "some-new-account",
 				Namespace: harness.namespace,
 			}
 
+			mariaDBHelper := harness.mariaDBHelper
+
+			k8sClient := mariaDBHelper.K8sClient
+
+			// create MariaDBAccount / secret ahead of time, to suit controllers
+			// that dont directly do EnsureMariaDBAccount
+			mariadbAccount, mariadbSecret := mariaDBHelper.CreateMariaDBAccountAndSecret(newAccountName, mariadbv1.MariaDBAccountSpec{})
+			DeferCleanup(k8sClient.Delete, mariaDBHelper.Ctx, mariadbSecret)
+			DeferCleanup(k8sClient.Delete, mariaDBHelper.Ctx, mariadbAccount)
+
 			harness.UpdateAccount(newAccountName)
 			harness.mariaDBHelper.SimulateMariaDBAccountCompleted(newAccountName)
 
-			mariadbAccount := harness.mariaDBHelper.GetMariaDBAccount(newAccountName)
-			mariadbSecret := harness.mariaDBHelper.GetSecret(types.NamespacedName{Name: mariadbAccount.Spec.Secret, Namespace: mariadbAccount.Namespace})
-
-			harness.runAccountUpdateWithWait(oldAccountName, newAccountName)
-
-			// ensure new URL present
 			assertURL(
 				newAccountName,
 				mariadbAccount.Spec.UserName,
@@ -422,15 +440,13 @@ func (harness *MariaDBTestHarness) RunConfigHashSuite(getConfigHash getsConfigHa
 
 		It("Gets a config hash when the MariaDBAccount is complete", func() {
 			configHash := getConfigHash()
-			Expect(configHash).NotTo(Equal(""))
+			Eventually(func(g Gomega) {
+				g.Expect(configHash).NotTo(Equal(""))
+			}).Should(Succeed())
+
 		})
 
 		It("Updates the config hash when the MariaDBAccount changes", func() {
-
-			oldAccountName := types.NamespacedName{
-				Name:      "some-old-account",
-				Namespace: harness.namespace,
-			}
 
 			newAccountName := types.NamespacedName{
 				Name:      "some-new-account",
@@ -439,11 +455,14 @@ func (harness *MariaDBTestHarness) RunConfigHashSuite(getConfigHash getsConfigHa
 
 			oldConfigHash := getConfigHash()
 
-			harness.runAccountUpdateWithWait(oldAccountName, newAccountName)
+			harness.UpdateAccount(newAccountName)
+			harness.mariaDBHelper.SimulateMariaDBAccountCompleted(newAccountName)
 
-			newConfigHash := getConfigHash()
-			Expect(newConfigHash).NotTo(Equal(""))
-			Expect(newConfigHash).NotTo(Equal(oldConfigHash))
+			Eventually(func(g Gomega) {
+				newConfigHash := getConfigHash()
+				g.Expect(newConfigHash).NotTo(Equal(""))
+				g.Expect(newConfigHash).NotTo(Equal(oldConfigHash))
+			}).Should(Succeed())
 
 		})
 
@@ -452,29 +471,4 @@ func (harness *MariaDBTestHarness) RunConfigHashSuite(getConfigHash getsConfigHa
 
 func (harness *MariaDBTestHarness) init() {
 	harness.PopulateHarness(harness)
-}
-
-func (harness *MariaDBTestHarness) runAccountUpdateWithWait(oldAccountName types.NamespacedName, newAccountName types.NamespacedName) {
-	mariaDBHelper, timeout, interval := harness.mariaDBHelper, harness.timeout, harness.interval
-
-	harness.UpdateAccount(newAccountName)
-	harness.mariaDBHelper.SimulateMariaDBAccountCompleted(newAccountName)
-
-	mariaDBHelper.Logger.Info(
-		fmt.Sprintf("Service should move to run fully off MariaDBAccount %s and remove finalizer from %s",
-			newAccountName, oldAccountName),
-	)
-
-	// finalizer is attached to new account
-	Eventually(func() []string {
-		newMariadbAccount := mariaDBHelper.GetMariaDBAccount(newAccountName)
-		return newMariadbAccount.Finalizers
-	}, timeout, interval).Should(ContainElement(harness.finalizerName))
-
-	// finalizer removed from old account
-	Eventually(func() []string {
-		oldMariadbAccount := mariaDBHelper.GetMariaDBAccount(oldAccountName)
-		return oldMariadbAccount.Finalizers
-	}, timeout, interval).ShouldNot(ContainElement(harness.finalizerName))
-
 }
