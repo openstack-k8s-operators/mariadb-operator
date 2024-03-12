@@ -376,7 +376,7 @@ func (d *Database) CreateOrPatchAll(
 		return ctrl.Result{RequeueAfter: time.Second * 5}, nil
 	}
 
-	err = d.loadDatabaseAndAccountCRs(ctx, h)
+	err = d.loadDatabaseAndAccountCRs(ctx, h, true)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -395,7 +395,7 @@ func (d *Database) WaitForDBCreatedWithTimeout(
 	requeueAfter time.Duration,
 ) (ctrl.Result, error) {
 
-	err := d.loadDatabaseAndAccountCRs(ctx, h)
+	err := d.loadDatabaseAndAccountCRs(ctx, h, true)
 	if err != nil && !k8s_errors.IsNotFound(err) {
 		return ctrl.Result{}, err
 	}
@@ -450,6 +450,7 @@ func (d *Database) WaitForDBCreated(
 func (d *Database) loadDatabaseAndAccountCRs(
 	ctx context.Context,
 	h *helper.Helper,
+	everythingMustExist bool,
 ) error {
 	mariaDBDatabase := &MariaDBDatabase{}
 	name := d.name
@@ -504,28 +505,51 @@ func (d *Database) loadDatabaseAndAccountCRs(
 		legacyAccount = true
 	}
 
-	mariaDBAccount, secretObj, err := GetAccountAndSecret(ctx, h, accountName, namespace)
+	var secretObj *corev1.Secret = nil
 
+	mariaDBAccount, err := GetAccount(ctx, h, accountName, namespace)
 	if err != nil {
-		if legacyAccount && k8s_errors.IsNotFound(err) {
-			// if account can't be found, log it, but don't quit, still
+
+		if everythingMustExist || !k8s_errors.IsNotFound(err) || !legacyAccount {
+			return util.WrapErrorForObject(
+				fmt.Sprintf("Error fetching account %s %s ", accountName, namespace),
+				h.GetBeforeObject(),
+				err,
+			)
+		} else {
+			// in "legacy" mode, if account can't be found, log it, but don't quit, still
 			// return the Database with MariaDBDatabase
 			h.GetLogger().Info(
 				fmt.Sprintf("Could not find account %s for Database named %s", accountName, namespace),
 			)
-
-			// note that d.account remains nil in this case
-		} else {
-			// only if not legacy account, or other kind of error, do we
-			// bail out
+		}
+	} else if mariaDBAccount != nil {
+		if mariaDBAccount.Spec.Secret == "" && everythingMustExist {
 			return util.WrapErrorForObject(
-				fmt.Sprintf("account error %s %s ", accountName, namespace),
+				fmt.Sprintf("Error fetching Secret for account %s %s ", accountName, namespace),
 				h.GetBeforeObject(),
-				err,
+				fmt.Errorf("no secret field present in MariaDBAccount %s", accountName),
 			)
+		} else if mariaDBAccount.Spec.Secret != "" {
+			secretObj, _, err = secret.GetSecret(ctx, h, mariaDBAccount.Spec.Secret, namespace)
+
+			if err != nil && (everythingMustExist || !k8s_errors.IsNotFound(err)) {
+				return util.WrapErrorForObject(
+					fmt.Sprintf("Error fetching Secret for account %s %s ", accountName, namespace),
+					h.GetBeforeObject(),
+					err,
+				)
+			}
+
+			// if Secret object not found and everythingMustExist not set, continue
+			// returning the Database contents.
+			// we do not add finalizers to the Secret associated with the MariaDBAccount
+			// so it may have been deleted.
 		}
 
-	} else {
+	}
+
+	if mariaDBAccount != nil {
 		d.account = mariaDBAccount
 		d.databaseUser = mariaDBAccount.Spec.UserName
 		d.secret = mariaDBAccount.Spec.Secret
@@ -549,7 +573,7 @@ func GetDatabaseByName(
 	}
 
 	// then querying the MariaDBDatabase and store it in db by calling
-	if err := db.loadDatabaseAndAccountCRs(ctx, h); err != nil {
+	if err := db.loadDatabaseAndAccountCRs(ctx, h, false); err != nil {
 		return db, err
 	}
 	return db, nil
@@ -568,7 +592,7 @@ func GetDatabaseByNameAndAccount(
 		namespace:   namespace,
 	}
 	// then querying the MariaDBDatabase and store it in db by calling
-	if err := db.loadDatabaseAndAccountCRs(ctx, h); err != nil {
+	if err := db.loadDatabaseAndAccountCRs(ctx, h, false); err != nil {
 		return db, err
 	}
 	return db, nil
