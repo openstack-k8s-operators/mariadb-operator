@@ -356,18 +356,18 @@ func (d *Database) CreateOrPatchAll(
 		return ctrl.Result{RequeueAfter: time.Second * 5}, nil
 	}
 
-	opAcc, errAcc := CreateOrPatchAccount(
-		ctx, h, mariaDBAccount,
+	opAcc, err := createOrPatchAccountAndSecret(
+		ctx, h, mariaDBAccount, nil,
 		map[string]string{
 			"mariaDBDatabaseName": d.name,
 		},
 	)
 
-	if errAcc != nil {
+	if err != nil {
 		return ctrl.Result{}, util.WrapErrorForObject(
 			fmt.Sprintf("Error creating or updating MariaDBAccount object %s", mariaDBAccount.Name),
 			mariaDBAccount,
-			errAcc,
+			err,
 		)
 	}
 
@@ -585,12 +585,21 @@ func (d *Database) DeleteFinalizer(
 	h *helper.Helper,
 ) error {
 
+	secretFinalizer := fmt.Sprintf("mariadb.openstack.org/%s", h.GetFinalizer())
+	if d.secretObj != nil && controllerutil.RemoveFinalizer(d.secretObj, secretFinalizer) {
+		err := h.GetClient().Update(ctx, d.secretObj)
+		if err != nil && !k8s_errors.IsNotFound(err) {
+			return err
+		}
+		util.LogForObject(h, fmt.Sprintf("Removed finalizer %s from Secret %s", secretFinalizer, d.secretObj.Name), d.secretObj)
+	}
+
 	if d.account != nil && controllerutil.RemoveFinalizer(d.account, h.GetFinalizer()) {
 		err := h.GetClient().Update(ctx, d.account)
 		if err != nil && !k8s_errors.IsNotFound(err) {
 			return err
 		}
-		util.LogForObject(h, fmt.Sprintf("Removed finalizer %s from MariaDBAccount object", h.GetFinalizer()), d.account)
+		util.LogForObject(h, fmt.Sprintf("Removed finalizer %s from MariaDBAccount %s", h.GetFinalizer(), d.account.Name), d.account)
 
 		// also do a delete for "unused" MariaDBAccounts, associated with
 		// this MariaDBDatabase.
@@ -678,13 +687,33 @@ func DeleteUnusedMariaDBAccountFinalizers(
 			continue
 		}
 
+		if mariaDBAccount.Spec.Secret != "" {
+			dbSecret, _, err := secret.GetSecret(ctx, h, mariaDBAccount.Spec.Secret, namespace)
+			if err != nil && !k8s_errors.IsNotFound(err) {
+				return err
+			}
+
+			secretFinalizer := fmt.Sprintf("mariadb.openstack.org/%s", h.GetFinalizer())
+			if dbSecret != nil && controllerutil.RemoveFinalizer(dbSecret, secretFinalizer) {
+				err := h.GetClient().Update(ctx, dbSecret)
+				if err != nil && !k8s_errors.IsNotFound(err) {
+					h.GetLogger().Error(
+						err,
+						fmt.Sprintf("Unable to remove finalizer %s from Secret %s", h.GetFinalizer(), dbSecret.Name))
+					return err
+				}
+				util.LogForObject(h, fmt.Sprintf("Removed finalizer %s from Secret %s", h.GetFinalizer(), dbSecret.Name), dbSecret)
+			}
+
+		}
+
 		if controllerutil.RemoveFinalizer(&mariaDBAccount, h.GetFinalizer()) {
 			err := h.GetClient().Update(ctx, &mariaDBAccount)
 			if err != nil && !k8s_errors.IsNotFound(err) {
 				h.GetLogger().Error(err, fmt.Sprintf("Unable to remove finalizer %s from MariaDBAccount %s", h.GetFinalizer(), mariaDBAccount.Name))
 				return err
 			}
-			util.LogForObject(h, fmt.Sprintf("Removed finalizer %s from MariaDBAccount", h.GetFinalizer()), &mariaDBAccount)
+			util.LogForObject(h, fmt.Sprintf("Removed finalizer %s from MariaDBAccount %s", h.GetFinalizer(), mariaDBAccount.Name), &mariaDBAccount)
 		}
 
 	}
@@ -692,7 +721,83 @@ func DeleteUnusedMariaDBAccountFinalizers(
 
 }
 
+// createOrPatchAccountAndSecret creates/updates a given MariaDBAccount / Secret CR.
+func createOrPatchAccountAndSecret(
+	ctx context.Context,
+	h *helper.Helper,
+	account *MariaDBAccount,
+	accountSecret *corev1.Secret,
+	labels map[string]string,
+) (controllerutil.OperationResult, error) {
+	opAcc, errAcc := controllerutil.CreateOrPatch(ctx, h.GetClient(), account, func() error {
+		account.Labels = util.MergeStringMaps(
+			account.GetLabels(),
+			labels,
+		)
+
+		err := controllerutil.SetControllerReference(h.GetBeforeObject(), account, h.GetScheme())
+		if err != nil {
+			return err
+		}
+
+		if account.Spec.UserName == "" {
+			return fmt.Errorf("no UserName field in account %s", account.Name)
+		}
+		if account.Spec.Secret == "" {
+			return fmt.Errorf("no secret field in account %s", account.Name)
+		}
+
+		if accountSecret == nil {
+			accountSecret, _, err = secret.GetSecret(ctx, h, account.Spec.Secret, account.Namespace)
+
+			if err != nil {
+				return fmt.Errorf("error loading secret %s for account %s",
+					account.Spec.Secret,
+					account.Name)
+			}
+		}
+
+		_, errSecret := controllerutil.CreateOrPatch(ctx, h.GetClient(), accountSecret, func() error {
+			trueVal := true
+
+			_, ok1 := accountSecret.Data[DatabasePasswordSelector]
+			_, ok2 := accountSecret.StringData[DatabasePasswordSelector]
+			if !ok1 && !ok2 {
+				err := fmt.Errorf("field %s not found in Secret %s", DatabasePasswordSelector, accountSecret.Name)
+				return err
+			}
+
+			accountSecret.Immutable = &trueVal
+
+			err := controllerutil.SetControllerReference(h.GetBeforeObject(), accountSecret, h.GetScheme())
+			if err != nil {
+				return err
+			}
+
+			// add calling CR finalizer to accountSecret first.  controllers use
+			// GetDatabaseByNameAndAccount to locate the Database which is how
+			// they remove finalizers.  this will return not found if secret
+			// is not present, so finalizer will keep it around
+			controllerutil.AddFinalizer(accountSecret, fmt.Sprintf("mariadb.openstack.org/%s", h.GetFinalizer()))
+
+			return nil
+		})
+
+		if errSecret != nil {
+			return errSecret
+		}
+
+		// then add calling CR finalizer to MariaDBAccount
+		controllerutil.AddFinalizer(account, h.GetFinalizer())
+
+		return nil
+	})
+
+	return opAcc, errAcc
+}
+
 // CreateOrPatchAccount creates/updates a given MariaDBAccount CR.
+// deprecated; use CreateOrPatchAll
 func CreateOrPatchAccount(
 	ctx context.Context,
 	h *helper.Helper,
@@ -844,22 +949,11 @@ func EnsureMariaDBAccount(ctx context.Context,
 				DatabasePasswordSelector: dbPassword,
 			},
 		}
-
-		_, _, errSecret := secret.CreateOrPatchSecret(
-			ctx,
-			helper,
-			helper.GetBeforeObject(),
-			dbSecret,
-		)
-		if errSecret != nil {
-			return nil, nil, errSecret
-		}
-
 	}
 
-	_, errAcc := CreateOrPatchAccount(ctx, helper, account, map[string]string{})
-	if errAcc != nil {
-		return nil, nil, errAcc
+	_, err = createOrPatchAccountAndSecret(ctx, helper, account, dbSecret, map[string]string{})
+	if err != nil {
+		return nil, nil, err
 	}
 
 	util.LogForObject(
