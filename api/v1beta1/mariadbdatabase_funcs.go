@@ -40,46 +40,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-// NewDatabase returns a partially-initialized Database struct.
-// Deprecated; use NewDatabaseForAccount
-func NewDatabase(
-	databaseName string,
-	databaseUser string,
-	secret string,
-	labels map[string]string,
-) *Database {
-	return &Database{
-		databaseName: databaseName,
-		databaseUser: databaseUser,
-		secret:       secret,
-		labels:       labels,
-		name:         "",
-		accountName:  "",
-		namespace:    "",
-	}
-}
-
-// NewDatabase returns a partially-initialized Database struct.
-// Deprecated; use NewDatabaseForAccount
-func NewDatabaseWithNamespace(
-	databaseName string,
-	databaseUser string,
-	secret string,
-	labels map[string]string,
-	name string,
-	namespace string,
-) *Database {
-	return &Database{
-		databaseName: databaseName,
-		databaseUser: databaseUser,
-		secret:       secret,
-		labels:       labels,
-		name:         name,
-		accountName:  "",
-		namespace:    namespace,
-	}
-}
-
 // NewDatabaseForAccount returns an initialized Database struct.
 // the stucture has all pre-requisite fields filled in, however has not
 // yet populated its object parameters .database and .account
@@ -190,48 +150,6 @@ func (d *Database) GetSecret() *corev1.Secret {
 	return d.secretObj
 }
 
-// CreateOrPatchDB - create or patch the service DB instance
-// Deprecated. Use CreateOrPatchAll() after calling
-// NewDatabaseForAccount.
-func (d *Database) CreateOrPatchDB(
-	ctx context.Context,
-	h *helper.Helper,
-) (ctrl.Result, error) {
-	return d.CreateOrPatchDBByName(ctx, h, "openstack")
-}
-
-// CreateOrPatchDBByName - create or patch the service DB instance
-// Deprecated. Use CreateOrPatchAll() after calling
-// NewDatabaseForAccount.
-func (d *Database) CreateOrPatchDBByName(
-	ctx context.Context,
-	h *helper.Helper,
-	name string,
-) (ctrl.Result, error) {
-
-	if d.mariadbName == "" {
-		d.mariadbName = name
-	} else if d.mariadbName != name {
-		return ctrl.Result{}, fmt.Errorf(
-			"the given mariadbname and name sent to CreateOrPatchDBByName "+
-				"do not match; %s != %s.  Use CreateOrPatchAll() for new code",
-			d.mariadbName,
-			name,
-		)
-	}
-
-	// legacy h.GetBeforeObject() stuff.  we'd like the Database object
-	// to be given all correct information up front by the caller.
-	if d.name == "" {
-		d.name = h.GetBeforeObject().GetName()
-	}
-	if d.namespace == "" {
-		d.namespace = h.GetBeforeObject().GetNamespace()
-	}
-
-	return d.CreateOrPatchAll(ctx, h)
-}
-
 // CreateOrPatchAll - create or patch the MariaDBDatabase and
 // MariaDBAccount.
 func (d *Database) CreateOrPatchAll(
@@ -251,23 +169,9 @@ func (d *Database) CreateOrPatchAll(
 
 	}
 	if d.accountName == "" {
-		// no accountName at all.  this indicates this Database came about
-		// using either NewDatabase or NewDatabaseWithNamespace; both
-		// legacy and both pass along a databaseUser and secret.
-
-		// so for forwards compatibility,
-		// make a name and a MariaDBAccount for it.  name it the same as
-		// the MariaDBDatabase so we can get it back
-		// again based on that name alone (also for backwards compatibility).
-
-		h.GetLogger().Info(
-			fmt.Sprintf(
-				"Database object for MariaDBDatabase %s does not have a MariaDBAccount CR name configured. "+
-					"Assuming legacy use of the API, will use the same name for the MariaDBAccount.", d.name,
-			),
+		return ctrl.Result{}, fmt.Errorf(
+			"MariaDBAccount CR name is not present",
 		)
-
-		d.accountName = d.name
 	}
 
 	mariaDBDatabase := d.database
@@ -298,22 +202,6 @@ func (d *Database) CreateOrPatchAll(
 			},
 		}
 
-		// databaseUser was given, this is from legacy mode.  populate it
-		// into the account
-		if d.databaseUser != "" {
-			mariaDBAccount.Spec.UserName = d.databaseUser
-		}
-
-		// secret was given, this is also from legacy mode.  populate it
-		// into the account.  note here that this is osp-secret, which has
-		// many PW fields in it.  By setting it here, as was the case when
-		// osp-secret was associated directly with MariaDBDatabase, the
-		// mariadb-controller is going to use the DatabasePassword value
-		// for the password, and **not** any of the controller-specific
-		// passwords.
-		if d.secret != "" {
-			mariaDBAccount.Spec.Secret = d.secret
-		}
 	}
 
 	// set the database hostname on the db instance
@@ -454,6 +342,7 @@ func (d *Database) loadDatabaseAndAccountCRs(
 	mariaDBDatabase := &MariaDBDatabase{}
 	name := d.name
 	namespace := d.namespace
+	accountName := d.accountName
 
 	if d.name == "" {
 		return fmt.Errorf(
@@ -463,6 +352,12 @@ func (d *Database) loadDatabaseAndAccountCRs(
 	if d.namespace == "" {
 		return fmt.Errorf(
 			"MariaDBDatabase CR namespace is not present",
+		)
+	}
+
+	if accountName == "" {
+		return fmt.Errorf(
+			"MariaDBAccount CR name is not present",
 		)
 	}
 
@@ -493,66 +388,21 @@ func (d *Database) loadDatabaseAndAccountCRs(
 	d.database = mariaDBDatabase
 	d.tlsSupport = mariaDBDatabase.Status.TLSSupport
 	d.mariadbName = mariaDBDatabase.Labels["dbName"]
-	accountName := d.accountName
-
-	legacyAccount := false
-
-	if accountName == "" {
-		// no account name, so this is a legacy lookup.  locate MariaDBAccount
-		// based on the same name as that of the MariaDBDatabase
-		accountName = d.name
-		legacyAccount = true
-	}
 
 	mariaDBAccount, secretObj, err := GetAccountAndSecret(ctx, h, accountName, namespace)
 
 	if err != nil {
-		if legacyAccount && k8s_errors.IsNotFound(err) {
-			// if account can't be found, log it, but don't quit, still
-			// return the Database with MariaDBDatabase
-			h.GetLogger().Info(
-				fmt.Sprintf("Could not find account %s for Database named %s", accountName, namespace),
-			)
-
-			// note that d.account remains nil in this case
-		} else {
-			// only if not legacy account, or other kind of error, do we
-			// bail out
-			return util.WrapErrorForObject(
-				fmt.Sprintf("account error %s %s ", accountName, namespace),
-				h.GetBeforeObject(),
-				err,
-			)
-		}
-
+		return util.WrapErrorForObject(
+			fmt.Sprintf("account error %s %s ", accountName, namespace),
+			h.GetBeforeObject(),
+			err,
+		)
 	} else {
 		d.account = mariaDBAccount
-		d.databaseUser = mariaDBAccount.Spec.UserName
-		d.secret = mariaDBAccount.Spec.Secret
 		d.secretObj = secretObj
 	}
 
 	return nil
-}
-
-// GetDatabaseByName returns a *Database object with specified name and namespace
-// deprecated; this needs to have the account name given as well for it to work
-// completely
-func GetDatabaseByName(
-	ctx context.Context,
-	h *helper.Helper,
-	name string,
-) (*Database, error) {
-	db := &Database{
-		name:      name,
-		namespace: h.GetBeforeObject().GetNamespace(),
-	}
-
-	// then querying the MariaDBDatabase and store it in db by calling
-	if err := db.loadDatabaseAndAccountCRs(ctx, h); err != nil {
-		return db, err
-	}
-	return db, nil
 }
 
 func GetDatabaseByNameAndAccount(
@@ -789,41 +639,6 @@ func createOrPatchAccountAndSecret(
 
 		// then add calling CR finalizer to MariaDBAccount
 		controllerutil.AddFinalizer(account, h.GetFinalizer())
-
-		return nil
-	})
-
-	return opAcc, errAcc
-}
-
-// CreateOrPatchAccount creates/updates a given MariaDBAccount CR.
-// deprecated; use CreateOrPatchAll
-func CreateOrPatchAccount(
-	ctx context.Context,
-	h *helper.Helper,
-	account *MariaDBAccount,
-	labels map[string]string,
-) (controllerutil.OperationResult, error) {
-	opAcc, errAcc := controllerutil.CreateOrPatch(ctx, h.GetClient(), account, func() error {
-		account.Labels = util.MergeStringMaps(
-			account.GetLabels(),
-			labels,
-		)
-
-		err := controllerutil.SetControllerReference(h.GetBeforeObject(), account, h.GetScheme())
-		if err != nil {
-			return err
-		}
-
-		// If the service object doesn't have our finalizer, add it.
-		controllerutil.AddFinalizer(account, h.GetFinalizer())
-
-		if account.Spec.UserName == "" {
-			return fmt.Errorf("no UserName field in account %s", account.Name)
-		}
-		if account.Spec.Secret == "" {
-			return fmt.Errorf("no secret field in account %s", account.Name)
-		}
 
 		return nil
 	})

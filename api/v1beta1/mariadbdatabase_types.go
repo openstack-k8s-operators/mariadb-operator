@@ -97,8 +97,6 @@ type Database struct {
 	secretObj        *corev1.Secret    // Secret object referenced by MariaDBAccount
 	databaseHostname string            // string hostname of database
 	databaseName     string            // string name used in CREATE DATABASE statement
-	databaseUser     string            // legacy; will go away when operators fully integrate MariaDBAccount
-	secret           string            // legacy; will go away when operators fully integrate MariaDBAccount
 	labels           map[string]string // labels to add to the MariaDBDatabase object
 	name             string            // CR name for the MariaDBDatabase object
 	accountName      string            // CR name for the MariaDBAccount object
