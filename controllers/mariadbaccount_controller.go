@@ -82,21 +82,26 @@ func (r *MariaDBAccountReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, err
 	}
 
-	// Always patch the instance status when exiting this function so we can persist any changes.
+	// initialize status if Conditions is nil, but do not reset if it already
+	// exists
+	isNewInstance := instance.Status.Conditions == nil
+	if isNewInstance {
+		instance.Status.Conditions = condition.Conditions{}
+	}
+
+	// Save a copy of the condtions so that we can restore the LastTransitionTime
+	// when a condition's state doesn't change.
+	savedConditions := instance.Status.Conditions.DeepCopy()
+
+	// Always patch the instance status when exiting this function so we can
+	// persist any changes.
 	defer func() {
-		// update the Ready condition based on the sub conditions
-		if instance.Status.Conditions.AllSubConditionIsTrue() {
-			instance.Status.Conditions.MarkTrue(
-				condition.ReadyCondition, condition.ReadyMessage)
-		} else {
-			// something is not ready so reset the Ready condition
-			instance.Status.Conditions.MarkUnknown(
-				condition.ReadyCondition, condition.InitReason, condition.ReadyInitMessage)
-			// and recalculate it based on the state of the rest of the conditions
+		condition.RestoreLastTransitionTimes(
+			&instance.Status.Conditions, savedConditions)
+		if instance.Status.Conditions.IsUnknown(condition.ReadyCondition) {
 			instance.Status.Conditions.Set(
 				instance.Status.Conditions.Mirror(condition.ReadyCondition))
 		}
-
 		err := helper.PatchInstance(ctx, instance)
 		if err != nil {
 			_err = err
@@ -104,23 +109,17 @@ func (r *MariaDBAccountReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 	}()
 
-	if instance.Status.Conditions == nil {
-		instance.Status.Conditions = condition.Conditions{}
+	// initialize conditions used later as Status=Unknown
+	cl := condition.CreateList(
+		condition.UnknownCondition(condition.ReadyCondition, condition.InitReason, condition.ReadyInitMessage),
+		condition.UnknownCondition(databasev1beta1.MariaDBServerReadyCondition, condition.InitReason, databasev1beta1.MariaDBServerReadyInitMessage),
+		condition.UnknownCondition(databasev1beta1.MariaDBDatabaseReadyCondition, condition.InitReason, databasev1beta1.MariaDBDatabaseReadyInitMessage),
+		condition.UnknownCondition(databasev1beta1.MariaDBAccountReadyCondition, condition.InitReason, databasev1beta1.MariaDBAccountReadyInitMessage),
+	)
 
-		// initialize conditions used later as Status=Unknown
-		cl := condition.CreateList(
-			condition.UnknownCondition(databasev1beta1.MariaDBServerReadyCondition, condition.InitReason, databasev1beta1.MariaDBServerReadyInitMessage),
-			condition.UnknownCondition(databasev1beta1.MariaDBDatabaseReadyCondition, condition.InitReason, databasev1beta1.MariaDBDatabaseReadyInitMessage),
-			condition.UnknownCondition(databasev1beta1.MariaDBAccountReadyCondition, condition.InitReason, databasev1beta1.MariaDBAccountReadyInitMessage),
-		)
+	instance.Status.Conditions.Init(&cl)
 
-		instance.Status.Conditions.Init(&cl)
-
-		// Register overall status immediately to have an early feedback e.g. in the cli
-		return ctrl.Result{}, nil
-	}
-
-	if instance.DeletionTimestamp.IsZero() {
+	if instance.DeletionTimestamp.IsZero() || isNewInstance {
 		return r.reconcileCreate(ctx, req, log, helper, instance)
 	} else {
 		return r.reconcileDelete(ctx, req, log, helper, instance)
@@ -317,6 +316,12 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 		databasev1beta1.MariaDBAccountReadyMessage,
 	)
 
+	// We reached the end of the Reconcile, update the Ready condition based on
+	// the sub conditions
+	if instance.Status.Conditions.AllSubConditionIsTrue() {
+		instance.Status.Conditions.MarkTrue(
+			condition.ReadyCondition, condition.ReadyMessage)
+	}
 	return ctrl.Result{}, nil
 }
 
