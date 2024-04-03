@@ -72,50 +72,45 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
-	// Always patch the instance status when exiting this function so we can persist any changes.
-	defer func() {
-		if instance.Status.Conditions.AllSubConditionIsTrue() {
-			// update the Ready condition based on the sub conditions
+	// initialize status if Conditions is nil, but do not reset if it already
+	// exists
+	isNewInstance := instance.Status.Conditions == nil
+	if isNewInstance {
+		instance.Status.Conditions = condition.Conditions{}
+	}
 
-			instance.Status.Conditions.MarkTrue(
-				condition.ReadyCondition, condition.ReadyMessage)
-		} else {
-			// something is not ready so reset the Ready condition
-			instance.Status.Conditions.MarkUnknown(
-				condition.ReadyCondition, condition.InitReason, condition.ReadyInitMessage)
-			// and recalculate it based on the state of the rest of the conditions
+	// Save a copy of the condtions so that we can restore the LastTransitionTime
+	// when a condition's state doesn't change.
+	savedConditions := instance.Status.Conditions.DeepCopy()
+
+	// Always patch the instance status when exiting this function so we can
+	// persist any changes.
+	defer func() {
+		condition.RestoreLastTransitionTimes(
+			&instance.Status.Conditions, savedConditions)
+		if instance.Status.Conditions.IsUnknown(condition.ReadyCondition) {
 			instance.Status.Conditions.Set(
 				instance.Status.Conditions.Mirror(condition.ReadyCondition))
 		}
-
 		if instance.Status.Conditions.IsTrue(condition.ReadyCondition) {
 			// database creation finished... okay to set to completed
 			instance.Status.Completed = true
 		}
-
 		err := helper.PatchInstance(ctx, instance)
-
 		if err != nil {
 			_err = err
 			return
 		}
-
 	}()
 
-	if instance.Status.Conditions == nil {
-		instance.Status.Conditions = condition.Conditions{}
+	// initialize conditions used later as Status=Unknown
+	cl := condition.CreateList(
+		condition.UnknownCondition(condition.ReadyCondition, condition.InitReason, condition.ReadyInitMessage),
+		condition.UnknownCondition(databasev1beta1.MariaDBServerReadyCondition, condition.InitReason, databasev1beta1.MariaDBServerReadyInitMessage),
+		condition.UnknownCondition(databasev1beta1.MariaDBDatabaseReadyCondition, condition.InitReason, databasev1beta1.MariaDBDatabaseReadyInitMessage),
+	)
 
-		// initialize conditions used later as Status=Unknown
-		cl := condition.CreateList(
-			condition.UnknownCondition(databasev1beta1.MariaDBServerReadyCondition, condition.InitReason, databasev1beta1.MariaDBServerReadyInitMessage),
-			condition.UnknownCondition(databasev1beta1.MariaDBDatabaseReadyCondition, condition.InitReason, databasev1beta1.MariaDBDatabaseReadyInitMessage),
-		)
-
-		instance.Status.Conditions.Init(&cl)
-
-		// Register overall status immediately to have an early feedback e.g. in the cli
-		return ctrl.Result{}, nil
-	}
+	instance.Status.Conditions.Init(&cl)
 
 	// Fetch the Galera instance from which we'll pull the credentials
 	dbGalera, err := r.getDatabaseObject(ctx, instance)
@@ -149,7 +144,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	// here we know that Galera exists so add a finalizer to ourselves and to the db CR. Before this point there is no reason to have a finalizer on ourselves as nothing to cleanup.
-	if instance.DeletionTimestamp.IsZero() { // this condition can be removed if you wish as it is always true at this point otherwise we would returned earlier.
+	if instance.DeletionTimestamp.IsZero() || isNewInstance { // this condition can be removed if you wish as it is always true at this point otherwise we would returned earlier.
 		if controllerutil.AddFinalizer(dbGalera, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
 			err := r.Update(ctx, dbGalera)
 			if err != nil {
@@ -234,6 +229,12 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// DB instances supports TLS
 	instance.Status.TLSSupport = dbGalera.Spec.TLS.Enabled()
 
+	// We reached the end of the Reconcile, update the Ready condition based on
+	// the sub conditions
+	if instance.Status.Conditions.AllSubConditionIsTrue() {
+		instance.Status.Conditions.MarkTrue(
+			condition.ReadyCondition, condition.ReadyMessage)
+	}
 	return ctrl.Result{}, nil
 }
 
