@@ -61,10 +61,10 @@ func NewDatabaseForAccount(
 
 // setDatabaseHostname - set the service name of the DB as the databaseHostname
 // by looking up the Service via the name of the MariaDB CR which provides it.
-func (d *Database) setDatabaseHostname(ctx context.Context, h *helper.Helper) error {
+func (d *Database) setDatabaseHostname(ctx context.Context, h *helper.Helper) (ctrl.Result, error) {
 
 	if d.mariadbName == "" {
-		return fmt.Errorf("MariaDB CR name mariadbName field is blank")
+		return ctrl.Result{}, fmt.Errorf("MariaDB CR name mariadbName field is blank")
 	}
 
 	// When the MariaDB CR provides the Service it sets the "cr" label of the
@@ -83,7 +83,7 @@ func (d *Database) setDatabaseHostname(ctx context.Context, h *helper.Helper) er
 	// as we know it is the same value.  We basically want to stop relying
 	// on h.GetBeforeObject()
 	if h.GetBeforeObject().GetNamespace() != d.namespace {
-		return fmt.Errorf(
+		return ctrl.Result{}, fmt.Errorf(
 			"helper namespace does not match the Database namespace %s != %s",
 			h.GetBeforeObject().GetNamespace(), d.namespace,
 		)
@@ -95,16 +95,27 @@ func (d *Database) setDatabaseHostname(ctx context.Context, h *helper.Helper) er
 		d.namespace,
 		selector,
 	)
-	if err != nil || len(serviceList.Items) == 0 {
-		return fmt.Errorf("error getting the DB service using label %v: %w",
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("error getting the Galera service using label %v: %w",
 			selector, err)
+	} else if len(serviceList.Items) == 0 {
+		// NOTE(zzzeek): requeue if no service items.  while we would prefer to get the Galera
+		// instance directly and test for galera.Status.Bootstrapped, all of the functional test suites
+		// across openstack-k8s-operators call only upon crd.go -> CreateDBService
+		// for their DB setup, which is named / tasked very specifically to only
+		// create a corev1.Service, and semantically does not include a Galera instance or
+		// the simulation of a completed job.  If they made use of a more generic
+		// EnsureGaleraSetup type of fixture, that might be more appropriate to put "everything
+		// for galera" into that fixture.
+		h.GetLogger().Info(fmt.Sprintf("Found zero services for Galera instance %s, requeueing ....", d.mariadbName))
+		return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 	}
 
 	// We assume here that a MariaDB CR instance always creates a single
 	// Service. If multiple DB services are used the they are managed via
 	// separate MariaDB CRs.
 	if len(serviceList.Items) > 1 {
-		return util.WrapErrorForObject(
+		return ctrl.Result{}, util.WrapErrorForObject(
 			fmt.Sprintf("more then one DB service found %d", len(serviceList.Items)),
 			d.database,
 			err,
@@ -115,7 +126,7 @@ func (d *Database) setDatabaseHostname(ctx context.Context, h *helper.Helper) er
 	d.databaseHostname = svc.GetName() + "." + svc.GetNamespace() + ".svc"
 	h.GetLogger().Info(fmt.Sprintf("Applied new databasehostname %s to MariaDBDatabase %s", d.databaseHostname, d.name))
 
-	return nil
+	return ctrl.Result{}, nil
 }
 
 // GetTLSSupport - returns the secret name holding the database connection and client config
@@ -204,12 +215,6 @@ func (d *Database) CreateOrPatchAll(
 
 	}
 
-	// set the database hostname on the db instance
-	err := d.setDatabaseHostname(ctx, h)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
 	op, err := controllerutil.CreateOrPatch(ctx, h.GetClient(), mariaDBDatabase, func() error {
 		mariaDBDatabase.Labels = util.MergeStringMaps(
 			mariaDBDatabase.GetLabels(),
@@ -228,9 +233,6 @@ func (d *Database) CreateOrPatchAll(
 		return nil
 	})
 
-	if d.databaseHostname == "" {
-		return ctrl.Result{}, fmt.Errorf("Database hostname is blank")
-	}
 	if err != nil && !k8s_errors.IsNotFound(err) {
 		return ctrl.Result{}, util.WrapErrorForObject(
 			fmt.Sprintf("Error create or update DB object %s", mariaDBDatabase.Name),
@@ -242,6 +244,18 @@ func (d *Database) CreateOrPatchAll(
 	if op != controllerutil.OperationResultNone {
 		util.LogForObject(h, fmt.Sprintf("MariaDBDatabase object %s created or patched", mariaDBDatabase.Name), mariaDBDatabase)
 		return ctrl.Result{RequeueAfter: time.Second * 5}, nil
+	}
+
+	// set the database hostname on the db instance
+	// this will wait for the Service to exist so may also return a requeue
+	// result
+	result, err := d.setDatabaseHostname(ctx, h)
+	if (err != nil || result != ctrl.Result{}) {
+		return result, err
+	}
+
+	if d.databaseHostname == "" {
+		return ctrl.Result{}, fmt.Errorf("Database hostname is blank")
 	}
 
 	opAcc, err := createOrPatchAccountAndSecret(
