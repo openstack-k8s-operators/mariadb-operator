@@ -67,16 +67,6 @@ func (d *Database) setDatabaseHostname(ctx context.Context, h *helper.Helper) (c
 		return ctrl.Result{}, fmt.Errorf("MariaDB CR name mariadbName field is blank")
 	}
 
-	// When the MariaDB CR provides the Service it sets the "cr" label of the
-	// Service to "mariadb-<name of the MariaDB CR>". So we use this label
-	// to select the right Service. See:
-	// https://github.com/openstack-k8s-operators/mariadb-operator/blob/5781b0cf1087d7d28fa285bd5c44689acba92183/pkg/service.go#L17
-	// https://github.com/openstack-k8s-operators/mariadb-operator/blob/590ffdc5ad86fe653f9cd8a7102bb76dfe2e36d1/pkg/utils.go#L4
-	selector := map[string]string{
-		"app": "mariadb",
-		"cr":  fmt.Sprintf("mariadb-%s", d.mariadbName),
-	}
-
 	// assert that Database has the correct namespace.   This code
 	// previously used h.GetBeforeObject().GetNamespace() for the
 	// namespace, so this assertion allows us to use d.namespace directly
@@ -89,14 +79,38 @@ func (d *Database) setDatabaseHostname(ctx context.Context, h *helper.Helper) (c
 		)
 	}
 
+	hostname, result, err := GetServiceHostname(ctx, h, d.mariadbName, d.namespace)
+
+	if (err != nil || result != ctrl.Result{}) {
+		return result, err
+	}
+
+	d.databaseHostname = hostname
+	h.GetLogger().Info(fmt.Sprintf("Applied new databasehostname %s to MariaDBDatabase %s", d.databaseHostname, d.name))
+
+	return ctrl.Result{}, nil
+}
+
+func GetServiceHostname(ctx context.Context, h *helper.Helper, galeraCRName string, namespace string) (string, ctrl.Result, error) {
+
+	// When the MariaDB CR provides the Service it sets the "cr" label of the
+	// Service to "mariadb-<name of the MariaDB CR>". So we use this label
+	// to select the right Service. See:
+	// https://github.com/openstack-k8s-operators/mariadb-operator/blob/5781b0cf1087d7d28fa285bd5c44689acba92183/pkg/service.go#L17
+	// https://github.com/openstack-k8s-operators/mariadb-operator/blob/590ffdc5ad86fe653f9cd8a7102bb76dfe2e36d1/pkg/utils.go#L4
+	selector := map[string]string{
+		"app": "mariadb",
+		"cr":  fmt.Sprintf("mariadb-%s", galeraCRName),
+	}
+
 	serviceList, err := service.GetServicesListWithLabel(
 		ctx,
 		h,
-		d.namespace,
+		namespace,
 		selector,
 	)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("error getting the Galera service using label %v: %w",
+		return "", ctrl.Result{}, fmt.Errorf("error getting the Galera service using label %v: %w",
 			selector, err)
 	} else if len(serviceList.Items) == 0 {
 		// NOTE(zzzeek): requeue if no service items.  while we would prefer to get the Galera
@@ -107,26 +121,21 @@ func (d *Database) setDatabaseHostname(ctx context.Context, h *helper.Helper) (c
 		// the simulation of a completed job.  If they made use of a more generic
 		// EnsureGaleraSetup type of fixture, that might be more appropriate to put "everything
 		// for galera" into that fixture.
-		h.GetLogger().Info(fmt.Sprintf("Found zero services for Galera instance %s, requeueing ....", d.mariadbName))
-		return ctrl.Result{RequeueAfter: time.Second * 10}, nil
+		h.GetLogger().Info(fmt.Sprintf("Found zero services for Galera instance %s, requeueing ....", galeraCRName))
+		return "", ctrl.Result{RequeueAfter: time.Second * 10}, nil
 	}
 
 	// We assume here that a MariaDB CR instance always creates a single
 	// Service. If multiple DB services are used the they are managed via
 	// separate MariaDB CRs.
 	if len(serviceList.Items) > 1 {
-		return ctrl.Result{}, util.WrapErrorForObject(
-			fmt.Sprintf("more then one DB service found %d", len(serviceList.Items)),
-			d.database,
-			err,
-		)
+		return "", ctrl.Result{}, fmt.Errorf("more then one DB service found (%d)",
+			len(serviceList.Items))
+
 	}
 	svc := serviceList.Items[0]
 
-	d.databaseHostname = svc.GetName() + "." + svc.GetNamespace() + ".svc"
-	h.GetLogger().Info(fmt.Sprintf("Applied new databasehostname %s to MariaDBDatabase %s", d.databaseHostname, d.name))
-
-	return ctrl.Result{}, nil
+	return svc.GetName() + "." + svc.GetNamespace() + ".svc", ctrl.Result{}, nil
 }
 
 // GetTLSSupport - returns the secret name holding the database connection and client config

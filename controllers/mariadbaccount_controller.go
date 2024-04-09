@@ -237,17 +237,22 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 		return ctrl.Result{}, err
 	}
 
-	var dbInstance, dbAdminSecret, dbContainerImage, serviceAccountName string
+	var dbAdminSecret, dbContainerImage, serviceAccountName string
 
 	if !dbGalera.Status.Bootstrapped {
 		log.Info("DB bootstrap not complete. Requeue...")
 		return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
 	}
 
-	dbInstance = dbGalera.Name
 	dbAdminSecret = dbGalera.Spec.Secret
 	dbContainerImage = dbGalera.Spec.ContainerImage
 	serviceAccountName = dbGalera.RbacResourceName()
+
+	dbHostname, dbHostResult, err := databasev1beta1.GetServiceHostname(ctx, helper, dbGalera.Name, dbGalera.Namespace)
+
+	if (err != nil || dbHostResult != ctrl.Result{}) {
+		return dbHostResult, err
+	}
 
 	instance.Status.Conditions.MarkTrue(
 		databasev1beta1.MariaDBServerReadyCondition,
@@ -272,12 +277,17 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 			condition.SeverityInfo,
 			databasev1beta1.MariaDBAccountSecretNotReadyMessage, err))
 
-		return secret_result, err
+		if k8s_errors.IsNotFound(err) {
+			return secret_result, nil
+		}
+
+		return ctrl.Result{}, err
+
 	}
 
 	log.Info(fmt.Sprintf("Running account create '%s' MariaDBDatabase '%s'", instance.Name, mariadbDatabaseName))
 
-	jobDef, err := mariadb.CreateDbAccountJob(instance, mariadbDatabase.Spec.Name, dbInstance, dbAdminSecret, dbContainerImage, serviceAccountName)
+	jobDef, err := mariadb.CreateDbAccountJob(instance, mariadbDatabase.Spec.Name, dbHostname, dbAdminSecret, dbContainerImage, serviceAccountName)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -468,7 +478,7 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 		}
 	}
 
-	var dbInstance, dbAdminSecret, dbContainerImage, serviceAccountName string
+	var dbAdminSecret, dbContainerImage, serviceAccountName string
 
 	if !dbGalera.Status.Bootstrapped {
 		log.Info("DB bootstrap not complete. Requeue...")
@@ -483,10 +493,15 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 		return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 	}
 
-	dbInstance = dbGalera.Name
 	dbAdminSecret = dbGalera.Spec.Secret
 	dbContainerImage = dbGalera.Spec.ContainerImage
 	serviceAccountName = dbGalera.RbacResourceName()
+
+	dbHostname, dbHostResult, err := databasev1beta1.GetServiceHostname(ctx, helper, dbGalera.Name, dbGalera.Namespace)
+
+	if (err != nil || dbHostResult != ctrl.Result{}) {
+		return dbHostResult, err
+	}
 
 	instance.Status.Conditions.MarkTrue(
 		databasev1beta1.MariaDBServerReadyCondition,
@@ -497,7 +512,7 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 
 	log.Info(fmt.Sprintf("Running account delete '%s' MariaDBDatabase '%s'", instance.Name, mariadbDatabaseName))
 
-	jobDef, err := mariadb.DeleteDbAccountJob(instance, mariadbDatabase.Spec.Name, dbInstance, dbAdminSecret, dbContainerImage, serviceAccountName)
+	jobDef, err := mariadb.DeleteDbAccountJob(instance, mariadbDatabase.Spec.Name, dbHostname, dbAdminSecret, dbContainerImage, serviceAccountName)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
