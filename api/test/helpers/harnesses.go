@@ -44,21 +44,25 @@ type assertsURL func(types.NamespacedName, string, string)
 
 type getsConfigHash func() string
 
+type switchToNewAccount func()
+
 // MariaDBTestHarness describes the parameters for running a series
 // of Ginkgo tests which exercise a controller's ability to correctly
 // work with MariaDBDatabase / MariaDBAccount APIs.
 type MariaDBTestHarness struct {
-	description     string
-	namespace       string
-	databaseName    string
-	finalizerName   string
-	PopulateHarness populateHarness
-	SetupCR         establishesCR
-	UpdateAccount   updatesAccountName
-	DeleteCR        deletesCR
-	mariaDBHelper   *TestHelper
-	timeout         time.Duration
-	interval        time.Duration
+	description        string
+	namespace          string
+	databaseName       string
+	finalizerName      string
+	PopulateHarness    populateHarness
+	SetupCR            establishesCR
+	UpdateAccount      updatesAccountName
+	DeleteCR           deletesCR
+	SwitchToNewAccount switchToNewAccount
+	mariaDBHelper      *TestHelper
+	timeout            time.Duration
+	interval           time.Duration
+	runUpdate          bool
 }
 
 func (harness *MariaDBTestHarness) Setup(
@@ -286,6 +290,9 @@ func (harness *MariaDBTestHarness) RunBasicSuite() {
 			harness.UpdateAccount(newAccountName)
 			harness.mariaDBHelper.SimulateMariaDBAccountCompleted(newAccountName)
 
+			if harness.SwitchToNewAccount != nil {
+				harness.SwitchToNewAccount()
+			}
 			mariaDBHelper.Logger.Info(
 				fmt.Sprintf("Service should move to run fully off MariaDBAccount %s and remove finalizer from %s",
 					newAccountName, oldAccountName),
