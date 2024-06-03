@@ -37,7 +37,7 @@ func StatefulSetLabels(database metav1.Object) map[string]string {
 	})
 }
 
-// StatefulSetName - statefulset name from a galera CR
+// StatefulSetName - statefulset name for a galera CR
 func StatefulSetName(name string) string {
 	return name + "-galera"
 }

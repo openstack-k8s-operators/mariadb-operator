@@ -502,8 +502,11 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		log.Info("", "Kind", instance.Kind, "Name", instance.Name, "database service", service.Name, "operation", string(op))
 	}
 
-	// Hash of all resources that may cause a service restart
+	// Map of all resources that may cause a rolling service restart
 	inputHashEnv := make(map[string]env.Setter)
+
+	// Map of all cluster properties that require a full service restart
+	clusterPropertiesEnv := make(map[string]env.Setter)
 
 	// Check and hash inputs
 	secretName := instance.Spec.Secret
@@ -559,14 +562,43 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	}
 	instance.Status.Conditions.MarkTrue(condition.ServiceConfigReadyCondition, condition.ServiceConfigReadyMessage)
 
+	// build state of the restart hash. this is used to decide whether the
+	// statefulset must stop all its pods before applying a config update
+	clusterPropertiesEnv["GCommTLS"] = env.SetValue(strconv.FormatBool(specTLS.Enabled() && specTLS.Ca.CaBundleSecretName != ""))
+	clusterPropertiesHash, err := util.HashOfInputHashes(clusterPropertiesEnv)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	inputHashEnv["ClusterProperties"] = env.SetValue(clusterPropertiesHash)
+
 	//
-	// create hash over all the different input resources to identify if any those changed
+	// create hash over all the different input resources to identify if has changed
 	// and a restart/recreate is required.
 	//
 	hashOfHashes, err := util.HashOfInputHashes(inputHashEnv)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+
+	// Update ClusterProperties here, as from this point we are sure we can update
+	// both `ClusterProperties` and `StopRequired` in this reconcile loop.
+	instance.Status.ClusterProperties = make(map[string]string)
+	for k, s := range clusterPropertiesEnv {
+		var envVar corev1.EnvVar
+		s(&envVar)
+		instance.Status.ClusterProperties[k] = envVar.Value
+	}
+
+	// check whether we need to stop the cluster after a cluster-wide change
+	if oldPropertiesHash, exists := instance.Status.Hash["ClusterProperties"]; exists {
+		if oldPropertiesHash != clusterPropertiesHash {
+			util.LogForObject(helper, fmt.Sprintf("ClusterProperties changed (%#v -> %#v), cluster restart required", oldPropertiesHash, clusterPropertiesHash), instance)
+			instance.Status.StopRequired = true
+			// Do not return here, let the return happen after the other
+			// config hashes get updated due to this hash change
+		}
+	}
+
 	if hashMap, changed := util.SetHash(instance.Status.Hash, common.InputHashName, hashOfHashes); changed {
 		// Hash changed and instance status should be updated (which will be done by main defer func),
 		// so update all the input hashes and return to reconcile again
@@ -580,7 +612,6 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		return ctrl.Result{}, nil
 	}
 
-	// The statefulset that manages galera pod
 	commonstatefulset := commonstatefulset.NewStatefulSet(mariadb.StatefulSet(instance, hashOfHashes), 5)
 	sfres, sferr := commonstatefulset.CreateOrPatch(ctx, helper)
 	if sferr != nil {
@@ -589,7 +620,20 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		}
 		return sfres, sferr
 	}
+
+	// util.LogForObject(helper, fmt.Sprintf("DAM BEFORE %v - AFTER %v", helper.GetBefore(), helper.GetAfter()), instance)
+
 	statefulset := commonstatefulset.GetStatefulSet()
+
+	// If a full cluster restart was requested,
+	// check whether it is still in progress
+	if instance.Status.StopRequired && statefulset.Status.Replicas == 0 {
+		util.LogForObject(helper, "Full cluster restart finished, config update can now proceed", instance)
+		instance.Status.StopRequired = false
+		// return now to force the next reconcile to reconfigure
+		// the statefulset to recreate the pods
+		return ctrl.Result{}, nil
+	}
 
 	// Retrieve pods managed by the associated statefulset
 	podList := &corev1.PodList{}

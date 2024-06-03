@@ -8,13 +8,19 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	resource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 )
 
 // StatefulSet returns a StatefulSet object for the galera cluster
 func StatefulSet(g *mariadbv1.Galera, configHash string) *appsv1.StatefulSet {
 	ls := StatefulSetLabels(g)
 	name := StatefulSetName(g.Name)
-	replicas := g.Spec.Replicas
+	var replicas *int32
+	if g.Status.StopRequired {
+		replicas = ptr.To[int32](0)
+	} else {
+		replicas = g.Spec.Replicas
+	}
 	storage := g.Spec.StorageClass
 	storageRequest := resource.MustParse(g.Spec.StorageRequest)
 	sts := &appsv1.StatefulSet{
