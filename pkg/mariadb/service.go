@@ -23,6 +23,27 @@ func ServiceForAdoption(db metav1.Object, dbType string, adoption *databasev1bet
 }
 
 func internalService(db metav1.Object, dbType string) *corev1.Service {
+	selectors := LabelSelectors(db, dbType)
+	// NOTE(dciabrin) we currently deploy the Galera cluster as A/P,
+	// by configuring the service's label selector to create
+	// a single endpoint matching a single pod's name.
+	// This label is later updated by a script called by Galera any
+	// time the cluster's state changes.
+	// When the service CR is being created, it is configured to
+	// point to the first pod. This is fair enough as:
+	//  1. when there's no pod running, there's no service anyway
+	//  2. As soon as a galera node becomes available, the label will
+	//     be reconfigured by the script if needed.
+	//  3. If the Galera cluster is already running, picking a random
+	//     node out of the running pods will work because Galera is
+	//     a multi-master service.
+	//  4. If the service CR gets deleted for whatever reason, and the
+	//     cluster is still running, picking a random node out of the
+	//     running pods will work because Galera is a multi-master
+	//     service. This is true as long the first pod is not in a
+	//     network partition without quorum.
+	//     TODO improve that fallback pod selection
+	selectors[ActivePodSelectorKey] = db.GetName() + "-galera-0"
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      db.GetName(),
@@ -30,7 +51,7 @@ func internalService(db metav1.Object, dbType string) *corev1.Service {
 			Labels:    ServiceLabels(db),
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: LabelSelectors(db, dbType),
+			Selector: selectors,
 			Ports: []corev1.ServicePort{
 				{Name: "database", Port: 3306, Protocol: corev1.ProtocolTCP},
 			},

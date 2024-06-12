@@ -34,6 +34,7 @@ thread_cache_size = 8
 thread_stack = 256K
 tmpdir = /tmp
 user = mysql
+wsrep_notify_cmd = /usr/local/bin/mysql_wsrep_notify.sh
 wsrep_auto_increment_control = 1
 wsrep_causal_reads = 0
 wsrep_certify_nonPK = 1
