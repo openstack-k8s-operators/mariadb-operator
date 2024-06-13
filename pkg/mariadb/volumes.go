@@ -109,6 +109,10 @@ func getGaleraVolumes(g *mariadbv1.Galera) []corev1.Volume {
 							Key:  "detect_gcomm_and_start.sh",
 							Path: "detect_gcomm_and_start.sh",
 						},
+						{
+							Key:  "mysql_wsrep_notify.sh",
+							Path: "mysql_wsrep_notify.sh",
+						},
 					},
 				},
 			},

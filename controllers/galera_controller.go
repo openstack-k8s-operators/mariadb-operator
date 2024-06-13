@@ -426,6 +426,11 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 			Resources: []string{"pods"},
 			Verbs:     []string{"create", "get", "list", "watch", "update", "patch", "delete"},
 		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"services"},
+			Verbs:     []string{"get", "list", "update", "patch"},
+		},
 	}
 	rbacResult, err := common_rbac.ReconcileRbac(ctx, helper, instance, rbacRules)
 	if err != nil {
@@ -472,7 +477,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	headless := &corev1.Service{ObjectMeta: pkghl.ObjectMeta}
 	op, err := controllerutil.CreateOrPatch(ctx, r.Client, headless, func() error {
 		headless.Spec = pkghl.Spec
-		err := controllerutil.SetOwnerReference(instance, headless, r.Client.Scheme())
+		err := controllerutil.SetControllerReference(instance, headless, r.Client.Scheme())
 		if err != nil {
 			return err
 		}
@@ -488,8 +493,17 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	pkgsvc := mariadb.ServiceForAdoption(instance, "galera", adoption)
 	service := &corev1.Service{ObjectMeta: pkgsvc.ObjectMeta}
 	op, err = controllerutil.CreateOrPatch(ctx, r.Client, service, func() error {
+		// NOTE(dciabrin) We deploy Galera as an A/P service (i.e. no multi-master writes)
+		// by setting labels in the service's label selectors.
+		// This label is dynamically set based on the status of the Galera cluster,
+		// so in this CreateOrPatch block we must reuse whatever is present in
+		// the existing service CR in case we're patching it.
+		activePod, present := service.Spec.Selector[mariadb.ActivePodSelectorKey]
 		service.Spec = pkgsvc.Spec
-		err := controllerutil.SetOwnerReference(instance, service, r.Client.Scheme())
+		if present {
+			service.Spec.Selector[mariadb.ActivePodSelectorKey] = activePod
+		}
+		err := controllerutil.SetControllerReference(instance, service, r.Client.Scheme())
 		if err != nil {
 			return err
 		}
