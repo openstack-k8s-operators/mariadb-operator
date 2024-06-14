@@ -32,6 +32,7 @@ import (
 	helper "github.com/openstack-k8s-operators/lib-common/modules/common/helper"
 	common_rbac "github.com/openstack-k8s-operators/lib-common/modules/common/rbac"
 	secret "github.com/openstack-k8s-operators/lib-common/modules/common/secret"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
 	commonstatefulset "github.com/openstack-k8s-operators/lib-common/modules/common/statefulset"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/tls"
 	util "github.com/openstack-k8s-operators/lib-common/modules/common/util"
@@ -411,6 +412,16 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	instance.Status.Conditions.Init(&cl)
 	instance.Status.ObservedGeneration = instance.Generation
 
+	// If we're not deleting this and the service object doesn't have our finalizer, add it.
+	if instance.DeletionTimestamp.IsZero() && controllerutil.AddFinalizer(instance, helper.GetFinalizer()) || isNewInstance {
+		return ctrl.Result{}, err
+	}
+
+	// Handle service delete
+	if !instance.DeletionTimestamp.IsZero() {
+		return r.reconcileDelete(ctx, instance, helper)
+	}
+
 	//
 	// Service account, role, binding
 	//
@@ -493,6 +504,11 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	pkgsvc := mariadb.ServiceForAdoption(instance, "galera", adoption)
 	service := &corev1.Service{ObjectMeta: pkgsvc.ObjectMeta}
 	op, err = controllerutil.CreateOrPatch(ctx, r.Client, service, func() error {
+		// Add finalizer to the svc to prevent deletion. If the svc gets deleted
+		// and re-created it will receive a new ClusterIP and connection from
+		// service get stuck.
+		controllerutil.AddFinalizer(service, helper.GetFinalizer())
+
 		// NOTE(dciabrin) We deploy Galera as an A/P service (i.e. no multi-master writes)
 		// by setting labels in the service's label selectors.
 		// This label is dynamically set based on the status of the Galera cluster,
@@ -871,7 +887,6 @@ func (r *GaleraReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // GetDatabaseObject - returns either a Galera or MariaDB object (and an associated client.Object interface).
 // used by both MariaDBDatabaseReconciler and MariaDBAccountReconciler
 // this will later return only Galera objects, so as a lookup it's part of the galera controller
-
 func GetDatabaseObject(ctx context.Context, clientObj client.Client, name string, namespace string) (*databasev1beta1.Galera, error) {
 	dbGalera := &databasev1beta1.Galera{
 		ObjectMeta: metav1.ObjectMeta{
@@ -918,4 +933,29 @@ func (r *GaleraReconciler) findObjectsForSrc(ctx context.Context, src client.Obj
 	}
 
 	return requests
+}
+
+func (r *GaleraReconciler) reconcileDelete(ctx context.Context, instance *databasev1beta1.Galera, helper *helper.Helper) (ctrl.Result, error) {
+	helper.GetLogger().Info("Reconciling Service delete")
+
+	// Remove our finalizer from the db svc
+	svc, err := service.GetServiceWithName(ctx, helper, instance.Name, instance.Namespace)
+	if err != nil && !k8s_errors.IsNotFound(err) {
+		return ctrl.Result{}, err
+	}
+
+	if !k8s_errors.IsNotFound(err) && svc != nil {
+		if controllerutil.RemoveFinalizer(svc, helper.GetFinalizer()) {
+			err := r.Update(ctx, svc)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+	}
+
+	// Service is deleted so remove the finalizer.
+	controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
+	helper.GetLogger().Info("Reconciled Service delete successfully")
+
+	return ctrl.Result{}, nil
 }
