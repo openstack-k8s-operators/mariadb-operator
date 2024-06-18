@@ -458,13 +458,12 @@ func (d *Database) DeleteFinalizer(
 	h *helper.Helper,
 ) error {
 
-	secretFinalizer := fmt.Sprintf("mariadb.openstack.org/%s", h.GetFinalizer())
-	if d.secretObj != nil && controllerutil.RemoveFinalizer(d.secretObj, secretFinalizer) {
+	if d.secretObj != nil && controllerutil.RemoveFinalizer(d.secretObj, h.GetFinalizer()) {
 		err := h.GetClient().Update(ctx, d.secretObj)
 		if err != nil && !k8s_errors.IsNotFound(err) {
 			return err
 		}
-		util.LogForObject(h, fmt.Sprintf("Removed finalizer %s from Secret %s", secretFinalizer, d.secretObj.Name), d.secretObj)
+		util.LogForObject(h, fmt.Sprintf("Removed finalizer %s from Secret %s", h.GetFinalizer(), d.secretObj.Name), d.secretObj)
 	}
 
 	if d.account != nil && controllerutil.RemoveFinalizer(d.account, h.GetFinalizer()) {
@@ -566,8 +565,7 @@ func DeleteUnusedMariaDBAccountFinalizers(
 				return err
 			}
 
-			secretFinalizer := fmt.Sprintf("mariadb.openstack.org/%s", h.GetFinalizer())
-			if dbSecret != nil && controllerutil.RemoveFinalizer(dbSecret, secretFinalizer) {
+			if dbSecret != nil && controllerutil.RemoveFinalizer(dbSecret, h.GetFinalizer()) {
 				err := h.GetClient().Update(ctx, dbSecret)
 				if err != nil && !k8s_errors.IsNotFound(err) {
 					h.GetLogger().Error(
@@ -651,7 +649,7 @@ func createOrPatchAccountAndSecret(
 			// GetDatabaseByNameAndAccount to locate the Database which is how
 			// they remove finalizers.  this will return not found if secret
 			// is not present, so finalizer will keep it around
-			controllerutil.AddFinalizer(accountSecret, fmt.Sprintf("mariadb.openstack.org/%s", h.GetFinalizer()))
+			controllerutil.AddFinalizer(accountSecret, h.GetFinalizer())
 
 			return nil
 		})
