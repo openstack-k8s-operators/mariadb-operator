@@ -29,6 +29,8 @@ const (
 
 	// GaleraContainerImage is the fall-back container image for Galera
 	GaleraContainerImage = "quay.io/podified-antelope-centos9/openstack-mariadb:current-podified"
+
+	storageRequestProdMin = "5G"
 )
 
 // AdoptionRedirectSpec defines redirection to a different DB instance during Adoption
