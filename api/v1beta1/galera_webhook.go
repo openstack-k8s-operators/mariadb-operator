@@ -17,11 +17,15 @@ limitations under the License.
 package v1beta1
 
 import (
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	common_webhook "github.com/openstack-k8s-operators/lib-common/modules/common/webhook"
 )
 
 // log is for logging in this package.
@@ -75,8 +79,42 @@ var _ webhook.Validator = &Galera{}
 func (r *Galera) ValidateCreate() (admission.Warnings, error) {
 	galeralog.Info("validate create", "name", r.Name)
 
-	// TODO(user): fill in your validation logic upon object creation.
-	return nil, nil
+	allErrs := field.ErrorList{}
+	allWarn := []string{}
+	basePath := field.NewPath("spec")
+
+	warn, err := r.Spec.ValidateCreate(basePath)
+
+	if err != nil {
+		allErrs = append(allErrs, err...)
+	}
+
+	if len(warn) != 0 {
+		allWarn = append(allWarn, warn...)
+	}
+
+	if len(allErrs) != 0 {
+		return allWarn, apierrors.NewInvalid(GroupVersion.WithKind("Galera").GroupKind(), r.Name, allErrs)
+	}
+
+	return allWarn, nil
+}
+
+// ValidateCreate - Exported function wrapping non-exported validate functions,
+// this function can be called externally to validate an KeystoneAPI spec.
+func (spec *GaleraSpec) ValidateCreate(basePath *field.Path) (admission.Warnings, field.ErrorList) {
+	return spec.GaleraSpecCore.ValidateCreate(basePath)
+}
+
+// ValidateCreate -
+func (spec *GaleraSpecCore) ValidateCreate(basePath *field.Path) (admission.Warnings, field.ErrorList) {
+	var allErrs field.ErrorList
+	allWarn := []string{}
+
+	warn, _ := common_webhook.ValidateStorageRequest(basePath, spec.StorageRequest, storageRequestProdMin, false)
+	allWarn = append(allWarn, warn...)
+
+	return allWarn, allErrs
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
