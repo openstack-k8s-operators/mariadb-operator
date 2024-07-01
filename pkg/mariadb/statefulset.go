@@ -41,84 +41,9 @@ func StatefulSet(g *mariadbv1.Galera, configHash string) *appsv1.StatefulSet {
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: g.RbacResourceName(),
-					InitContainers: []corev1.Container{{
-						Image:   g.Spec.ContainerImage,
-						Name:    "mysql-bootstrap",
-						Command: []string{"bash", "/var/lib/operator-scripts/mysql_bootstrap.sh"},
-						Env: []corev1.EnvVar{{
-							Name:  "KOLLA_BOOTSTRAP",
-							Value: "True",
-						}, {
-							Name:  "KOLLA_CONFIG_STRATEGY",
-							Value: "COPY_ALWAYS",
-						}, {
-							Name: "DB_ROOT_PASSWORD",
-							ValueFrom: &corev1.EnvVarSource{
-								SecretKeyRef: &corev1.SecretKeySelector{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: g.Spec.Secret,
-									},
-									Key: "DbRootPassword",
-								},
-							},
-						}},
-						VolumeMounts: getGaleraInitVolumeMounts(),
-					}},
-					Containers: []corev1.Container{{
-						Image: g.Spec.ContainerImage,
-						// ImagePullPolicy: "Always",
-						Name:    "galera",
-						Command: []string{"/usr/bin/dumb-init", "--", "/usr/local/bin/kolla_start"},
-						Env: []corev1.EnvVar{{
-							Name:  "CR_CONFIG_HASH",
-							Value: configHash,
-						}, {
-							Name:  "KOLLA_CONFIG_STRATEGY",
-							Value: "COPY_ALWAYS",
-						}, {
-							Name: "DB_ROOT_PASSWORD",
-							ValueFrom: &corev1.EnvVarSource{
-								SecretKeyRef: &corev1.SecretKeySelector{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: g.Spec.Secret,
-									},
-									Key: "DbRootPassword",
-								},
-							},
-						}},
-						Ports: []corev1.ContainerPort{{
-							ContainerPort: 3306,
-							Name:          "mysql",
-						}, {
-							ContainerPort: 4567,
-							Name:          "galera",
-						}},
-						VolumeMounts: getGaleraVolumeMounts(g),
-						StartupProbe: &corev1.Probe{
-							ProbeHandler: corev1.ProbeHandler{
-								Exec: &corev1.ExecAction{
-									Command: []string{"/bin/bash", "/var/lib/operator-scripts/mysql_probe.sh", "startup"},
-								},
-							},
-							PeriodSeconds:    10,
-							FailureThreshold: 30,
-						},
-						LivenessProbe: &corev1.Probe{
-							ProbeHandler: corev1.ProbeHandler{
-								Exec: &corev1.ExecAction{
-									Command: []string{"/bin/bash", "/var/lib/operator-scripts/mysql_probe.sh", "liveness"},
-								},
-							},
-						},
-						ReadinessProbe: &corev1.Probe{
-							ProbeHandler: corev1.ProbeHandler{
-								Exec: &corev1.ExecAction{
-									Command: []string{"/bin/bash", "/var/lib/operator-scripts/mysql_probe.sh", "readiness"},
-								},
-							},
-						},
-					}},
-					Volumes: getGaleraVolumes(g),
+					InitContainers:     getGaleraInitContainers(g),
+					Containers:         getGaleraContainers(g, configHash),
+					Volumes:            getGaleraVolumes(g),
 				},
 			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
@@ -158,4 +83,98 @@ func StatefulSet(g *mariadbv1.Galera, configHash string) *appsv1.StatefulSet {
 	}
 
 	return sts
+}
+
+func getGaleraInitContainers(g *mariadbv1.Galera) []corev1.Container {
+	return []corev1.Container{{
+		Image:   g.Spec.ContainerImage,
+		Name:    "mysql-bootstrap",
+		Command: []string{"bash", "/var/lib/operator-scripts/mysql_bootstrap.sh"},
+		Env: []corev1.EnvVar{{
+			Name:  "KOLLA_BOOTSTRAP",
+			Value: "True",
+		}, {
+			Name:  "KOLLA_CONFIG_STRATEGY",
+			Value: "COPY_ALWAYS",
+		}, {
+			Name: "DB_ROOT_PASSWORD",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: g.Spec.Secret,
+					},
+					Key: "DbRootPassword",
+				},
+			},
+		}},
+		VolumeMounts: getGaleraInitVolumeMounts(g),
+	}}
+}
+
+func getGaleraContainers(g *mariadbv1.Galera, configHash string) []corev1.Container {
+	containers := []corev1.Container{{
+		Image:   g.Spec.ContainerImage,
+		Name:    "galera",
+		Command: []string{"/usr/bin/dumb-init", "--", "/usr/local/bin/kolla_start"},
+		Env: []corev1.EnvVar{{
+			Name:  "CR_CONFIG_HASH",
+			Value: configHash,
+		}, {
+			Name:  "KOLLA_CONFIG_STRATEGY",
+			Value: "COPY_ALWAYS",
+		}, {
+			Name: "DB_ROOT_PASSWORD",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: g.Spec.Secret,
+					},
+					Key: "DbRootPassword",
+				},
+			},
+		}},
+		Ports: []corev1.ContainerPort{{
+			ContainerPort: 3306,
+			Name:          "mysql",
+		}, {
+			ContainerPort: 4567,
+			Name:          "galera",
+		}},
+		VolumeMounts: getGaleraVolumeMounts(g),
+		StartupProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"/bin/bash", "/var/lib/operator-scripts/mysql_probe.sh", "startup"},
+				},
+			},
+			PeriodSeconds:    10,
+			FailureThreshold: 30,
+		},
+		LivenessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"/bin/bash", "/var/lib/operator-scripts/mysql_probe.sh", "liveness"},
+				},
+			},
+		},
+		ReadinessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"/bin/bash", "/var/lib/operator-scripts/mysql_probe.sh", "readiness"},
+				},
+			},
+		},
+	}}
+	logSideCar := corev1.Container{
+		Image:        g.Spec.ContainerImage,
+		Name:         "log",
+		Command:      []string{"/usr/bin/dumb-init", "--", "/bin/sh", "-c", "tail -n+1 -F /var/log/mariadb/mariadb.log"},
+		VolumeMounts: getGaleraVolumeMounts(g),
+	}
+
+	if g.Spec.LogToDisk {
+		containers = append(containers, logSideCar)
+	}
+
+	return containers
 }
