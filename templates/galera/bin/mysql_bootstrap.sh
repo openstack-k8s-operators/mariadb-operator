@@ -3,6 +3,9 @@ set +eux
 
 if [ -e /var/lib/mysql/mysql ]; then
     echo -e "Database already exists. Reuse it."
+    # set up permissions of mounted directories before starting
+    # galera or the sidecar logging container
+    sudo -E kolla_set_configs
 else
     echo -e "Creating new mariadb database."
     # we need the right perm on the persistent directory,
