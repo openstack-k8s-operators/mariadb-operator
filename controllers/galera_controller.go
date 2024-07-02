@@ -802,7 +802,9 @@ func (r *GaleraReconciler) generateConfigMaps(
 	envVars *map[string]env.Setter,
 ) error {
 	log := GetLog(ctx, "galera")
-	templateParameters := make(map[string]interface{})
+	templateParameters := map[string]interface{}{
+		"logToDisk": instance.Spec.LogToDisk,
+	}
 	customData := make(map[string]string)
 	customData[mariadbv1.CustomServiceConfigFile] = instance.Spec.CustomServiceConfig
 

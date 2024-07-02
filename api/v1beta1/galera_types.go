@@ -81,6 +81,9 @@ type GaleraSpecCore struct {
 	// +kubebuilder:validation:Optional
 	// When TLS is configured, only allow connections to the DB over TLS
 	DisableNonTLSListeners bool `json:"disableNonTLSListeners,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Log Galera pod's output to disk
+	LogToDisk bool `json:"logToDisk"`
 }
 
 // GaleraAttributes holds startup information for a Galera host

@@ -1,0 +1,23 @@
+#
+# Check for the log side car container in the galera pod
+#
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: openstack-galera
+status:
+  availableReplicas: 1
+  readyReplicas: 1
+  replicas: 1
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: openstack-galera-0
+status:
+   containerStatuses:
+   - name: galera
+     ready: true
+   - name: log
+     ready: true

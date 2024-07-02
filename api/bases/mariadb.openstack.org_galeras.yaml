@@ -64,6 +64,9 @@ spec:
                 description: When TLS is configured, only allow connections to the
                   DB over TLS
                 type: boolean
+              logToDisk:
+                description: Log Galera pod's output to disk
+                type: boolean
               nodeSelector:
                 additionalProperties:
                   type: string
