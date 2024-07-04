@@ -56,8 +56,8 @@ func (r *MariaDBAccountReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 //+kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbaccounts,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbaccounts/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbaccounts/finalizers,verbs=update
-//+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;create;update;delete;
+//+kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbaccounts/finalizers,verbs=update;patch
+//+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;create;update;delete;patch
 
 // Reconcile
 func (r *MariaDBAccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, _err error) {
