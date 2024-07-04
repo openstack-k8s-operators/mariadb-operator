@@ -297,7 +297,7 @@ func assertPodsAttributesValidity(helper *helper.Helper, instance *mariadbv1.Gal
 // RBAC for galera resources
 // +kubebuilder:rbac:groups=mariadb.openstack.org,resources=galeras,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=mariadb.openstack.org,resources=galeras/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=mariadb.openstack.org,resources=galeras/finalizers,verbs=update
+// +kubebuilder:rbac:groups=mariadb.openstack.org,resources=galeras/finalizers,verbs=update;patch
 
 // RBAC for statefulsets
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
@@ -318,15 +318,15 @@ func assertPodsAttributesValidity(helper *helper.Helper, instance *mariadbv1.Gal
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete;
 
 // RBAC permissions to create service accounts, roles, role bindings
-// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update
-// +kubebuilder:rbac:groups="rbac.authorization.k8s.io",resources=roles,verbs=get;list;watch;create;update
-// +kubebuilder:rbac:groups="rbac.authorization.k8s.io",resources=rolebindings,verbs=get;list;watch;create;update
+// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch
+// +kubebuilder:rbac:groups="rbac.authorization.k8s.io",resources=roles,verbs=get;list;watch;create;update;patch
+// +kubebuilder:rbac:groups="rbac.authorization.k8s.io",resources=rolebindings,verbs=get;list;watch;create;update;patch
 
 // RBAC required to grant the service account role these capabilities
 // +kubebuilder:rbac:groups="security.openshift.io",resourceNames=anyuid,resources=securitycontextconstraints,verbs=use
 // +kubebuilder:rbac:groups="",resources=pods,verbs=create;delete;get;list;patch;update;watch
 
-// +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;delete;
+// +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;delete;patch
 
 // Reconcile - Galera
 func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, _err error) {
