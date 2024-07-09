@@ -6,7 +6,7 @@ require (
 	github.com/go-logr/logr v1.4.2
 	github.com/onsi/ginkgo/v2 v2.19.0
 	github.com/onsi/gomega v1.33.1
-	github.com/openstack-k8s-operators/lib-common/modules/common v0.3.1-0.20240624132705-6c8da3c0bbfd
+	github.com/openstack-k8s-operators/lib-common/modules/common v0.3.1-0.20240709171418-83ff4f73c986
 	github.com/openstack-k8s-operators/mariadb-operator/api v0.0.0-00010101000000-000000000000
 	golang.org/x/exp v0.0.0-20240205201215-2c58cdc269a3
 	k8s.io/api v0.28.11
@@ -77,3 +77,7 @@ require (
 )
 
 replace github.com/openstack-k8s-operators/mariadb-operator/api => ./api
+
+// mschuppert: map to latest commit from release-4.13 tag
+// must consistent within modules and service operators
+replace github.com/openshift/api => github.com/openshift/api v0.0.0-20230414143018-3367bc7e6ac7 //allow-merging
