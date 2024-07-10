@@ -28,7 +28,7 @@ function log_error() {
 
 function mysql_get_status {
     local name=$1
-    mysql -nNE -uroot -p$DB_ROOT_PASSWORD -e "show status like '${name}';" | tail -1
+    mysql -nNE -uroot -p"${DB_ROOT_PASSWORD}" -e "show status like '${name}';" | tail -1
     if [ $? != 0 ]; then
         log_error "could not get value of mysql variable '${name}' (rc=$?)"
         return 1
