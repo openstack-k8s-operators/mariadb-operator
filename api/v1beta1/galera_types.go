@@ -31,6 +31,11 @@ const (
 	GaleraContainerImage = "quay.io/podified-antelope-centos9/openstack-mariadb:current-podified"
 
 	storageRequestProdMin = "5G"
+
+	// CrMaxLengthCorrection - DNS1123LabelMaxLength (63) - CrMaxLengthCorrection used in validation to
+	// omit issue with statefulset pod label "controller-revision-hash": "<statefulset_name>-<hash>"
+	// Int32 is a 10 character + hyphen = 11 + len(-galera) = 17
+	CrMaxLengthCorrection = 17
 )
 
 // AdoptionRedirectSpec defines redirection to a different DB instance during Adoption
