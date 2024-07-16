@@ -142,6 +142,7 @@ func getGaleraVolumeMounts(g *mariadbv1.Galera) []corev1.VolumeMount {
 		{
 			MountPath: "/var/lib/mysql",
 			Name:      "mysql-db",
+			SubPath:   "mysql",
 		}, {
 			MountPath: "/var/lib/config-data/default",
 			ReadOnly:  true,
@@ -162,6 +163,10 @@ func getGaleraVolumeMounts(g *mariadbv1.Galera) []corev1.VolumeMount {
 			ReadOnly:  true,
 			Name:      "kolla-config",
 		},
+	}
+
+	if g.Spec.LogToDisk {
+		volumeMounts = append(volumeMounts, getGaleraLogMount())
 	}
 
 	if g.Spec.TLS.Enabled() {
@@ -182,11 +187,12 @@ func getGaleraVolumeMounts(g *mariadbv1.Galera) []corev1.VolumeMount {
 	return volumeMounts
 }
 
-func getGaleraInitVolumeMounts() []corev1.VolumeMount {
+func getGaleraInitVolumeMounts(g *mariadbv1.Galera) []corev1.VolumeMount {
 	volumeMounts := []corev1.VolumeMount{
 		{
 			MountPath: "/var/lib/mysql",
 			Name:      "mysql-db",
+			SubPath:   "mysql",
 		}, {
 			MountPath: "/var/lib/config-data/default",
 			ReadOnly:  true,
@@ -209,5 +215,17 @@ func getGaleraInitVolumeMounts() []corev1.VolumeMount {
 		},
 	}
 
+	if g.Spec.LogToDisk {
+		volumeMounts = append(volumeMounts, getGaleraLogMount())
+	}
+
 	return volumeMounts
+}
+
+func getGaleraLogMount() corev1.VolumeMount {
+	return corev1.VolumeMount{
+		MountPath: "/var/log/mariadb",
+		Name:      "mysql-db",
+		SubPath:   "log",
+	}
 }
