@@ -17,6 +17,8 @@ limitations under the License.
 package v1beta1
 
 import (
+	"fmt"
+
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -120,6 +122,11 @@ func (spec *GaleraSpecCore) ValidateCreate(basePath *field.Path) (admission.Warn
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *Galera) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
 	galeralog.Info("validate update", "name", r.Name)
+
+	oldGalera, ok := old.(*Galera)
+	if !ok || oldGalera == nil {
+		return nil, apierrors.NewInternalError(fmt.Errorf("unable to convert existing object"))
+	}
 
 	// TODO(user): fill in your validation logic upon object update.
 	return nil, nil

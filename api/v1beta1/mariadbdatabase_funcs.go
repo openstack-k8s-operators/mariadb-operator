@@ -420,10 +420,9 @@ func (d *Database) loadDatabaseAndAccountCRs(
 			h.GetBeforeObject(),
 			err,
 		)
-	} else {
-		d.account = mariaDBAccount
-		d.secretObj = secretObj
 	}
+	d.account = mariaDBAccount
+	d.secretObj = secretObj
 
 	return nil
 }
@@ -475,9 +474,12 @@ func (d *Database) DeleteFinalizer(
 
 		// also do a delete for "unused" MariaDBAccounts, associated with
 		// this MariaDBDatabase.
-		DeleteUnusedMariaDBAccountFinalizers(
+		err = DeleteUnusedMariaDBAccountFinalizers(
 			ctx, h, d.database.Name, d.account.Name, d.account.Namespace,
 		)
+		if err != nil && !k8s_errors.IsNotFound(err) {
+			return err
+		}
 	}
 	if controllerutil.RemoveFinalizer(d.database, h.GetFinalizer()) {
 		err := h.GetClient().Update(ctx, d.database)

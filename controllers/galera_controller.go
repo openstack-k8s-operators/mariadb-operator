@@ -202,7 +202,7 @@ func isGaleraContainerStartedAndWaiting(ctx context.Context, pod *corev1.Pod, in
 	waiting := false
 	err := mariadb.ExecInPod(ctx, h, config, instance.Namespace, pod.Name, "galera",
 		[]string{"/bin/bash", "-c", "test ! -f /var/lib/mysql/gcomm_uri && pgrep -aP1 | grep -o detect_gcomm_and_start.sh"},
-		func(stdout *bytes.Buffer, stderr *bytes.Buffer) error {
+		func(stdout *bytes.Buffer, _ *bytes.Buffer) error {
 			predicate := strings.TrimSuffix(stdout.String(), "\n")
 			waiting = (predicate == "detect_gcomm_and_start.sh")
 			return nil
@@ -219,7 +219,7 @@ func isGaleraContainerStartedAndWaiting(ctx context.Context, pod *corev1.Pod, in
 func injectGcommURI(ctx context.Context, h *helper.Helper, config *rest.Config, instance *mariadbv1.Galera, pod *corev1.Pod, uri string) error {
 	err := mariadb.ExecInPod(ctx, h, config, instance.Namespace, pod.Name, "galera",
 		[]string{"/bin/bash", "-c", "echo '" + uri + "' > /var/lib/mysql/gcomm_uri"},
-		func(stdout *bytes.Buffer, stderr *bytes.Buffer) error {
+		func(_ *bytes.Buffer, _ *bytes.Buffer) error {
 			attr := instance.Status.Attributes[pod.Name]
 			attr.Gcomm = uri
 			attr.ContainerID = pod.Status.ContainerStatuses[0].ContainerID
@@ -233,7 +233,7 @@ func injectGcommURI(ctx context.Context, h *helper.Helper, config *rest.Config, 
 func retrieveSequenceNumber(ctx context.Context, helper *helper.Helper, config *rest.Config, instance *mariadbv1.Galera, pod *corev1.Pod) error {
 	err := mariadb.ExecInPod(ctx, helper, config, instance.Namespace, pod.Name, "galera",
 		[]string{"/bin/bash", "/var/lib/operator-scripts/detect_last_commit.sh"},
-		func(stdout *bytes.Buffer, stderr *bytes.Buffer) error {
+		func(stdout *bytes.Buffer, _ *bytes.Buffer) error {
 			seqno := strings.TrimSuffix(stdout.String(), "\n")
 			attr := mariadbv1.GaleraAttributes{
 				Seqno: seqno,
