@@ -19,7 +19,7 @@ package v1beta1
 import (
 	"testing"
 
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //revive:disable:dot-imports
 	"github.com/openstack-k8s-operators/lib-common/modules/common/tls"
 	"k8s.io/utils/ptr"
 )

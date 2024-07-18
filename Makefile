@@ -107,8 +107,9 @@ fmt: ## Run go fmt against code.
 	go fmt ./...
 
 .PHONY: vet
-vet: ## Run go vet against code.
+vet: gowork ## Run go vet against code.
 	go vet ./...
+	go vet ./api/...
 
 .PHONY: tidy
 tidy: ## Run go mod tidy on every mod file in the repo
@@ -124,7 +125,7 @@ PROCS?=$(shell expr $(shell nproc --ignore 2) / 2)
 PROC_CMD = --procs ${PROCS}
 
 .PHONY: test
-test: manifests generate fmt vet envtest ## Run tests.
+test: manifests generate gowork fmt vet envtest ginkgo ## Run tests.
 	for mod in $(shell find . -name go.mod -exec dirname {} \;); do \
 		pushd ./$$mod ; \
 		if [ -f test/functional/suite_test.go ]; then \
@@ -330,23 +331,26 @@ get-ci-tools:
 
 # Run go fmt against code
 gofmt: get-ci-tools
-	$(CI_TOOLS_REPO_DIR)/test-runner/gofmt.sh
+	GOWORK=off $(CI_TOOLS_REPO_DIR)/test-runner/gofmt.sh
+	GOWORK=off $(CI_TOOLS_REPO_DIR)/test-runner/gofmt.sh ./api
 
 # Run go vet against code
 govet: get-ci-tools
-	$(CI_TOOLS_REPO_DIR)/test-runner/govet.sh
+	GOWORK=off $(CI_TOOLS_REPO_DIR)/test-runner/govet.sh
+	GOWORK=off $(CI_TOOLS_REPO_DIR)/test-runner/govet.sh ./api
 
 # Run go test against code
-gotest: get-ci-tools
-	$(CI_TOOLS_REPO_DIR)/test-runner/gotest.sh
+gotest: test
 
 # Run golangci-lint test against code
 golangci: get-ci-tools
-	$(CI_TOOLS_REPO_DIR)/test-runner/golangci.sh
+	GOWORK=off $(CI_TOOLS_REPO_DIR)/test-runner/golangci.sh
+	GOWORK=off $(CI_TOOLS_REPO_DIR)/test-runner/golangci.sh ./api
 
 # Run go lint against code
 golint: get-ci-tools
-	PATH=$(GOBIN):$(PATH); $(CI_TOOLS_REPO_DIR)/test-runner/golint.sh
+	GOWORK=off PATH=$(GOBIN):$(PATH); $(CI_TOOLS_REPO_DIR)/test-runner/golint.sh
+	GOWORK=off PATH=$(GOBIN):$(PATH); $(CI_TOOLS_REPO_DIR)/test-runner/golint.sh ./api
 
 .PHONY: operator-lint
 operator-lint: $(LOCALBIN) gowork ## Runs operator-lint
@@ -358,6 +362,7 @@ gowork: ## Generate go.work file
 	test -f go.work || go work init
 	go work use .
 	go work use ./api
+	go work sync
 
 # Used for webhook testing
 # Please ensure the mariadb-controller-manager deployment and
