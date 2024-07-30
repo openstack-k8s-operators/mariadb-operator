@@ -1,6 +1,7 @@
 package mariadb
 
 import (
+	common "github.com/openstack-k8s-operators/lib-common/modules/common"
 	labels "github.com/openstack-k8s-operators/lib-common/modules/common/labels"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -31,9 +32,10 @@ func LabelSelectors(database metav1.Object, dbType string) map[string]string {
 func StatefulSetLabels(database metav1.Object) map[string]string {
 	name := database.GetName()
 	return labels.GetLabels(database, "galera", map[string]string{
-		"owner": "mariadb-operator",
-		"app":   "galera",
-		"cr":    "galera-" + name,
+		"owner":            "mariadb-operator",
+		"app":              "galera",
+		"cr":               "galera-" + name,
+		common.AppSelector: StatefulSetName(name),
 	})
 }
 
