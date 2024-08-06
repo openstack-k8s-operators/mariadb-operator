@@ -691,7 +691,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	// Note:
 	//   . A pod is available in the statefulset if the pod's readiness
 	//     probe returns true (i.e. galera is running in the pod and clustered)
-	//   . Cluster is bootstrapped if as soon as one pod is available
+	//   . Cluster is bootstrapped as soon as one pod is available
 	instance.Status.Bootstrapped = statefulset.Status.AvailableReplicas > 0
 
 	if instance.Status.Bootstrapped {
@@ -708,8 +708,17 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 			}
 		}
 
+		runningPods := getRunningPodsMissingGcomm(ctx, podList.Items, instance, helper, r.config)
+		// Special case for 1-node deployment: if the statefulset reports 1 node is available
+		// but the pod shows up in runningPods (i.e. NotReady), do not consider it a joiner.
+		// Wait for the two statuses to re-sync after another k8s probe is run.
+		if *instance.Spec.Replicas == 1 && len(runningPods) == 1 {
+			log.Info("Galera node no longer running. Requeuing")
+			return ctrl.Result{RequeueAfter: time.Duration(3) * time.Second}, nil
+		}
+
 		// The other 'Running' pods can join the existing cluster.
-		for _, pod := range getRunningPodsMissingGcomm(ctx, podList.Items, instance, helper, r.config) {
+		for _, pod := range runningPods {
 			name := pod.Name
 			joinerURI := buildGcommURI(instance)
 			log.Info("Pushing gcomm URI to joiner", "pod", name)
