@@ -197,6 +197,16 @@ func getRunningPodsMissingGcomm(ctx context.Context, pods []corev1.Pod, instance
 	return
 }
 
+// getGaleraContainerID retrieves the ContainerID of the galera container running in a pod
+func getGaleraContainerID(pod *corev1.Pod) (found bool, CID string) {
+	for _, container := range pod.Status.ContainerStatuses {
+		if container.Name == "galera" {
+			return true, container.ContainerID
+		}
+	}
+	return false, ""
+}
+
 // isGaleraContainerStartedAndWaiting checks whether the galera container is waiting for a gcomm_uri file
 func isGaleraContainerStartedAndWaiting(ctx context.Context, pod *corev1.Pod, instance *mariadbv1.Galera, h *helper.Helper, config *rest.Config) bool {
 	waiting := false
@@ -282,14 +292,14 @@ func assertPodsAttributesValidity(helper *helper.Helper, instance *mariadbv1.Gal
 		// A node can have various attributes depending on its known state.
 		// A ContainerID attribute is only present if the node is being started.
 		attrCID := instance.Status.Attributes[pod.Name].ContainerID
-		podCID := pod.Status.ContainerStatuses[0].ContainerID
-		if attrCID != "" && attrCID != podCID {
+		containerFound, podCID := getGaleraContainerID(&pod)
+		if !containerFound || (attrCID != "" && attrCID != podCID) {
 			// This gcomm URI was pushed in a pod which was restarted
 			// before the attribute got cleared, which means the pod
 			// failed to start galera. Clear the attribute here, and
 			// reprobe the pod's state in the next reconcile loop
 			clearPodAttributes(instance, pod.Name)
-			util.LogForObject(helper, "Pod restarted while galera was starting", instance, "pod", pod.Name, "current pod ID", podCID, "recorded ID", attrCID)
+			util.LogForObject(helper, "Pod restarted while galera was starting", instance, "pod", pod.Name, "recorded ID", attrCID)
 		}
 	}
 }
