@@ -269,7 +269,7 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 		r.Client,
 		time.Duration(30)*time.Second,
 	)
-	if err != nil {
+	if (err != nil || secretResult != ctrl.Result{}) {
 
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			databasev1beta1.MariaDBAccountReadyCondition,
@@ -277,12 +277,7 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 			condition.SeverityInfo,
 			databasev1beta1.MariaDBAccountSecretNotReadyMessage, err))
 
-		if k8s_errors.IsNotFound(err) {
-			return secretResult, nil
-		}
-
-		return ctrl.Result{}, err
-
+		return secretResult, err
 	}
 
 	log.Info(fmt.Sprintf("Running account create '%s' MariaDBDatabase '%s'", instance.Name, mariadbDatabaseName))
