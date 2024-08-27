@@ -1,0 +1,7 @@
+---
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+commands:
+  - script: |
+      # ensure kubernetes pod key present
+      oc get -n ${NAMESPACE} service openstack -o yaml | grep "statefulset.kubernetes.io/pod-name: openstack-galera-"

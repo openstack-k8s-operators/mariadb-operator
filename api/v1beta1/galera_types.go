@@ -89,6 +89,9 @@ type GaleraSpecCore struct {
 	// +kubebuilder:validation:Optional
 	// Log Galera pod's output to disk
 	LogToDisk bool `json:"logToDisk"`
+	// +kubebuilder:default=false
+	// Use multi-master service routing
+	EnableMultiMaster bool `json:"enableMultiMaster"`
 }
 
 // GaleraAttributes holds startup information for a Galera host

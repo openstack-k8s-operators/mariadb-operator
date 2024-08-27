@@ -64,6 +64,10 @@ spec:
                 description: When TLS is configured, only allow connections to the
                   DB over TLS
                 type: boolean
+              enableMultiMaster:
+                default: false
+                description: Use multi-master service routing
+                type: boolean
               logToDisk:
                 description: Log Galera pod's output to disk
                 type: boolean
@@ -104,6 +108,7 @@ spec:
                 type: object
             required:
             - containerImage
+            - enableMultiMaster
             - replicas
             - secret
             - storageClass

@@ -509,16 +509,23 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		// service get stuck.
 		controllerutil.AddFinalizer(service, helper.GetFinalizer())
 
-		// NOTE(dciabrin) We deploy Galera as an A/P service (i.e. no multi-master writes)
-		// by setting labels in the service's label selectors.
-		// This label is dynamically set based on the status of the Galera cluster,
-		// so in this CreateOrPatch block we must reuse whatever is present in
-		// the existing service CR in case we're patching it.
-		activePod, present := service.Spec.Selector[mariadb.ActivePodSelectorKey]
-		service.Spec = pkgsvc.Spec
-		if present {
-			service.Spec.Selector[mariadb.ActivePodSelectorKey] = activePod
+		if !instance.Spec.EnableMultiMaster {
+			// NOTE(dciabrin) We deploy Galera as an A/P service (i.e. no multi-master writes)
+			// by setting labels in the service's label selectors.
+			// This label is dynamically set based on the status of the Galera cluster,
+			// so in this CreateOrPatch block we must reuse whatever is present in
+			// the existing service CR in case we're patching it.
+			activePod, present := service.Spec.Selector[mariadb.ActivePodSelectorKey]
+			service.Spec = pkgsvc.Spec
+
+			if present {
+				service.Spec.Selector[mariadb.ActivePodSelectorKey] = activePod
+			}
+		} else {
+			service.Spec = pkgsvc.Spec
+			delete(service.Spec.Selector, mariadb.ActivePodSelectorKey)
 		}
+
 		err := controllerutil.SetControllerReference(instance, service, r.Client.Scheme())
 		if err != nil {
 			return err
