@@ -27,6 +27,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	helper "github.com/openstack-k8s-operators/lib-common/modules/common/helper"
@@ -145,7 +147,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	// here we know that Galera exists so add a finalizer to ourselves and to the db CR. Before this point there is no reason to have a finalizer on ourselves as nothing to cleanup.
 	if instance.DeletionTimestamp.IsZero() || isNewInstance { // this condition can be removed if you wish as it is always true at this point otherwise we would returned earlier.
-		if controllerutil.AddFinalizer(dbGalera, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
+		if dbGalera.DeletionTimestamp.IsZero() && controllerutil.AddFinalizer(dbGalera, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
 			err := r.Update(ctx, dbGalera)
 			if err != nil {
 				return ctrl.Result{}, err
@@ -245,8 +247,42 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 // SetupWithManager -
 func (r *MariaDBDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	updateStatusFn := func(ctx context.Context, o client.Object) []reconcile.Request {
+		log := GetLog(ctx, "MariaDBDatabase")
+
+		result := []reconcile.Request{}
+
+		mariaDBDatabases := &databasev1beta1.MariaDBDatabaseList{}
+
+		listOpts := []client.ListOption{
+			client.InNamespace(o.GetNamespace()),
+		}
+		if err := r.Client.List(ctx, mariaDBDatabases, listOpts...); err != nil {
+			log.Error(err, "Unable to retrieve MariaDBDatabase CRs %w")
+			return nil
+		}
+
+		for _, cr := range mariaDBDatabases.Items {
+
+			if o.GetName() == cr.GetLabels()["dbName"] {
+				name := client.ObjectKey{
+					Namespace: o.GetNamespace(),
+					Name:      cr.Name,
+				}
+				log.Info(fmt.Sprintf("Galera %s is used by MariaDBDatabase CR %s", o.GetName(), cr.Name))
+				result = append(result, reconcile.Request{NamespacedName: name})
+			}
+		}
+
+		if len(result) > 0 {
+			return result
+		}
+		return nil
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&databasev1beta1.MariaDBDatabase{}).
+		Watches(&databasev1beta1.Galera{}, handler.EnqueueRequestsFromMapFunc(updateStatusFn)).
 		Complete(r)
 }
 

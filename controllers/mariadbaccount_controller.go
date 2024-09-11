@@ -63,6 +63,8 @@ func (r *MariaDBAccountReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *MariaDBAccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, _err error) {
 	log := GetLog(ctx, "MariaDBAccount")
 
+	log.Info("this is a test")
+
 	var err error
 
 	instance := &databasev1beta1.MariaDBAccount{}
