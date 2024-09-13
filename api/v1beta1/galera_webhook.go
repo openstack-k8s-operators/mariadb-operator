@@ -79,9 +79,13 @@ var _ webhook.Validator = &Galera{}
 func (r *Galera) ValidateCreate() (admission.Warnings, error) {
 	galeralog.Info("validate create", "name", r.Name)
 
-	allErrs := field.ErrorList{}
 	allWarn := []string{}
 	basePath := field.NewPath("spec")
+
+	allErrs := common_webhook.ValidateDNS1123Label(
+		field.NewPath("metadata").Child("name"),
+		[]string{r.Name},
+		CrMaxLengthCorrection) // omit issue with  statefulset pod label "controller-revision-hash": "<statefulset_name>-<hash>"
 
 	warn, err := r.Spec.ValidateCreate(basePath)
 

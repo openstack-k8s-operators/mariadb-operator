@@ -6,11 +6,11 @@ require (
 	github.com/go-logr/logr v1.4.2
 	github.com/onsi/ginkgo/v2 v2.19.0
 	github.com/onsi/gomega v1.33.1
-	github.com/openstack-k8s-operators/lib-common/modules/common v0.3.1-0.20240730154700-e526dc22c2bf
+	github.com/openstack-k8s-operators/lib-common/modules/common v0.3.1-0.20240913084932-eb5ec1aa13b5
 	k8s.io/api v0.28.11
 	k8s.io/apimachinery v0.28.11
 	k8s.io/client-go v0.28.11
-	k8s.io/utils v0.0.0-20240502163921-fe8a2dddb1d0
+	k8s.io/utils v0.0.0-20240711033017-18e509b52bc8
 	sigs.k8s.io/controller-runtime v0.16.6
 )
 
