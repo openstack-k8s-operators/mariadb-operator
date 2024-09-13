@@ -539,18 +539,32 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	clusterPropertiesEnv := make(map[string]env.Setter)
 
 	// Check and hash inputs
-	secretName := instance.Spec.Secret
 	// NOTE do not hash the db root password, as its change requires
 	// more orchestration than a simple rolling restart
-	_, _, err = secret.GetSecret(ctx, helper, secretName, instance.Namespace)
+	_, res, err := secret.VerifySecret(
+		ctx,
+		types.NamespacedName{Namespace: instance.Namespace, Name: instance.Spec.Secret},
+		[]string{
+			"DbRootPassword",
+		},
+		helper.GetClient(),
+		time.Duration(5)*time.Second)
 	if err != nil {
+		if k8s_errors.IsNotFound(err) {
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.InputReadyCondition,
+				condition.RequestedReason,
+				condition.SeverityInfo,
+				condition.InputReadyWaitingMessage))
+			return res, fmt.Errorf("OpenStack secret %s not found", instance.Spec.Secret)
+		}
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.InputReadyCondition,
 			condition.ErrorReason,
 			condition.SeverityWarning,
 			condition.InputReadyErrorMessage,
 			err.Error()))
-		return ctrl.Result{}, fmt.Errorf("error calculating input hash: %w", err)
+		return ctrl.Result{}, err
 	}
 	instance.Status.Conditions.MarkTrue(condition.InputReadyCondition, condition.InputReadyMessage)
 
