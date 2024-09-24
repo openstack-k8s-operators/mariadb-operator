@@ -57,7 +57,7 @@ func StatefulSet(g *mariadbv1.Galera, configHash string) *appsv1.StatefulSet {
 							"ReadWriteOnce",
 						},
 						StorageClassName: &storage,
-						Resources: corev1.ResourceRequirements{
+						Resources: corev1.VolumeResourceRequirements{
 							Requests: corev1.ResourceList{
 								"storage": storageRequest,
 							},
