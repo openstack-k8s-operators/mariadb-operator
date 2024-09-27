@@ -15,11 +15,14 @@ CACERT=${SERVICEACCOUNT}/ca.crt
 RETRIES=6
 WAIT=1
 
+
 ##
 ## Utilities functions
 ##
+## NOTE: mysql diverts this script's stdout, but stderr is logged to the
+## configured log-error file (e.g. /var/log/mariadb/mariadb.log)
 function log() {
-    echo "$(date +%F_%H_%M_%S) `basename $0` $*"
+    echo "$(date +%F_%H_%M_%S) `basename $0` $*" >&2
 }
 
 function log_error() {
@@ -65,6 +68,11 @@ function api_server {
     if echo "${output}" | grep -q '"status": "Failure"'; then
         message=$(echo "${output}" | parse_output '["message"]')
         code=$(echo "${output}" | parse_output '["code"]')
+        if [ "${code}" = 401 ]; then
+            # Unauthorized means the token is no longer valid as the galera
+            # resource is in the process of being deleted.
+            return 2
+        fi
         log_error "API server returned an error for service ${SERVICE}: ${message} (code=${code})"
         return 1
     fi
@@ -98,9 +106,16 @@ function retry {
     local retries=$RETRIES
     local wait=$WAIT
     local rc=1
+
     $action
     rc=$?
     while [ $rc -ne 0 -a $retries -gt 0 ]; do
+        # if API call are unauthorized, the resource is being deleted
+        # exit now as there is nothing more to do
+        if [ $rc -eq 2 ]; then
+            log "galera resource is being deleted, exit now."
+            return 0
+        fi
         log_error "previous action failed, retrying."
         sleep $wait
         $action
@@ -129,7 +144,8 @@ function reconfigure_service_endpoint {
     fi
 
     CURRENT_SVC=$(api_server GET "$SERVICE")
-    [ $? == 0 ] || return 1
+    local rc=$?
+    [ $rc == 0 ] || return $rc
 
     CURRENT_ENDPOINT=$(echo "$CURRENT_SVC" | parse_output '["spec"]["selector"].get("statefulset.kubernetes.io/pod-name","")')
     [ $? == 0 ] || return 1
@@ -151,7 +167,8 @@ function reconfigure_service_endpoint {
 ## Change the Active endpoint from the service
 function remove_service_endpoint {
     CURRENT_SVC=$(api_server GET "$SERVICE")
-    [ $? == 0 ] || return 1
+    local rc=$?
+    [ $rc == 0 ] || return $rc
 
     CURRENT_ENDPOINT=$(echo "$CURRENT_SVC" | parse_output '["spec"]["selector"].get("statefulset.kubernetes.io/pod-name","")')
     [ $? == 0 ] || return 1
@@ -174,9 +191,6 @@ function remove_service_endpoint {
 
 ## Main
 
-# mysql diverts this script's stdout/stderr, so in order for its output
-# to be logged properly, reuse dumb-init's stdout
-exec &> >(tee -a /proc/1/fd/1) 2>&1
 log "called with args: $*"
 
 # Galera always calls script with --status argument
