@@ -78,7 +78,7 @@ func StatefulSet(g *mariadbv1.Galera, configHash string) *appsv1.StatefulSet {
 		},
 		corev1.LabelHostname,
 	)
-	if g.Spec.NodeSelector != nil && len(g.Spec.NodeSelector) > 0 {
+	if len(g.Spec.NodeSelector) > 0 {
 		sts.Spec.Template.Spec.NodeSelector = g.Spec.NodeSelector
 	}
 
@@ -161,6 +161,13 @@ func getGaleraContainers(g *mariadbv1.Galera, configHash string) []corev1.Contai
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{"/bin/bash", "/var/lib/operator-scripts/mysql_probe.sh", "readiness"},
+				},
+			},
+		},
+		Lifecycle: &corev1.Lifecycle{
+			PreStop: &corev1.LifecycleHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"/bin/bash", "/var/lib/operator-scripts/mysql_shutdown.sh"},
 				},
 			},
 		},

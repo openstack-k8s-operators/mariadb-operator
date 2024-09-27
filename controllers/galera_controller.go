@@ -19,6 +19,7 @@ package controllers
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
@@ -94,20 +95,31 @@ func GetLog(ctx context.Context, controller string) logr.Logger {
 //
 
 // findBestCandidate returns the node with the lowest seqno
-func findBestCandidate(status *mariadbv1.GaleraStatus) string {
-	sortednodes := maps.Keys(status.Attributes)
+func findBestCandidate(g *mariadbv1.Galera) (node string, found bool) {
+	sortednodes := maps.Keys(g.Status.Attributes)
 	sort.Strings(sortednodes)
 	bestnode := ""
 	bestseqno := -1
 	for _, node := range sortednodes {
-		seqno := status.Attributes[node].Seqno
+		// On clean shutdown, galera sets the last
+		// stopped node as 'safe to bootstrap', so use
+		// this hint when we can
+		if g.Status.Attributes[node].SafeToBootstrap {
+			return node, true
+		}
+		seqno := g.Status.Attributes[node].Seqno
 		intseqno, _ := strconv.Atoi(seqno)
 		if intseqno >= bestseqno {
 			bestnode = node
 			bestseqno = intseqno
 		}
 	}
-	return bestnode //"galera-0"
+	// if we pass here, a candidate is only valid if we
+	// inspected all the expected replicas (e.g. typically 3)
+	if len(g.Status.Attributes) != int(*g.Spec.Replicas) {
+		return "", false
+	}
+	return bestnode, true //"galera-0"
 }
 
 // buildGcommURI builds a gcomm URI for a galera instance
@@ -230,18 +242,22 @@ func injectGcommURI(ctx context.Context, h *helper.Helper, config *rest.Config, 
 }
 
 // retrieveSequenceNumber probes a pod's galera instance for sequence number
-func retrieveSequenceNumber(ctx context.Context, helper *helper.Helper, config *rest.Config, instance *mariadbv1.Galera, pod *corev1.Pod) error {
-	err := mariadb.ExecInPod(ctx, helper, config, instance.Namespace, pod.Name, "galera",
+func retrieveSequenceNumber(ctx context.Context, helper *helper.Helper, config *rest.Config, instance *mariadbv1.Galera, pod *corev1.Pod) (errStr []string, err error) {
+	errStr = nil
+	err = mariadb.ExecInPod(ctx, helper, config, instance.Namespace, pod.Name, "galera",
 		[]string{"/bin/bash", "/var/lib/operator-scripts/detect_last_commit.sh"},
-		func(stdout *bytes.Buffer, _ *bytes.Buffer) error {
-			seqno := strings.TrimSuffix(stdout.String(), "\n")
-			attr := mariadbv1.GaleraAttributes{
-				Seqno: seqno,
+		func(stdout *bytes.Buffer, stderr *bytes.Buffer) error {
+			var attr mariadbv1.GaleraAttributes
+			if err := json.Unmarshal(stdout.Bytes(), &attr); err != nil {
+				return err
+			}
+			if stderr.Len() > 0 {
+				errStr = strings.Split(strings.TrimSuffix(stderr.String(), "\n"), "\n")
 			}
 			instance.Status.Attributes[pod.Name] = attr
 			return nil
 		})
-	return err
+	return
 }
 
 // clearPodAttributes clears information known by the operator about a pod
@@ -753,7 +769,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		for _, pod := range getReadyPods(podList.Items) {
 			name := pod.Name
 			if _, found := instance.Status.Attributes[name]; found {
-				log.Info("Galera started on", "pod", pod.Name)
+				log.Info("Galera started", "pod", name)
 				clearPodAttributes(instance, name)
 			}
 		}
@@ -793,21 +809,36 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	//   . any other status means the the pod is starting/restarting. We can't
 	//     exec into the pod yet, so we will probe it in another reconcile loop.
 	if !instance.Status.Bootstrapped && !isBootstrapInProgress(instance) {
+		var node string
+		found := false
 		for _, pod := range getRunningPodsMissingAttributes(ctx, podList.Items, instance, helper, r.config) {
 			name := pod.Name
 			util.LogForObject(helper, fmt.Sprintf("Pod %s running, retrieve seqno", name), instance)
-			err := retrieveSequenceNumber(ctx, helper, r.config, instance, &pod)
+			warn, err := retrieveSequenceNumber(ctx, helper, r.config, instance, &pod)
+			if len(warn) > 0 {
+				util.LogForObject(helper, fmt.Sprintf("Warning: %q", warn), instance)
+			}
 			if err != nil {
-				log.Error(err, "Failed to retrieve seqno for ", "name", name)
+				log.Error(err, fmt.Sprintf("Failed to retrieve seqno for %s", name))
 				return ctrl.Result{}, err
 			}
-			log.Info("", "Pod", name, "seqno:", instance.Status.Attributes[name].Seqno)
+			log.Info(fmt.Sprintf("Attributes retrieved for %s", name),
+				"UUID", instance.Status.Attributes[name].UUID,
+				"Seqno", instance.Status.Attributes[name].Seqno,
+				"SafeToBootstrap", instance.Status.Attributes[name].SafeToBootstrap,
+			)
+			if instance.Status.Attributes[name].SafeToBootstrap {
+				node = name
+				found = true
+				break
+			}
 		}
 
 		// Check if we have enough info to bootstrap the cluster now
-		if (len(instance.Status.Attributes) > 0) &&
-			(len(instance.Status.Attributes) == len(podList.Items)) {
-			node := findBestCandidate(&instance.Status)
+		if !found {
+			node, found = findBestCandidate(instance)
+		}
+		if found {
 			pod := getPodFromName(podList.Items, node)
 			log.Info("Pushing gcomm URI to bootstrap", "pod", node)
 			// Setting the gcomm attribute marks this pod as 'currently bootstrapping the cluster'

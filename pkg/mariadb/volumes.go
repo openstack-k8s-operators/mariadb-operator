@@ -102,6 +102,10 @@ func getGaleraVolumes(g *mariadbv1.Galera) []corev1.Volume {
 							Path: "mysql_probe.sh",
 						},
 						{
+							Key:  "mysql_shutdown.sh",
+							Path: "mysql_shutdown.sh",
+						},
+						{
 							Key:  "detect_last_commit.sh",
 							Path: "detect_last_commit.sh",
 						},
