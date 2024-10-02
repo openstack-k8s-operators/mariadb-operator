@@ -1,29 +1,12 @@
 package mariadb
 
 import (
-	"net"
-
-	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ServiceForAdoption - create a service based on the adoption configuration
-func ServiceForAdoption(db metav1.Object, dbType string, adoption *databasev1beta1.AdoptionRedirectSpec) *corev1.Service {
-	adoptionHost := adoption.Host
-	adoptionHostIsIP := adoptionHost == "" || net.ParseIP(adoptionHost) != nil
-
-	if adoptionHost != "" {
-		if adoptionHostIsIP {
-			return externalServiceFromIP(db)
-		}
-		return externalServiceFromName(db, adoption)
-	}
-	return internalService(db, dbType)
-}
-
-func internalService(db metav1.Object, dbType string) *corev1.Service {
-	selectors := LabelSelectors(db, dbType)
+func Service(db metav1.Object) *corev1.Service {
+	selectors := LabelSelectors(db, "galera")
 	// NOTE(dciabrin) we currently deploy the Galera cluster as A/P,
 	// by configuring the service's label selector to create
 	// a single endpoint matching a single pod's name.
@@ -55,36 +38,6 @@ func internalService(db metav1.Object, dbType string) *corev1.Service {
 			Ports: []corev1.ServicePort{
 				{Name: "database", Port: 3306, Protocol: corev1.ProtocolTCP},
 			},
-		},
-	}
-	return svc
-}
-
-func externalServiceFromIP(db metav1.Object) *corev1.Service {
-	svc := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      db.GetName(),
-			Namespace: db.GetNamespace(),
-			Labels:    ServiceLabels(db),
-		},
-		Spec: corev1.ServiceSpec{
-			ClusterIP: "None",
-			Type:      corev1.ServiceTypeClusterIP,
-		},
-	}
-	return svc
-}
-
-func externalServiceFromName(db metav1.Object, adoption *databasev1beta1.AdoptionRedirectSpec) *corev1.Service {
-	svc := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      db.GetName(),
-			Namespace: db.GetNamespace(),
-			Labels:    ServiceLabels(db),
-		},
-		Spec: corev1.ServiceSpec{
-			ExternalName: adoption.Host,
-			Type:         corev1.ServiceTypeExternalName,
 		},
 	}
 	return svc

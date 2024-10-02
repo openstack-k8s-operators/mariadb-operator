@@ -38,12 +38,6 @@ const (
 	CrMaxLengthCorrection = 17
 )
 
-// AdoptionRedirectSpec defines redirection to a different DB instance during Adoption
-type AdoptionRedirectSpec struct {
-	// MariaDB host to redirect to (IP or name)
-	Host string `json:"host,omitempty"`
-}
-
 // GaleraSpec defines the desired state of Galera
 type GaleraSpec struct {
 	GaleraSpecCore `json:",inline"`
@@ -76,9 +70,6 @@ type GaleraSpecCore struct {
 	// or overwrite rendered information using raw MariaDB config format.
 	// The content gets added to /etc/my.cnf.d/galera_custom.cnf
 	CustomServiceConfig string `json:"customServiceConfig,omitempty"`
-	// +kubebuilder:validation:Optional
-	// Adoption configuration
-	AdoptionRedirect AdoptionRedirectSpec `json:"adoptionRedirect"`
 	// +kubebuilder:validation:Optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec
 	// TLS settings for MySQL service and internal Galera replication
