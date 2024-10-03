@@ -44,13 +44,6 @@ spec:
           spec:
             description: GaleraSpec defines the desired state of Galera
             properties:
-              adoptionRedirect:
-                description: Adoption configuration
-                properties:
-                  host:
-                    description: MariaDB host to redirect to (IP or name)
-                    type: string
-                type: object
               containerImage:
                 description: Name of the galera container image to run (will be set
                   to environmental default if empty)

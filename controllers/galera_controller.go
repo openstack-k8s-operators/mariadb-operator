@@ -407,7 +407,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		condition.UnknownCondition(condition.InputReadyCondition, condition.InitReason, condition.InputReadyInitMessage),
 		// TLS cert secrets
 		condition.UnknownCondition(condition.TLSInputReadyCondition, condition.InitReason, condition.InputReadyInitMessage),
-		// endpoint for adoption redirect
+		// service (expose database to pods) and headless service (between galera pods)
 		condition.UnknownCondition(condition.ExposeServiceReadyCondition, condition.InitReason, condition.ExposeServiceReadyInitMessage),
 		// configmap generation
 		condition.UnknownCondition(condition.ServiceConfigReadyCondition, condition.InitReason, condition.ServiceConfigReadyInitMessage),
@@ -464,34 +464,6 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	// Create/Update all the resources associated to this galera instance
 	//
 
-	adoption := &instance.Spec.AdoptionRedirect
-
-	// Endpoints
-	endpoints := mariadb.EndpointsForAdoption(instance, adoption)
-	if endpoints != nil {
-		op, err := controllerutil.CreateOrPatch(ctx, r.Client, endpoints, func() error {
-			err := controllerutil.SetControllerReference(instance, endpoints, r.Scheme)
-			if err != nil {
-				return err
-			}
-			return nil
-		})
-		if err != nil {
-			instance.Status.Conditions.Set(condition.FalseCondition(
-				condition.ExposeServiceReadyCondition,
-				condition.ErrorReason,
-				condition.SeverityWarning,
-				condition.ExposeServiceReadyErrorMessage,
-				err.Error()))
-			return ctrl.Result{}, err
-		}
-		if op != controllerutil.OperationResultNone {
-			log.Info("", "Kind", instance.Kind, "Name", instance.Name, "database endpoints", endpoints.Name, "operation:", string(op))
-		}
-	}
-
-	instance.Status.Conditions.MarkTrue(condition.ExposeServiceReadyCondition, condition.ExposeServiceReadyMessage)
-
 	// the headless service provides DNS entries for pods
 	// the name of the resource must match the name of the app selector
 	pkghl := mariadb.HeadlessService(instance)
@@ -511,7 +483,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		log.Info("", "Kind", instance.Kind, "Name", instance.Name, "database headless service", headless.Name, "operation", string(op))
 	}
 
-	pkgsvc := mariadb.ServiceForAdoption(instance, "galera", adoption)
+	pkgsvc := mariadb.Service(instance)
 	service := &corev1.Service{ObjectMeta: pkgsvc.ObjectMeta}
 	op, err = controllerutil.CreateOrPatch(ctx, r.Client, service, func() error {
 		// Add finalizer to the svc to prevent deletion. If the svc gets deleted
@@ -541,6 +513,8 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	if op != controllerutil.OperationResultNone {
 		log.Info("", "Kind", instance.Kind, "Name", instance.Name, "database service", service.Name, "operation", string(op))
 	}
+
+	instance.Status.Conditions.MarkTrue(condition.ExposeServiceReadyCondition, condition.ExposeServiceReadyMessage)
 
 	// Map of all resources that may cause a rolling service restart
 	inputHashEnv := make(map[string]env.Setter)
