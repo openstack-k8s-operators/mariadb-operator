@@ -34,7 +34,6 @@ import (
 
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -362,7 +361,6 @@ func (d *Database) loadDatabaseAndAccountCRs(
 	ctx context.Context,
 	h *helper.Helper,
 ) error {
-	mariaDBDatabase := &MariaDBDatabase{}
 	name := d.name
 	namespace := d.namespace
 	accountName := d.accountName
@@ -384,13 +382,7 @@ func (d *Database) loadDatabaseAndAccountCRs(
 		)
 	}
 
-	err := h.GetClient().Get(
-		ctx,
-		types.NamespacedName{
-			Name:      name,
-			Namespace: namespace,
-		},
-		mariaDBDatabase)
+	mariaDBDatabase, err := GetDatabase(ctx, h, name, namespace)
 
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
@@ -532,6 +524,71 @@ func (d *Database) GetDatabaseClientConfig(s *tls.Service) string {
 	return strings.Join(conn, "\n")
 }
 
+// DeleteDatabaseAndAccountFinalizers performs the same tasks as
+// GetDatabaseByNameAndAccount and then database.DeleteFinalizer, but does
+// so such that all individual objects that exist are guaranteed to be updated,
+// even if other objects in the Database combination don't exist.  This
+// includes the MariaDBDatabase, all MariaDBAccount objects and their
+// associated Secret objects.
+func DeleteDatabaseAndAccountFinalizers(
+	ctx context.Context,
+	h *helper.Helper,
+	name string,
+	accountName string,
+	namespace string,
+) error {
+
+	databaseAccount, err := GetAccount(ctx, h, accountName, namespace)
+	if err != nil && !k8s_errors.IsNotFound(err) {
+		return err
+	} else if err == nil {
+		if databaseAccount.Spec.Secret != "" {
+			dbSecret, _, err := secret.GetSecret(ctx, h, databaseAccount.Spec.Secret, namespace)
+			if err != nil && !k8s_errors.IsNotFound(err) {
+				return err
+			}
+
+			if err == nil && controllerutil.RemoveFinalizer(dbSecret, h.GetFinalizer()) {
+				err := h.GetClient().Update(ctx, dbSecret)
+				if err != nil && !k8s_errors.IsNotFound(err) {
+					return err
+				}
+				util.LogForObject(h, fmt.Sprintf("Removed finalizer %s from Secret %s", h.GetFinalizer(), dbSecret.Name), dbSecret)
+			}
+		}
+
+		if controllerutil.RemoveFinalizer(databaseAccount, h.GetFinalizer()) {
+			err := h.GetClient().Update(ctx, databaseAccount)
+			if err != nil && !k8s_errors.IsNotFound(err) {
+				return err
+			}
+			util.LogForObject(h, fmt.Sprintf("Removed finalizer %s from MariaDBAccount %s", h.GetFinalizer(), databaseAccount.Name), databaseAccount)
+		}
+	}
+
+	// also do a delete for "unused" MariaDBAccounts, associated with
+	// this MariaDBDatabase.
+	err = DeleteUnusedMariaDBAccountFinalizers(
+		ctx, h, name, accountName, namespace,
+	)
+	if err != nil && !k8s_errors.IsNotFound(err) {
+		return err
+	}
+
+	mariaDBDatabase, err := GetDatabase(ctx, h, name, namespace)
+	if err != nil && !k8s_errors.IsNotFound(err) {
+		return err
+	} else if err == nil && controllerutil.RemoveFinalizer(mariaDBDatabase, h.GetFinalizer()) {
+		err := h.GetClient().Update(ctx, mariaDBDatabase)
+		if err != nil && !k8s_errors.IsNotFound(err) {
+			return err
+		}
+		util.LogForObject(h, fmt.Sprintf("Removed finalizer %s from MariaDBDatabase %s", h.GetFinalizer(), mariaDBDatabase.Spec.Name), mariaDBDatabase)
+	}
+
+	return nil
+}
+
 // DeleteUnusedMariaDBAccountFinalizers searches for all MariaDBAccounts
 // associated with the given MariaDBDatabase name and removes the finalizer for all
 // of them except for the given named account.
@@ -667,6 +724,26 @@ func createOrPatchAccountAndSecret(
 	})
 
 	return opAcc, errAcc
+}
+
+// GetDatabase returns an existing MariaDBDatabase object from the cluster
+func GetDatabase(ctx context.Context,
+	h *helper.Helper,
+	name string, namespace string,
+) (*MariaDBDatabase, error) {
+	mariaDBDatabase := &MariaDBDatabase{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+	}
+	objectKey := client.ObjectKeyFromObject(mariaDBDatabase)
+
+	err := h.GetClient().Get(ctx, objectKey, mariaDBDatabase)
+	if err != nil {
+		return nil, err
+	}
+	return mariaDBDatabase, err
 }
 
 // GetAccount returns an existing MariaDBAccount object from the cluster
