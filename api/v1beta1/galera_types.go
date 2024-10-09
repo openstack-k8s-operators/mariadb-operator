@@ -84,8 +84,14 @@ type GaleraSpecCore struct {
 
 // GaleraAttributes holds startup information for a Galera host
 type GaleraAttributes struct {
+	// UUID of the partition that is seen by the galera node
+	UUID string `json:"uuid,omitempty"`
 	// Last recorded replication sequence number in the DB
 	Seqno string `json:"seqno"`
+	// This galera node can bootstrap a galera cluster
+	SafeToBootstrap bool `json:"safe_to_bootstrap,omitempty"`
+	// This galera node has its state recovered from the DB
+	NoGrastate bool `json:"no_grastate,omitempty"`
 	// Gcomm URI used to connect to the galera cluster
 	Gcomm string `json:"gcomm,omitempty"`
 	// Identifier of the container at the time the gcomm URI was injected

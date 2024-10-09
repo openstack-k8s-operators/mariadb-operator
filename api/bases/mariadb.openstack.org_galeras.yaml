@@ -117,9 +117,20 @@ spec:
                     gcomm:
                       description: Gcomm URI used to connect to the galera cluster
                       type: string
+                    no_grastate:
+                      description: This galera node has its state recovered from the
+                        DB
+                      type: boolean
+                    safe_to_bootstrap:
+                      description: This galera node can bootstrap a galera cluster
+                      type: boolean
                     seqno:
                       description: Last recorded replication sequence number in the
                         DB
+                      type: string
+                    uuid:
+                      description: UUID of the partition that is seen by the galera
+                        node
                       type: string
                   required:
                   - seqno
