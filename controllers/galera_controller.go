@@ -985,6 +985,8 @@ func GetDatabaseObject(ctx context.Context, clientObj client.Client, name string
 func (r *GaleraReconciler) findObjectsForSrc(ctx context.Context, src client.Object) []reconcile.Request {
 	requests := []reconcile.Request{}
 
+	l := log.FromContext(context.Background()).WithName("Controllers").WithName("Galera")
+
 	for _, field := range allWatchFields {
 		crList := &mariadbv1.GaleraList{}
 		listOps := &client.ListOptions{
@@ -993,10 +995,13 @@ func (r *GaleraReconciler) findObjectsForSrc(ctx context.Context, src client.Obj
 		}
 		err := r.List(ctx, crList, listOps)
 		if err != nil {
-			return []reconcile.Request{}
+			l.Error(err, fmt.Sprintf("listing %s for field: %s - %s", crList.GroupVersionKind().Kind, field, src.GetNamespace()))
+			return requests
 		}
 
 		for _, item := range crList.Items {
+			l.Info(fmt.Sprintf("input source %s changed, reconcile: %s - %s", src.GetName(), item.GetName(), item.GetNamespace()))
+
 			requests = append(requests,
 				reconcile.Request{
 					NamespacedName: types.NamespacedName{
