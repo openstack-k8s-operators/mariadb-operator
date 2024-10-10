@@ -55,6 +55,9 @@ type MariaDBDatabaseStatus struct {
 
 	// Whether TLS is supported by the DB instance
 	TLSSupport bool `json:"tlsSupport,omitempty"`
+
+	// whether the DB instance is using multi-master routing
+	EnableMultiMaster bool `json:"enableMultiMaster,omitempty"`
 }
 
 //+kubebuilder:object:root=true
