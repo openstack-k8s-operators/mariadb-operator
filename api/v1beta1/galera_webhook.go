@@ -120,11 +120,15 @@ func (spec *GaleraSpecCore) ValidateCreate(basePath *field.Path) (admission.Warn
 	warn, _ := common_webhook.ValidateStorageRequest(basePath, spec.StorageRequest, storageRequestProdMin, false)
 	allWarn = append(allWarn, warn...)
 
+	warn = spec.ValidateGaleraReplicas(basePath)
+	allWarn = append(allWarn, warn...)
+
 	return allWarn, allErrs
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *Galera) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
+	allWarn := []string{}
 	galeralog.Info("validate update", "name", r.Name)
 
 	oldGalera, ok := old.(*Galera)
@@ -132,8 +136,12 @@ func (r *Galera) ValidateUpdate(old runtime.Object) (admission.Warnings, error) 
 		return nil, apierrors.NewInternalError(fmt.Errorf("unable to convert existing object"))
 	}
 
+	basePath := field.NewPath("spec")
+	warn := r.Spec.ValidateGaleraReplicas(basePath)
+	allWarn = append(allWarn, warn...)
+
 	// TODO(user): fill in your validation logic upon object update.
-	return nil, nil
+	return allWarn, nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
@@ -148,4 +156,16 @@ func (r *Galera) ValidateDelete() (admission.Warnings, error) {
 func SetupGaleraDefaults(defaults GaleraDefaults) {
 	galeraDefaults = defaults
 	galeralog.Info("Galera defaults initialized", "defaults", defaults)
+}
+
+// SetupGaleraDefaults - Check whether replica count is valid for quorum
+func (spec *GaleraSpecCore) ValidateGaleraReplicas(basePath *field.Path) admission.Warnings {
+	replicas := int(*spec.Replicas)
+	if replicas > 0 && (replicas%2 == 0) {
+		res := fmt.Sprintf("%s: %d is not appropriate for quorum! Use an odd value!",
+			basePath.Child("replicas").String(), replicas)
+		return []string{res}
+	} else {
+		return nil
+	}
 }
