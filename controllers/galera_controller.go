@@ -819,7 +819,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		}
 
 		// Check if we have enough info to bootstrap the cluster now
-		if !found {
+		if !found && int(*instance.Spec.Replicas) > 0 {
 			node, found = findBestCandidate(instance)
 		}
 		if found {

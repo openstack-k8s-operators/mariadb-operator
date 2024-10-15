@@ -57,9 +57,9 @@ type GaleraSpecCore struct {
 	// Storage size allocated for the mariadb databases
 	// +kubebuilder:validation:Required
 	StorageRequest string `json:"storageRequest"`
-	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=3
 	// +kubebuilder:default=1
-	// +kubebuilder:validation:Enum=1;3
 	// Size of the galera cluster deployment
 	Replicas *int32 `json:"replicas"`
 	// +kubebuilder:validation:Optional
