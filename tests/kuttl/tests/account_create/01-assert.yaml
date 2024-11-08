@@ -13,6 +13,8 @@ spec:
   replicas: 1
   secret: osp-secret
   storageRequest: 500M
+  nodeSelector:
+    node-role.kubernetes.io/worker: ""
 status:
   bootstrapped: true
   conditions:
@@ -72,6 +74,8 @@ spec:
         cr: galera-openstack
         galera/name: openstack
     spec:
+      nodeSelector:
+        node-role.kubernetes.io/worker: ""
       containers:
       - command:
         - /usr/bin/dumb-init
@@ -96,6 +100,9 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: openstack-galera-0
+spec:
+  nodeSelector:
+    node-role.kubernetes.io/worker: ""
 ---
 apiVersion: v1
 kind: Service

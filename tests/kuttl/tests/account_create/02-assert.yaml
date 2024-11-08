@@ -3,5 +3,10 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: kuttldb-accounttest-db-create
+spec:
+  template:
+    spec:
+      nodeSelector:
+        node-role.kubernetes.io/worker: ""
 status:
   succeeded: 1

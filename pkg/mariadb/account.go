@@ -18,7 +18,7 @@ type accountCreateOrDeleteOptions struct {
 	RequireTLS            string
 }
 
-func CreateDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName string, databaseHostName string, databaseSecret string, containerImage string, serviceAccountName string) (*batchv1.Job, error) {
+func CreateDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName string, databaseHostName string, databaseSecret string, containerImage string, serviceAccountName string, nodeSelector *map[string]string) (*batchv1.Job, error) {
 	var tlsStatement string
 	if account.Spec.RequireTLS {
 		tlsStatement = " REQUIRE SSL"
@@ -90,10 +90,14 @@ func CreateDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName st
 		},
 	}
 
+	if nodeSelector != nil {
+		job.Spec.Template.Spec.NodeSelector = *nodeSelector
+	}
+
 	return job, nil
 }
 
-func DeleteDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName string, databaseHostName string, databaseSecret string, containerImage string, serviceAccountName string) (*batchv1.Job, error) {
+func DeleteDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName string, databaseHostName string, databaseSecret string, containerImage string, serviceAccountName string, nodeSelector *map[string]string) (*batchv1.Job, error) {
 
 	opts := accountCreateOrDeleteOptions{account.Spec.UserName, databaseName, databaseHostName, "root", ""}
 
@@ -138,6 +142,10 @@ func DeleteDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName st
 				},
 			},
 		},
+	}
+
+	if nodeSelector != nil {
+		job.Spec.Template.Spec.NodeSelector = *nodeSelector
 	}
 
 	return job, nil

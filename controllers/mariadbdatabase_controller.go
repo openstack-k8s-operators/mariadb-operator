@@ -195,7 +195,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	)
 
 	// Define a new Job object (hostname, password, containerImage)
-	jobDef, err := mariadb.DbDatabaseJob(instance, dbHostname, dbSecret, dbContainerImage, serviceAccount, useTLS)
+	jobDef, err := mariadb.DbDatabaseJob(instance, dbHostname, dbSecret, dbContainerImage, serviceAccount, useTLS, dbGalera.Spec.NodeSelector)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
