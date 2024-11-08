@@ -78,8 +78,8 @@ func StatefulSet(g *mariadbv1.Galera, configHash string) *appsv1.StatefulSet {
 		},
 		corev1.LabelHostname,
 	)
-	if len(g.Spec.NodeSelector) > 0 {
-		sts.Spec.Template.Spec.NodeSelector = g.Spec.NodeSelector
+	if g.Spec.NodeSelector != nil {
+		sts.Spec.Template.Spec.NodeSelector = *g.Spec.NodeSelector
 	}
 
 	return sts

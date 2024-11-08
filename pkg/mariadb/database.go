@@ -20,7 +20,7 @@ type dbCreateOptions struct {
 }
 
 // DbDatabaseJob -
-func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName string, databaseSecret string, containerImage string, serviceAccountName string, useTLS bool) (*batchv1.Job, error) {
+func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName string, databaseSecret string, containerImage string, serviceAccountName string, useTLS bool, nodeSelector *map[string]string) (*batchv1.Job, error) {
 	var tlsStatement string
 	if useTLS {
 		tlsStatement = " REQUIRE SSL"
@@ -115,11 +115,15 @@ func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName s
 		},
 	}
 
+	if nodeSelector != nil && len(*nodeSelector) > 0 {
+		job.Spec.Template.Spec.NodeSelector = *nodeSelector
+	}
+
 	return job, nil
 }
 
 // DeleteDbDatabaseJob -
-func DeleteDbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName string, databaseSecret string, containerImage string, serviceAccountName string) (*batchv1.Job, error) {
+func DeleteDbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName string, databaseSecret string, containerImage string, serviceAccountName string, nodeSelector *map[string]string) (*batchv1.Job, error) {
 
 	opts := dbCreateOptions{
 		database.Spec.Name,
@@ -204,6 +208,10 @@ func DeleteDbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHost
 				},
 			},
 		},
+	}
+
+	if nodeSelector != nil {
+		job.Spec.Template.Spec.NodeSelector = *nodeSelector
 	}
 
 	return job, nil
