@@ -7,3 +7,15 @@ commands:
       ${MARIADB_KUTTL_DIR:-tests/kuttl/tests}/../common/scripts/check_db_account.sh openstack-galera-0 kuttldb_accounttest someuser dbsecret1
       # ensure db users are configured without TLS connection restriction
       oc rsh -n ${NAMESPACE} -c galera openstack-galera-0 /bin/sh -c 'mysql -uroot -p${DB_ROOT_PASSWORD} -e "show grants for \`someuser\`@\`%\`;"' | grep 'GRANT USAGE' | grep -v 'REQUIRE SSL'
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: someuser-account-create
+spec:
+  template:
+    spec:
+      nodeSelector:
+        node-role.kubernetes.io/worker: ""
+status:
+  succeeded: 1
