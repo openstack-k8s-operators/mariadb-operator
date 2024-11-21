@@ -44,5 +44,16 @@ if curl -s --cacert ${CACERT} --header "Content-Type:application/json" --header 
     done
 fi
 
-log "Shutting down local galera node"
+log "Initiating orchestrated shutdown of the local galera node"
+
+log "Failover service to another available galera node"
+bash $(dirname $0)/mysql_wsrep_notify.sh --status failover
+
+log "Close all active connections to this local galera node"
+# filter out system and localhost connections, only consider clients with a port in the host field
+# from that point, clients will automatically reconnect to another node
+CLIENTS=$(mysql -uroot -p${DB_ROOT_PASSWORD} -nN -e "select id from information_schema.processlist where host like '%:%';")
+echo -n "$CLIENTS" | tr '\n' ',' | xargs mysqladmin -uroot -p${DB_ROOT_PASSWORD} kill
+
+log "Shutdown local server"
 mysqladmin -uroot -p"${DB_ROOT_PASSWORD}" shutdown
