@@ -7,3 +7,5 @@ spec:
   storageClass: local-storage
   storageRequest: 500M
   replicas: 1
+  nodeSelector:
+    node-role.kubernetes.io/worker: ""

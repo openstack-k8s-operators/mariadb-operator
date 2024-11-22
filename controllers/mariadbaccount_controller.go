@@ -282,7 +282,7 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 
 	log.Info(fmt.Sprintf("Running account create '%s' MariaDBDatabase '%s'", instance.Name, mariadbDatabaseName))
 
-	jobDef, err := mariadb.CreateDbAccountJob(instance, mariadbDatabase.Spec.Name, dbHostname, dbAdminSecret, dbContainerImage, serviceAccountName)
+	jobDef, err := mariadb.CreateDbAccountJob(instance, mariadbDatabase.Spec.Name, dbHostname, dbAdminSecret, dbContainerImage, serviceAccountName, dbGalera.Spec.NodeSelector)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -507,7 +507,7 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 
 	log.Info(fmt.Sprintf("Running account delete '%s' MariaDBDatabase '%s'", instance.Name, mariadbDatabaseName))
 
-	jobDef, err := mariadb.DeleteDbAccountJob(instance, mariadbDatabase.Spec.Name, dbHostname, dbAdminSecret, dbContainerImage, serviceAccountName)
+	jobDef, err := mariadb.DeleteDbAccountJob(instance, mariadbDatabase.Spec.Name, dbHostname, dbAdminSecret, dbContainerImage, serviceAccountName, dbGalera.Spec.NodeSelector)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
