@@ -3,6 +3,7 @@
 # NOTE(dciabrin) we might use downward API to populate those in the future
 PODNAME=$HOSTNAME
 SERVICE=${PODNAME/-galera-[0-9]*/}
+MYSQL_SOCKET=/var/lib/mysql/mysql.sock
 
 # API server config
 APISERVER=https://kubernetes.default.svc
@@ -22,6 +23,12 @@ if [ -f "$LOGFILE" ]; then
     exec &> >(cat >> "$LOGFILE") 2>&1
 else
     exec &> >(cat >> /proc/1/fd/1) 2>&1
+fi
+
+# if the mysql socket is not available, mysql is either not started or
+# not reachable, orchestration stops here.
+if [ ! -e $MYSQL_SOCKET ]; then
+    exit 0
 fi
 
 # On update, k8s performs a rolling restart, but on resource deletion,
@@ -44,16 +51,22 @@ if curl -s --cacert ${CACERT} --header "Content-Type:application/json" --header 
     done
 fi
 
-log "Initiating orchestrated shutdown of the local galera node"
-
-log "Failover service to another available galera node"
-bash $(dirname $0)/mysql_wsrep_notify.sh --status failover
+# We now to need disconnect the clients so that when the server will
+# initiate its shutdown, they won't receive unexpected WSREP statuses
+# when running SQL queries.
+# Note: It is safe to do it now, as k8s already removed this pod from
+# the service endpoint, so client won't reconnect to it.
 
 log "Close all active connections to this local galera node"
 # filter out system and localhost connections, only consider clients with a port in the host field
 # from that point, clients will automatically reconnect to another node
 CLIENTS=$(mysql -uroot -p${DB_ROOT_PASSWORD} -nN -e "select id from information_schema.processlist where host like '%:%';")
-echo -n "$CLIENTS" | tr '\n' ',' | xargs mysqladmin -uroot -p${DB_ROOT_PASSWORD} kill
+echo -n "$CLIENTS" | tr '\n' ',' | xargs -r mysqladmin -uroot -p${DB_ROOT_PASSWORD} kill
 
-log "Shutdown local server"
-mysqladmin -uroot -p"${DB_ROOT_PASSWORD}" shutdown
+# At this point no clients are connected anymore.
+# We can finish this pre-stop hook and let k8s send the SIGTERM to the
+# mysql server to make it disconnect from the galera cluster and shut down.
+# Note: shutting down mysql here would cause the pod to finish too early,
+# and this pre-stop hook would shows up as 'Failed' in k8s events.
+
+exit 0
