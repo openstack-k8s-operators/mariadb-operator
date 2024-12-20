@@ -47,7 +47,7 @@ wsrep_debug = 0
 wsrep_drupal_282555_workaround = 0
 wsrep_on = ON
 wsrep_provider = /usr/lib64/galera/libgalera_smm.so
-wsrep_provider_options = gmcast.listen_addr=tcp://{ PODIP }:4567
+wsrep_provider_options = pc.wait_prim=FALSE;gcache.recover=no;gmcast.listen_addr=tcp://{ PODIP }:4567
 wsrep_retry_autocommit = 1
 wsrep_slave_threads = 1
 wsrep_sst_method = rsync
