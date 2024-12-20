@@ -1,6 +1,8 @@
 package mariadb
 
 import (
+	"strconv"
+
 	common "github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/affinity"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
@@ -112,6 +114,7 @@ func getGaleraInitContainers(g *mariadbv1.Galera) []corev1.Container {
 }
 
 func getGaleraContainers(g *mariadbv1.Galera, configHash string) []corev1.Container {
+	timeout := strconv.Itoa(StartupProbeTimeout)
 	containers := []corev1.Container{{
 		Image:   g.Spec.ContainerImage,
 		Name:    "galera",
@@ -144,11 +147,13 @@ func getGaleraContainers(g *mariadbv1.Galera, configHash string) []corev1.Contai
 		StartupProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
-					Command: []string{"/bin/bash", "/var/lib/operator-scripts/mysql_probe.sh", "startup"},
+					Command: []string{"/bin/bash", "/var/lib/operator-scripts/mysql_probe.sh", "startup", timeout},
 				},
 			},
-			PeriodSeconds:    10,
-			FailureThreshold: 30,
+			// extra seconds so that the script is not preempted by k8s
+			TimeoutSeconds: StartupProbeTimeout + 10,
+			// the current probe implementation assumes a single failure threshold
+			FailureThreshold: 1,
 		},
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
