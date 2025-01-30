@@ -3,6 +3,7 @@
 aliases:
   mariadb-approvers:
   - dciabrin
+  - lmiccini
   ci-approvers:
   - lewisdenny
   - frenzyfriday
