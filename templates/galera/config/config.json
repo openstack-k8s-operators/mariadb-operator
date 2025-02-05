@@ -29,6 +29,13 @@
             "optional": true
         },
         {
+            "source": "/var/lib/config-data/generated/galera_sst_mariabackup.cnf",
+            "dest": "/etc/my.cnf.d/galera_mariabackup.cnf",
+            "owner": "root",
+            "perm": "0644",
+            "optional": true
+        },
+        {
             "source": "/var/lib/operator-scripts",
             "dest": "/usr/local/bin",
             "owner": "root",

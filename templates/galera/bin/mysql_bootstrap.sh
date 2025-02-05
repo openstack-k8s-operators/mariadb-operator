@@ -1,5 +1,10 @@
 #!/bin/bash
-set +eux
+set +eu
+
+init_error() {
+    echo "Container initialization failed at $(caller)." >&2
+}
+trap init_error ERR
 
 if [ -e /var/lib/mysql/mysql ]; then
     echo -e "Database already exists. Reuse it."
@@ -27,24 +32,34 @@ if [ "$(sysctl -n crypto.fips_enabled)" == "1" ]; then
 else
     SSL_CIPHER='AES128-SHA256'
 fi
+export SSL_CIPHER
 
 PODNAME=$(hostname -f | cut -d. -f1,2)
 PODIPV4=$(grep "${PODNAME}" /etc/hosts | grep -v ':' | cut -d$'\t' -f1)
 PODIPV6=$(grep "${PODNAME}" /etc/hosts | grep ':' | cut -d$'\t' -f1)
+if [[ "" = "${PODIPV6}" ]]; then
+    PODIP="${PODIPV4}"
+    IPSTACK="IPV4"
+else
+    PODIP="[::]"
+    IPSTACK="IPV6"
+fi
+export PODNAME PODIP
+
+# mariabackup: default credentials if no configuration was provided
+: ${MARIABACKUP_USER=root}
+: ${MARIABACKUP_PASSWORD=$DB_ROOT_PASSWORD}
+export MARIABACKUP_USER MARIABACKUP_PASSWORD
 
 cd /var/lib/config-data/default
 for cfg in *.cnf.in; do
     if [ -s "${cfg}" ]; then
-
-        if [[ "" = "${PODIPV6}" ]]; then
-            PODIP="${PODIPV4}"
-            IPSTACK="IPV4"
-        else
-            PODIP="[::]"
-            IPSTACK="IPV6"
-        fi
-
         echo "Generating config file from template ${cfg}, will use ${IPSTACK} listen address of ${PODIP}"
-        sed -e "s/{ PODNAME }/${PODNAME}/" -e "s/{ PODIP }/${PODIP}/" -e "s/{ SSL_CIPHER }/${SSL_CIPHER}/" "/var/lib/config-data/default/${cfg}" > "/var/lib/config-data/generated/${cfg%.in}"
+        # replace all occurrences of "{ xxx }" with their value from environment
+        awk '{
+patsplit($0,markers,/{ (PODNAME|PODIP|SSL_CIPHER|MARIABACKUP_USER|MARIABACKUP_PASSWORD) }/);
+for(i in markers){ m=markers[i]; gsub(/\W/,"",m); gsub(markers[i], ENVIRON[m])};
+print $0
+}' "/var/lib/config-data/default/${cfg}" > "/var/lib/config-data/generated/${cfg%.in}"
     fi
 done

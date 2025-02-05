@@ -81,6 +81,13 @@ spec:
               secret:
                 description: Name of the secret to look for password keys
                 type: string
+              sst:
+                default: rsync
+                description: Snapshot State Transfer method to use for full node synchronization
+                enum:
+                - rsync
+                - mariabackup
+                type: string
               storageClass:
                 description: Storage class to host the mariadb databases
                 type: string

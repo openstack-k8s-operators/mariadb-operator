@@ -37,6 +37,13 @@ func getGaleraVolumes(g *mariadbv1.Galera) []corev1.Volume {
 		}
 	}
 
+	if g.Spec.SST == mariadbv1.MariaBackup {
+		configTemplates = append(configTemplates, corev1.KeyToPath{
+			Key:  "galera_sst_mariabackup.cnf.in",
+			Path: "galera_sst_mariabackup.cnf.in",
+		})
+	}
+
 	volumes := []corev1.Volume{
 		{
 			Name: "secrets",

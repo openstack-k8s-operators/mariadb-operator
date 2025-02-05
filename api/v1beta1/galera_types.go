@@ -80,7 +80,20 @@ type GaleraSpecCore struct {
 	// +kubebuilder:validation:Optional
 	// Log Galera pod's output to disk
 	LogToDisk bool `json:"logToDisk"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=rsync
+	// +kubebuilder:validation:Enum=rsync;mariabackup
+	// Snapshot State Transfer method to use for full node synchronization
+	SST GaleraSST `json:"sst"`
 }
+
+// Supported SST type
+type GaleraSST string
+
+const (
+	RSync       GaleraSST = "rsync"
+	MariaBackup GaleraSST = "mariabackup"
+)
 
 // GaleraAttributes holds startup information for a Galera host
 type GaleraAttributes struct {

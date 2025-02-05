@@ -1,0 +1,10 @@
+{
+    "command": "/usr/bin/true",
+    "permissions": [
+        {
+            "path": "/var/lib/mysql",
+            "owner": "mysql:mysql",
+            "recurse": "true"
+        }
+    ]
+}
