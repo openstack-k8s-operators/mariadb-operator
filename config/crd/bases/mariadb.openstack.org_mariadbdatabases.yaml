@@ -110,6 +110,9 @@ spec:
                   - type
                   type: object
                 type: array
+              enableMultiMaster:
+                description: whether the DB instance is using multi-master routing
+                type: boolean
               hash:
                 additionalProperties:
                   type: string

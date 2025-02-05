@@ -1,0 +1,20 @@
+apiVersion: mariadb.openstack.org/v1beta1
+kind: Galera
+metadata:
+  name: openstack
+spec:
+  replicas: 3
+  secret: osp-secret
+  storageRequest: 500M
+  enableMultiMaster: true
+---
+apiVersion: mariadb.openstack.org/v1beta1
+kind: MariaDBDatabase
+metadata:
+  labels:
+    dbName: openstack
+  name: mydatabase
+spec:
+  name: mydatabase
+status:
+  enableMultiMaster: true
