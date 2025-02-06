@@ -1,0 +1,9 @@
+apiVersion: mariadb.openstack.org/v1beta1
+kind: MariaDBAccount
+metadata:
+  labels:
+    mariaDBDatabaseName: testdb-accounttest
+  name: testdb-some-db-account
+spec:
+  userName: someuser
+  secret: some-db-secret

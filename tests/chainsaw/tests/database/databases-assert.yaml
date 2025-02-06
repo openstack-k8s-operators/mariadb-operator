@@ -1,0 +1,47 @@
+apiVersion: mariadb.openstack.org/v1beta1
+kind: MariaDBDatabase
+metadata:
+  name: testdb-utf8
+  labels:
+    dbName: openstack
+spec:
+  name: testdb_utf8
+status:
+  conditions:
+  - message: Setup complete
+    reason: Ready
+    status: "True"
+    type: Ready
+  - message: MariaDBDatabase ready
+    reason: Ready
+    status: "True"
+    type: MariaDBDatabaseReady
+  - message: MariaDB / Galera server ready
+    reason: Ready
+    status: "True"
+    type: MariaDBServerReady
+  completed: true
+---
+apiVersion: mariadb.openstack.org/v1beta1
+kind: MariaDBDatabase
+metadata:
+  name: testdb-latin1
+  labels:
+    dbName: openstack
+spec:
+  name: testdb_latin1
+status:
+  conditions:
+  - message: Setup complete
+    reason: Ready
+    status: "True"
+    type: Ready
+  - message: MariaDBDatabase ready
+    reason: Ready
+    status: "True"
+    type: MariaDBDatabaseReady
+  - message: MariaDB / Galera server ready
+    reason: Ready
+    status: "True"
+    type: MariaDBServerReady
+  completed: true

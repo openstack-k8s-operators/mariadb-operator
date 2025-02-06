@@ -1,0 +1,116 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: failover
+spec:
+  description: Service failover test case
+  steps:
+  - name: Setup
+    description: Deploy a cluster and a background pod with long-running DB connection
+    bindings:
+    - name: replicas
+      value: 3
+    try:
+    - apply:
+        file: ../../common/galera.yaml
+    - assert:
+        # check if all nodes are started and one pod is reacheable via the service endpoint
+        file: ../../common/galera-assert.yaml
+    - script:
+        content: |
+          oc get -n $NAMESPACE -o jsonpath='{ .data.DbRootPassword }' secret osp-secret | base64 -d
+        skipLogOutput: true
+        outputs:
+        - name: db_password
+          value: ($stdout)
+    - script:
+        content: |
+          oc get -n $NAMESPACE -o jsonpath='{ .spec.containers[0].image }' pod openstack-galera-0
+        skipLogOutput: true
+        outputs:
+        - name: pod_image
+          value: ($stdout)
+    - script:
+        env:
+        - name: PASSWORD
+          value: ($db_password)
+        - name: IMAGE
+          value: ($pod_image)
+        skipLogOutput: true
+        content: |
+          oc -n $NAMESPACE run failover-check --image=$IMAGE --env="DB_ROOT_PASSWORD=$PASSWORD" --command -- dumb-init bash -c "$(cat ../../scripts/connect.sh)"
+          oc -n $NAMESPACE wait --for=jsonpath='{.status.phase}'=Running pod failover-check
+
+    cleanup:
+    - delete:
+        ref:
+          apiVersion: v1
+          kind: Pod
+          name: failover-check
+
+  - name: Service failover on pod restart
+    description: Check that service is failing over when the current endpoint pod is stopped
+    try:
+    - script: &get_endpoint
+        content: &endpoint_cmd |
+          oc get -n $NAMESPACE -o jsonpath="{.spec.selector['statefulset\.kubernetes\.io/pod-name']}" service openstack
+        outputs:
+        - name: endpoint
+          value: ($stdout)
+    - script:
+        env:
+        - name: ENDPOINT
+          value: ($endpoint)
+        content: |
+          oc wait -n $NAMESPACE --for=jsonpath='{.status.readyReplicas}'=3 statefulset openstack-galera
+          oc delete -n $NAMESPACE --wait pod $ENDPOINT
+    - script:
+        content: *endpoint_cmd
+        check:
+          ($stdout != $endpoint): true
+    - script: &no_wsrep_in_failover_check
+        content: |
+          oc logs -n $NAMESPACE failover-check
+        check:
+          # we dont want "ERROR 1047 (08S01) at line 495: WSREP has not yet prepared node for application use"
+          (find_first($stdout,'(08S01)') == NULL): true
+
+  - name: Service failover on pod crash
+    description: Check that service is failing over when the current endpoint pod crashes
+    try:
+    - script: *get_endpoint
+    - script:
+        env:
+        - name: ENDPOINT
+          value: ($endpoint)
+        content: |
+          oc wait -n $NAMESPACE --for=jsonpath='{.status.readyReplicas}'=3 statefulset openstack-galera
+          current=$ENDPOINT
+          oc rsh -n $NAMESPACE $ENDPOINT killall -9 /usr/libexec/mysqld
+          while [ "$current" = "$ENDPOINT" ]; do
+            echo $(date) "$current" "$ENDPOINT"
+            sleep 1
+            current=$(oc get -n $NAMESPACE -o jsonpath="{.spec.selector['statefulset\.kubernetes\.io/pod-name']}" service openstack)
+          done
+    - script:
+        content: *endpoint_cmd
+        check:
+          ($stdout != $endpoint): true
+    - script: *no_wsrep_in_failover_check
+
+  - name: No failover on random pod restart
+    description: Check that service is not impacted when a pod that is not the current endpoint is stopped
+    try:
+    - script: *get_endpoint
+    - script:
+        env:
+        - name: ENDPOINT
+          value: ($endpoint)
+        content: |
+          oc wait -n $NAMESPACE --for=jsonpath='{.status.readyReplicas}'=3 statefulset openstack-galera
+          echo -ne openstack-galera-{0,1,2}\\n | grep -v $ENDPOINT | head -1 | xargs oc delete --wait -n $NAMESPACE --wait pod
+    - script:
+        content: *endpoint_cmd
+        check:
+          ($stdout == $endpoint): true
+    - script: *no_wsrep_in_failover_check

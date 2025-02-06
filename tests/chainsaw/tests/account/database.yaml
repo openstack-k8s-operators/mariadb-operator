@@ -1,0 +1,8 @@
+apiVersion: mariadb.openstack.org/v1beta1
+kind: MariaDBDatabase
+metadata:
+  name: testdb-accounttest
+  labels:
+    dbName: openstack
+spec:
+  name: testdb_accounttest
