@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -89,6 +90,14 @@ func (r *Galera) ValidateCreate() (admission.Warnings, error) {
 		[]string{r.Name},
 		CrMaxLengthCorrection) // omit issue with  statefulset pod label "controller-revision-hash": "<statefulset_name>-<hash>"
 
+	// When a TopologyRef CR is referenced, fail if a different Namespace is
+	// referenced because is not supported
+	if r.Spec.TopologyRef != nil {
+		if err := topologyv1.ValidateTopologyNamespace(r.Spec.TopologyRef.Namespace, *basePath, r.Namespace); err != nil {
+			allErrs = append(allErrs, err)
+		}
+	}
+
 	warn, err := r.Spec.ValidateCreate(basePath)
 
 	if err != nil {
@@ -129,6 +138,7 @@ func (spec *GaleraSpecCore) ValidateCreate(basePath *field.Path) (admission.Warn
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *Galera) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
 	allWarn := []string{}
+	allErrs := field.ErrorList{}
 	galeralog.Info("validate update", "name", r.Name)
 
 	oldGalera, ok := old.(*Galera)
@@ -137,10 +147,20 @@ func (r *Galera) ValidateUpdate(old runtime.Object) (admission.Warnings, error) 
 	}
 
 	basePath := field.NewPath("spec")
+
+	// When a TopologyRef CR is referenced, fail if a different Namespace is
+	// referenced because is not supported
+	if r.Spec.TopologyRef != nil {
+		if err := topologyv1.ValidateTopologyNamespace(r.Spec.TopologyRef.Namespace, *basePath, r.Namespace); err != nil {
+			allErrs = append(allErrs, err)
+		}
+	}
 	warn := r.Spec.ValidateGaleraReplicas(basePath)
 	allWarn = append(allWarn, warn...)
 
-	// TODO(user): fill in your validation logic upon object update.
+	if len(allErrs) != 0 {
+		return allWarn, apierrors.NewInvalid(GroupVersion.WithKind("Galera").GroupKind(), r.Name, allErrs)
+	}
 	return allWarn, nil
 }
 
