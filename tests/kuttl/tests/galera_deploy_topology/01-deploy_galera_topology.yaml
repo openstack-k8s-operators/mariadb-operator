@@ -1,0 +1,32 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+delete:
+  - apiVersion: mariadb.openstack.org/v1beta1
+    kind: Galera
+    name: openstack
+---
+apiVersion: topology.openstack.org/v1beta1
+kind: Topology
+metadata:
+  name: galera-topology
+spec:
+  topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: "topology.kubernetes.io/hostname"
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        service: mariadb
+---
+# galera resource referencing a Topology CR
+apiVersion: mariadb.openstack.org/v1beta1
+kind: Galera
+metadata:
+  name: openstack
+spec:
+  secret: osp-secret
+  storageClass: local-storage
+  storageRequest: 500M
+  replicas: 3
+  topologyRef:
+    name: galera-topology

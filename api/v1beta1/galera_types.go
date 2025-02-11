@@ -20,6 +20,7 @@ import (
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/tls"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
+	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -80,6 +81,11 @@ type GaleraSpecCore struct {
 	// +kubebuilder:validation:Optional
 	// Log Galera pod's output to disk
 	LogToDisk bool `json:"logToDisk"`
+
+	// +kubebuilder:validation:Optional
+	// TopologyRef to apply the Topology defined by the associated CR referenced
+	// by name
+	TopologyRef *topologyv1.TopoRef `json:"topologyRef,omitempty"`
 }
 
 // GaleraAttributes holds startup information for a Galera host
@@ -121,6 +127,8 @@ type GaleraStatus struct {
 	// then the controller has not processed the latest changes injected by
 	// the opentack-operator in the top-level CR (e.g. the ContainerImage)
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+	// LastAppliedTopology - the last applied Topology
+	LastAppliedTopology string `json:"lastAppliedTopology,omitempty"`
 }
 
 // +kubebuilder:object:root=true

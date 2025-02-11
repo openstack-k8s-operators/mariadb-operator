@@ -3,6 +3,7 @@ package mariadb
 import (
 	"strconv"
 
+	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	common "github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/affinity"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
@@ -14,7 +15,7 @@ import (
 )
 
 // StatefulSet returns a StatefulSet object for the galera cluster
-func StatefulSet(g *mariadbv1.Galera, configHash string) *appsv1.StatefulSet {
+func StatefulSet(g *mariadbv1.Galera, configHash string, topology *topologyv1.Topology) *appsv1.StatefulSet {
 	ls := StatefulSetLabels(g)
 	name := StatefulSetName(g.Name)
 	var replicas *int32
@@ -69,21 +70,32 @@ func StatefulSet(g *mariadbv1.Galera, configHash string) *appsv1.StatefulSet {
 			},
 		},
 	}
-
-	// If possible two pods of the same service should not
-	// run on the same worker node. If this is not possible
-	// the get still created on the same worker node.
-	sts.Spec.Template.Spec.Affinity = affinity.DistributePods(
-		common.AppSelector,
-		[]string{
-			name,
-		},
-		corev1.LabelHostname,
-	)
 	if g.Spec.NodeSelector != nil {
 		sts.Spec.Template.Spec.NodeSelector = *g.Spec.NodeSelector
 	}
-
+	if topology != nil {
+		// Get the Topology .Spec
+		ts := topology.Spec
+		// Process TopologySpreadConstraints if defined in the referenced Topology
+		if ts.TopologySpreadConstraints != nil {
+			sts.Spec.Template.Spec.TopologySpreadConstraints = *topology.Spec.TopologySpreadConstraints
+		}
+		// Process Affinity if defined in the referenced Topology
+		if ts.Affinity != nil {
+			sts.Spec.Template.Spec.Affinity = ts.Affinity
+		}
+	} else {
+		// If possible two pods of the same service should not
+		// run on the same worker node. If this is not possible
+		// the get still created on the same worker node.
+		sts.Spec.Template.Spec.Affinity = affinity.DistributePods(
+			common.AppSelector,
+			[]string{
+				name,
+			},
+			corev1.LabelHostname,
+		)
+	}
 	return sts
 }
 
