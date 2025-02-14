@@ -1,0 +1,79 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: tls
+spec:
+  steps:
+  - name: TLS 3-node
+    description: Deploy a 3-note cluster and verify all connections (SQL, GCOMM, SST) are encrypted
+    bindings:
+    - name: replicas
+      value: 3
+    - name: cert
+      value: galera-cert
+    try:
+    - apply:
+        file: ../../common/tls-certificate.yaml
+    - apply:
+        file: ../../common/galera-tls.yaml
+    - assert:
+        # check if all nodes are started and one pod is reacheable via the service endpoint
+        file: ../../common/galera-assert.yaml
+    - script:
+        # check if galera can be accessed and cluster is correct
+        content: |
+          ../../scripts/mysql-cli.sh -sNEe "show status like 'wsrep_cluster_size';" | tail -1 | tr -d '\n'
+        check:
+          (to_number($stdout)): ($replicas)
+    - script: &check_wsrep
+        # ensure galera/WSREP traffic uses encryption
+        content: |
+          ../../scripts/mysql-cli.sh -sNe "select @@global.wsrep_provider_options;"
+        check:
+          (contains($stdout, 'socket.ssl = YES')): true
+    - script: &check_sql
+        # ensure mysql/SQL traffic uses encryption
+        content: |
+          ../../scripts/mysql-cli.sh -sNe "select @@global.ssl_cipher;" | tr -d '\n'
+        check:
+          ($stdout == 'NULL'): false
+    - delete:
+        file: ../../common/galera-tls.yaml
+
+  - name: Brownfield - 1 - deploy without TLS
+    description: Deploy a 3-note cluster without TLS
+    bindings:
+    - name: replicas
+      value: 3
+    - name: cert
+      value: galera-cert
+    try:
+    - apply:
+        file: ../../common/tls-certificate.yaml
+    - apply:
+        file: ../../common/galera.yaml
+    - assert:
+        file: ../../common/galera-assert.yaml
+
+  - name: Brownfield - 2 - switch cluster to TLS
+    description: Add certs in configuration and verify all connections (SQL, GCOMM, SST) are encrypted
+    bindings:
+    - name: replicas
+      value: 3
+    - name: cert
+      value: galera-cert
+    try:
+    - apply:
+        file: ../../common/galera-tls.yaml
+    - assert:
+        resource:
+          apiVersion: mariadb.openstack.org/v1beta1
+          kind: Galera
+          status:
+            clusterProperties:
+              GCommTLS: "true"
+            stopRequired: true
+    - assert:
+        file: ../../common/galera-assert.yaml
+    - script: *check_wsrep
+    - script: *check_sql

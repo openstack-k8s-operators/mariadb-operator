@@ -1,0 +1,19 @@
+apiVersion: mariadb.openstack.org/v1beta1
+kind: MariaDBDatabase
+metadata:
+  name: testdb-utf8
+  labels:
+    dbName: openstack
+spec:
+  name: testdb_utf8
+---
+apiVersion: mariadb.openstack.org/v1beta1
+kind: MariaDBDatabase
+metadata:
+  name: testdb-latin1
+  labels:
+    dbName: openstack
+spec:
+  name: testdb_latin1
+  defaultCharacterSet: latin1
+  defaultCollation: latin1_general_ci

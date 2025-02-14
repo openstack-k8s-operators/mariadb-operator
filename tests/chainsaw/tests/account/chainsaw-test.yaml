@@ -1,0 +1,40 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: account
+spec:
+  steps:
+  - name: Deploy 1-node cluster
+    description: Deploy a 1-node cluster for tests
+    bindings:
+    - name: replicas
+      value: 1
+    try:
+    - apply:
+        file: ../../common/galera.yaml
+    - assert:
+        file: ../../common/galera-assert.yaml
+
+  - name: create database CR
+    description: check databases are created with the proper characteristics
+    try:
+    - apply:
+        file: database.yaml
+    - assert:
+        file: database-assert.yaml
+
+  - name: create account without secret
+    description: account CR has to wait for a secret to create account in the database
+    try:
+    - apply:
+        file: account.yaml
+    - assert:
+        file: account-missing-secret-assert.yaml
+
+  - name: add secret and finish account creation
+    description: make sure the account is created in the database
+    try:
+    - apply:
+        file: account-secret.yaml
+    - assert:
+        file: account-assert.yaml

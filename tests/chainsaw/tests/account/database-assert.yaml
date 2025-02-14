@@ -1,0 +1,7 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: testdb-accounttest-db-create
+status:
+  succeeded: 1

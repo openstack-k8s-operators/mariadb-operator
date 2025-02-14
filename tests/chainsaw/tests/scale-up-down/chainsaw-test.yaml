@@ -1,0 +1,49 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: scale-up-down
+spec:
+  steps:
+  - name: Deploy 3-node cluster
+    description: Deploy a 3-node cluster and check that all nodes are ready
+    bindings:
+    - name: replicas
+      value: 3
+    try:
+    - apply:
+        file: ../../common/galera.yaml
+    - assert:
+        # check if all nodes are started and one pod is reacheable via the service endpoint
+        file: ../../common/galera-assert.yaml
+    - script: &check
+        # check if galera can be accessed and cluster is correct
+        content: |
+          ../../scripts/mysql-cli.sh -sNEe "show status like 'wsrep_cluster_size';" | tail -1 | tr -d '\n'
+        check:
+          (to_number($stdout)): ($replicas)
+
+  - name: Scale down to 1-node
+    description: Ensure that a running cluster can be scaled down to 1 node
+    bindings:
+    - name: replicas
+      value: 1
+    try:
+    - script:
+        content: |
+          oc patch -n $NAMESPACE galera openstack --type='json' -p='[{"op": "replace", "path": "/spec/replicas", "value":1}]'
+    - assert:
+        file: ../../common/galera-assert.yaml
+    - script: *check
+
+  - name: Scale up back to 3-node
+    description: Ensure that nodes can be added to a running cluster
+    bindings:
+    - name: replicas
+      value: 3
+    try:
+    - script:
+        content: |
+          oc patch -n $NAMESPACE galera openstack --type='json' -p='[{"op": "replace", "path": "/spec/replicas", "value":3}]'
+    - assert:
+        file: ../../common/galera-assert.yaml
+    - script: *check

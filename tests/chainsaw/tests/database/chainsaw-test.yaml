@@ -1,0 +1,63 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: database
+spec:
+  steps:
+  - name: Deploy 1-node cluster
+    description: Deploy a 1-node cluster for tests
+    bindings:
+    - name: replicas
+      value: 1
+    try:
+    - apply:
+        file: ../../common/galera.yaml
+    - assert:
+        file: ../../common/galera-assert.yaml
+
+  - name: create database CR
+    description: check databases are created with the proper characteristics
+    try:
+    - apply:
+        file: ./databases.yaml
+    - assert:
+        # check if all nodes are started and one pod is reacheable via the service endpoint
+        file: databases-assert.yaml
+
+  - name: check database for latin1
+    bindings:
+    - name: db_name
+      value: testdb_latin1
+    - name: character_set
+      value: latin1
+    - name: collation
+      value: latin1_general_ci
+    try:
+    - script: &check_charset
+        env:
+        - name: DB
+          value: ($db_name)
+        content: |
+          ../../scripts/mysql-cli.sh -sNEe "use $DB; select @@character_set_database;" | tail -1 | tr -d '\n'
+        check:
+          ($stdout): ($character_set)
+    - script: &check_collation
+        env:
+        - name: DB
+          value: ($db_name)
+        content: |
+          ../../scripts/mysql-cli.sh -sNEe "use $DB; select @@collation_database;" | tail -1 | tr -d '\n'
+        check:
+          ($stdout): ($collation)
+
+  - name: check database for utf8
+    bindings:
+    - name: db_name
+      value: testdb_utf8
+    - name: character_set
+      value: utf8
+    - name: collation
+      value: utf8_general_ci
+    try:
+    - script: *check_charset
+    - script: *check_collation
