@@ -379,3 +379,13 @@ run-with-webhook: export OPERATOR_TEMPLATES=./templates/
 run-with-webhook: manifests generate fmt vet ## Run a controller from your host.
 	/bin/bash hack/configure_local_webhook.sh
 	go run ./main.go -metrics-bind-address ":$(METRICS_PORT)" -health-probe-bind-address ":$(HEALTH_PORT)"
+
+BRANCH=18.0-fr1
+.PHONY: force-bump
+force-bump: ## Force bump operator and lib-common dependencies
+	for dep in $$(cat go.mod | grep openstack-k8s-operators | grep -vE -- 'indirect|mariadb-operator|^replace' | awk '{print $$1}'); do \
+		go get $$dep@$(BRANCH) ; \
+	done
+	for dep in $$(cat api/go.mod | grep openstack-k8s-operators | grep -vE -- 'indirect|mariadb-operator|^replace' | awk '{print $$1}'); do \
+		cd ./api && go get $$dep@$(BRANCH) && cd .. ; \
+	done
