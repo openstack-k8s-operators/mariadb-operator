@@ -90,15 +90,7 @@ func (r *Galera) ValidateCreate() (admission.Warnings, error) {
 		[]string{r.Name},
 		CrMaxLengthCorrection) // omit issue with  statefulset pod label "controller-revision-hash": "<statefulset_name>-<hash>"
 
-	// When a TopologyRef CR is referenced, fail if a different Namespace is
-	// referenced because is not supported
-	if r.Spec.TopologyRef != nil {
-		if err := topologyv1.ValidateTopologyNamespace(r.Spec.TopologyRef.Namespace, *basePath, r.Namespace); err != nil {
-			allErrs = append(allErrs, err)
-		}
-	}
-
-	warn, err := r.Spec.ValidateCreate(basePath)
+	warn, err := r.Spec.ValidateCreate(basePath, r.Namespace)
 
 	if err != nil {
 		allErrs = append(allErrs, err...)
@@ -117,12 +109,12 @@ func (r *Galera) ValidateCreate() (admission.Warnings, error) {
 
 // ValidateCreate - Exported function wrapping non-exported validate functions,
 // this function can be called externally to validate an KeystoneAPI spec.
-func (spec *GaleraSpec) ValidateCreate(basePath *field.Path) (admission.Warnings, field.ErrorList) {
-	return spec.GaleraSpecCore.ValidateCreate(basePath)
+func (spec *GaleraSpec) ValidateCreate(basePath *field.Path, namespace string) (admission.Warnings, field.ErrorList) {
+	return spec.GaleraSpecCore.ValidateCreate(basePath, namespace)
 }
 
 // ValidateCreate -
-func (spec *GaleraSpecCore) ValidateCreate(basePath *field.Path) (admission.Warnings, field.ErrorList) {
+func (spec *GaleraSpecCore) ValidateCreate(basePath *field.Path, namespace string) (admission.Warnings, field.ErrorList) {
 	var allErrs field.ErrorList
 	allWarn := []string{}
 
@@ -131,6 +123,14 @@ func (spec *GaleraSpecCore) ValidateCreate(basePath *field.Path) (admission.Warn
 
 	warn = spec.ValidateGaleraReplicas(basePath)
 	allWarn = append(allWarn, warn...)
+
+	// When a TopologyRef CR is referenced, fail if a different Namespace is
+	// referenced because is not supported
+	if spec.TopologyRef != nil {
+		if err := topologyv1.ValidateTopologyNamespace(spec.TopologyRef.Namespace, *basePath, namespace); err != nil {
+			allErrs = append(allErrs, err)
+		}
+	}
 
 	return allWarn, allErrs
 }
@@ -145,16 +145,9 @@ func (r *Galera) ValidateUpdate(old runtime.Object) (admission.Warnings, error) 
 	if !ok || oldGalera == nil {
 		return nil, apierrors.NewInternalError(fmt.Errorf("unable to convert existing object"))
 	}
-
 	basePath := field.NewPath("spec")
+	allErrs = append(allErrs, r.Spec.ValidateUpdate(oldGalera.Spec, basePath, r.Namespace)...)
 
-	// When a TopologyRef CR is referenced, fail if a different Namespace is
-	// referenced because is not supported
-	if r.Spec.TopologyRef != nil {
-		if err := topologyv1.ValidateTopologyNamespace(r.Spec.TopologyRef.Namespace, *basePath, r.Namespace); err != nil {
-			allErrs = append(allErrs, err)
-		}
-	}
 	warn := r.Spec.ValidateGaleraReplicas(basePath)
 	allWarn = append(allWarn, warn...)
 
@@ -162,6 +155,31 @@ func (r *Galera) ValidateUpdate(old runtime.Object) (admission.Warnings, error) 
 		return allWarn, apierrors.NewInvalid(GroupVersion.WithKind("Galera").GroupKind(), r.Name, allErrs)
 	}
 	return allWarn, nil
+}
+func (r *GaleraSpec) ValidateUpdate(old GaleraSpec, basePath *field.Path, namespace string) field.ErrorList {
+	allErrs := field.ErrorList{}
+
+	// When a TopologyRef CR is referenced, fail if a different Namespace is
+	// referenced because is not supported
+	if r.TopologyRef != nil {
+		if err := topologyv1.ValidateTopologyNamespace(r.TopologyRef.Namespace, *basePath, namespace); err != nil {
+			allErrs = append(allErrs, err)
+		}
+	}
+	return allErrs
+}
+
+func (r *GaleraSpecCore) ValidateUpdate(old GaleraSpecCore, basePath *field.Path, namespace string) field.ErrorList {
+	allErrs := field.ErrorList{}
+
+	// When a TopologyRef CR is referenced, fail if a different Namespace is
+	// referenced because is not supported
+	if r.TopologyRef != nil {
+		if err := topologyv1.ValidateTopologyNamespace(r.TopologyRef.Namespace, *basePath, namespace); err != nil {
+			allErrs = append(allErrs, err)
+		}
+	}
+	return allErrs
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
