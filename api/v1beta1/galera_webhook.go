@@ -172,6 +172,8 @@ func (r *GaleraSpec) ValidateUpdate(old GaleraSpec, basePath *field.Path, namesp
 func (r *GaleraSpecCore) ValidateUpdate(old GaleraSpecCore, basePath *field.Path, namespace string) field.ErrorList {
 	allErrs := field.ErrorList{}
 
+	_, errs := common_webhook.ValidateStorageRequest(basePath, r.StorageRequest, storageRequestProdMin, true)
+	allErrs = append(allErrs, errs...)
 	// When a TopologyRef CR is referenced, fail if a different Namespace is
 	// referenced because is not supported
 	if r.TopologyRef != nil {

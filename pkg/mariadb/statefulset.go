@@ -15,7 +15,7 @@ import (
 )
 
 // StatefulSet returns a StatefulSet object for the galera cluster
-func StatefulSet(g *mariadbv1.Galera, configHash string, topology *topologyv1.Topology) *appsv1.StatefulSet {
+func StatefulSet(g *mariadbv1.Galera, configHash string, topology *topologyv1.Topology) (*appsv1.StatefulSet, error) {
 	ls := StatefulSetLabels(g)
 	name := StatefulSetName(g.Name)
 	var replicas *int32
@@ -25,7 +25,10 @@ func StatefulSet(g *mariadbv1.Galera, configHash string, topology *topologyv1.To
 		replicas = g.Spec.Replicas
 	}
 	storage := g.Spec.StorageClass
-	storageRequest := resource.MustParse(g.Spec.StorageRequest)
+	storageRequest, err := resource.ParseQuantity(g.Spec.StorageRequest)
+	if err != nil {
+		return nil, err
+	}
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -87,7 +90,7 @@ func StatefulSet(g *mariadbv1.Galera, configHash string, topology *topologyv1.To
 			corev1.LabelHostname,
 		)
 	}
-	return sts
+	return sts, nil
 }
 
 func getGaleraInitContainers(g *mariadbv1.Galera) []corev1.Container {
