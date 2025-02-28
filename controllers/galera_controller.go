@@ -740,7 +740,12 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		instance.Status.LastAppliedTopology = nil
 	}
 
-	commonstatefulset := commonstatefulset.NewStatefulSet(mariadb.StatefulSet(instance, hashOfHashes, topology), 5)
+	stsSpec, err := mariadb.StatefulSet(instance, hashOfHashes, topology)
+	// an error is detected while creating the StatefulSet spec
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	commonstatefulset := commonstatefulset.NewStatefulSet(stsSpec, 5)
 	sfres, sferr := commonstatefulset.CreateOrPatch(ctx, helper)
 	if sferr != nil {
 		if k8s_errors.IsNotFound(sferr) {
