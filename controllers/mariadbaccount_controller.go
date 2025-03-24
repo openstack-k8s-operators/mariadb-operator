@@ -63,10 +63,8 @@ func (r *MariaDBAccountReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *MariaDBAccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, _err error) {
 	log := GetLog(ctx, "MariaDBAccount")
 
-	var err error
-
 	instance := &databasev1beta1.MariaDBAccount{}
-	err = r.Client.Get(ctx, req.NamespacedName, instance)
+	err := r.Client.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -116,7 +114,6 @@ func (r *MariaDBAccountReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		condition.UnknownCondition(databasev1beta1.MariaDBDatabaseReadyCondition, condition.InitReason, databasev1beta1.MariaDBDatabaseReadyInitMessage),
 		condition.UnknownCondition(databasev1beta1.MariaDBAccountReadyCondition, condition.InitReason, databasev1beta1.MariaDBAccountReadyInitMessage),
 	)
-
 	instance.Status.Conditions.Init(&cl)
 
 	if instance.DeletionTimestamp.IsZero() || isNewInstance { //revive:disable:indent-error-flow
@@ -132,79 +129,13 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 	ctx context.Context, log logr.Logger,
 	helper *helper.Helper, instance *databasev1beta1.MariaDBAccount) (result ctrl.Result, _err error) {
 
-	// this is following from how the MariaDBDatabase CRD works.
-	// the related Galera / MariaDB object is given as a label, while
-	// the reference to the secret itself is given in the spec
-	// the convention appears to be: "things we are dependent on are named in labels,
-	// things we are setting up are named in the spec"
-	mariadbDatabaseName := instance.ObjectMeta.Labels["mariaDBDatabaseName"]
-	if mariadbDatabaseName == "" {
-
-		log.Info(fmt.Sprintf(
-			"MariaDBAccount '%s' does not have a 'mariaDBDatabaseName' label, create won't proceed",
-			instance.Name,
-		))
-
-		return ctrl.Result{}, nil
+	// get a handle to the current, active MariaDBDatabase.
+	// if not ready yet, requeue.
+	mariadbDatabase, result, err := r.getMariaDBDatabaseForCreate(ctx, log, instance)
+	if mariadbDatabase == nil {
+		return result, err
 	}
 
-	// locate the MariaDBDatabase object that this account is associated with
-	mariadbDatabase, err := r.getMariaDBDatabaseObject(ctx, instance, mariadbDatabaseName)
-
-	// not found
-	if err != nil && k8s_errors.IsNotFound(err) {
-		// for the create case, need to wait for the MariaDBDatabase to exists before we can continue;
-		// requeue
-
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			databasev1beta1.MariaDBDatabaseReadyCondition,
-			databasev1beta1.ReasonDBNotFound,
-			condition.SeverityInfo,
-			databasev1beta1.MariaDBDatabaseReadyInitMessage))
-
-		log.Info(fmt.Sprintf(
-			"MariaDBAccount '%s' didn't find MariaDBDatabase '%s'; requeueing",
-			instance.Name, instance.ObjectMeta.Labels["mariaDBDatabaseName"]))
-
-		return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
-	} else if err == nil && !mariadbDatabase.Status.Conditions.IsTrue(databasev1beta1.MariaDBDatabaseReadyCondition) {
-		// found but database not ready
-
-		// for the create case, need to wait for the MariaDBDatabase to exists before we can continue;
-		// requeue
-
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			databasev1beta1.MariaDBDatabaseReadyCondition,
-			databasev1beta1.ReasonDBWaitingInitialized,
-			condition.SeverityInfo,
-			databasev1beta1.MariaDBDatabaseReadyInitMessage))
-
-		log.Info(fmt.Sprintf(
-			"MariaDBAccount '%s' MariaDBDatabase '%s' not yet complete; requeueing",
-			instance.Name, instance.ObjectMeta.Labels["mariaDBDatabaseName"]))
-
-		return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
-	} else if err != nil {
-		// unhandled error; exit
-		log.Error(err, "unhandled error retrieving MariaDBDatabase instance")
-
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			databasev1beta1.MariaDBDatabaseReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityError,
-			databasev1beta1.MariaDBErrorRetrievingMariaDBDatabaseMessage,
-			err))
-
-		return ctrl.Result{}, err
-	}
-
-	instance.Status.Conditions.MarkTrue(
-		databasev1beta1.MariaDBDatabaseReadyCondition,
-		databasev1beta1.MariaDBDatabaseReadyMessage,
-	)
-
-	// first, add a finalizer for us, so that subsequent steps can make
-	// additional state changes that we'd be on the hook to clean up afterwards
 	if controllerutil.AddFinalizer(instance, helper.GetFinalizer()) {
 		// we need to persist this right away
 		return ctrl.Result{}, nil
@@ -212,51 +143,23 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 
 	// MariaDBdatabase exists and we are a create case.  ensure finalizers set up
 	if controllerutil.AddFinalizer(mariadbDatabase, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
-		err := r.Update(ctx, mariadbDatabase)
+		err = r.Update(ctx, mariadbDatabase)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 	}
 
-	// now proceed to do actual work.  acquire the galera/mariadb instance
-	// referenced by the MariaDBDatabase which will lead us to the hostname
-	// and container image to target
-
-	dbGalera, err := r.getDatabaseObject(ctx, mariadbDatabase, instance)
-	if err != nil {
-
-		log.Error(err, "Error getting database object")
-
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			databasev1beta1.MariaDBServerReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityError,
-			databasev1beta1.MariaDBErrorRetrievingMariaDBGaleraMessage,
-			err))
-
-		return ctrl.Result{}, err
-	}
-
-	var dbContainerImage, serviceAccountName string
-
-	if !dbGalera.Status.Bootstrapped {
-		log.Info("DB bootstrap not complete. Requeue...")
-		return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
-	}
-
-	dbContainerImage = dbGalera.Spec.ContainerImage
-	serviceAccountName = dbGalera.RbacResourceName()
-
-	dbHostname, dbHostResult, err := databasev1beta1.GetServiceHostname(ctx, helper, dbGalera.Name, dbGalera.Namespace)
-
-	if (err != nil || dbHostResult != ctrl.Result{}) {
-		return dbHostResult, err
-	}
-
-	instance.Status.Conditions.MarkTrue(
-		databasev1beta1.MariaDBServerReadyCondition,
-		databasev1beta1.MariaDBServerReadyMessage,
+	// now proceed to do actual work.  acquire the Galera instance
+	// which will lead us to the hostname and container image to target
+	dbGalera, dbHostname, result, err := r.getGaleraForCreateOrDelete(
+		ctx, log, helper, instance, mariadbDatabase,
 	)
+	if dbGalera == nil {
+		return result, err
+	}
+
+	dbContainerImage := dbGalera.Spec.ContainerImage
+	serviceAccountName := dbGalera.RbacResourceName()
 
 	// account create
 
@@ -276,12 +179,18 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 			condition.SeverityInfo,
 			databasev1beta1.MariaDBAccountSecretNotReadyMessage, err))
 
-		return secretResult, err
+		log.Info(fmt.Sprintf(
+			"MariaDBAccount '%s' didn't find Secret '%s'; requeueing",
+			instance.Name, instance.Spec.Secret))
+
+		return secretResult, client.IgnoreNotFound(err)
 	}
 
-	log.Info(fmt.Sprintf("Running account create '%s' MariaDBDatabase '%s'", instance.Name, mariadbDatabaseName))
-
-	jobDef, err := mariadb.CreateDbAccountJob(dbGalera, instance, mariadbDatabase.Spec.Name, dbHostname, dbContainerImage, serviceAccountName, dbGalera.Spec.NodeSelector)
+	log.Info(fmt.Sprintf("Running account create '%s' MariaDBDatabase '%s'",
+		instance.Name, mariadbDatabase.Spec.Name))
+	jobDef, err := mariadb.CreateDbAccountJob(
+		dbGalera, instance, mariadbDatabase.Spec.Name, dbHostname,
+		dbContainerImage, serviceAccountName, dbGalera.Spec.NodeSelector)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -298,13 +207,10 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 		ctx,
 		helper,
 	)
-	if (ctrlResult != ctrl.Result{}) {
-		// TODO: should this be ctrlResult, err ?
-		return ctrlResult, nil
+	if (ctrlResult != ctrl.Result{} || err != nil) {
+		return ctrlResult, err
 	}
-	if err != nil {
-		return ctrl.Result{}, err
-	}
+
 	if accountCreateJob.HasChanged() {
 		if instance.Status.Hash == nil {
 			instance.Status.Hash = make(map[string]string)
@@ -334,74 +240,9 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 	ctx context.Context, log logr.Logger,
 	helper *helper.Helper, instance *databasev1beta1.MariaDBAccount) (result ctrl.Result, _err error) {
 
-	// this is following from how the MariaDBDatabase CRD works.
-	// the related Galera / MariaDB object is given as a label, while
-	// the reference to the secret itself is given in the spec
-	// the convention appears to be: "things we are dependent on are named in labels,
-	// things we are setting up are named in the spec"
-	mariadbDatabaseName := instance.ObjectMeta.Labels["mariaDBDatabaseName"]
-	if mariadbDatabaseName == "" {
-
-		log.Info(fmt.Sprintf(
-			"MariaDBAccount '%s' does not have a 'mariaDBDatabaseName' label, will remove finalizers",
-			instance.Name,
-		))
-		controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
-
-		return ctrl.Result{}, nil
-	}
-
-	// locate the MariaDBDatabase object that this account is associated with
-	mariadbDatabase, err := r.getMariaDBDatabaseObject(ctx, instance, mariadbDatabaseName)
-
-	// not found
-	if err != nil && k8s_errors.IsNotFound(err) {
-		// for the delete case, the database doesn't exist.  so
-		// that means we don't, either.   remove finalizer from
-		// our own instance and return
-		log.Info(fmt.Sprintf(
-			"MariaDBAccount '%s' Didn't find MariaDBDatabase '%s'; no account delete needed",
-			instance.Name, instance.ObjectMeta.Labels["mariaDBDatabaseName"]))
-
-		controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
-
-		return ctrl.Result{}, nil
-	} else if err == nil && !mariadbDatabase.Status.Conditions.IsTrue(databasev1beta1.MariaDBDatabaseReadyCondition) {
-		// found but database is not ready
-
-		// for the delete case, the database doesn't exist.  so
-		// that means we don't, either.   remove finalizer from
-		// our own instance and return
-		log.Info(fmt.Sprintf(
-			"MariaDBAccount '%s' MariaDBDatabase '%s' not yet complete; no account delete needed",
-			instance.Name, instance.ObjectMeta.Labels["mariaDBDatabaseName"]))
-
-		// first, remove finalizer from the MariaDBDatabase instance
-		if controllerutil.RemoveFinalizer(mariadbDatabase, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
-			err = r.Update(ctx, mariadbDatabase)
-
-			if err != nil && !k8s_errors.IsNotFound(err) {
-				return ctrl.Result{}, err
-			}
-
-		}
-
-		// then remove finalizer from our own instance
-		controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
-
-		return ctrl.Result{}, nil
-	} else if err != nil {
-		// unhandled error; exit
-		log.Error(err, "unhandled error retrieving MariaDBDatabase instance")
-
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			databasev1beta1.MariaDBDatabaseReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityError,
-			"Error retrieving MariaDBDatabase instance %s",
-			err))
-
-		return ctrl.Result{}, err
+	mariadbDatabase, result, err := r.getMariaDBDatabaseForDelete(ctx, log, helper, instance)
+	if mariadbDatabase == nil {
+		return result, err
 	}
 
 	// dont do actual DROP USER until finalizers from downstream controllers
@@ -422,7 +263,7 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 			databasev1beta1.MariaDBAccountFinalizersRemainMessage,
 			strings.Join(finalizersWeCareAbout, ", "),
 		)
-		return ctrl.Result{}, err
+		return ctrl.Result{}, nil
 	}
 
 	instance.Status.Conditions.MarkTrue(
@@ -435,75 +276,37 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 		databasev1beta1.MariaDBDatabaseReadyMessage,
 	)
 
-	// now proceed to do actual work.  acquire the galera/mariadb instance
-	// referenced by the MariaDBDatabase which will lead us to the hostname
-	// and container image to target
+	// now proceed to do actual work.  acquire the Galera instance
+	// which will lead us to the hostname and container image to target
+	dbGalera, dbHostname, result, err := r.getGaleraForCreateOrDelete(
+		ctx, log, helper, instance, mariadbDatabase,
+	)
+	// if Galera CR was not found at all, this indicates MariaDBAccount is not
+	// implemented in the database either, so remove all finalizers and
+	// exit
+	if k8s_errors.IsNotFound(err) {
+		// remove finalizer from the MariaDBDatabase instance
+		if controllerutil.RemoveFinalizer(mariadbDatabase, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
+			err = r.Update(ctx, mariadbDatabase)
 
-	dbGalera, err := r.getDatabaseObject(ctx, mariadbDatabase, instance)
-	if err != nil {
-
-		log.Error(err, "Error getting database object")
-
-		if k8s_errors.IsNotFound(err) {
-			// remove finalizer from the MariaDBDatabase instance
-			if controllerutil.RemoveFinalizer(mariadbDatabase, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
-				err = r.Update(ctx, mariadbDatabase)
-
-				if err != nil && !k8s_errors.IsNotFound(err) {
-					return ctrl.Result{}, err
-				}
-
+			if err != nil && !k8s_errors.IsNotFound(err) {
+				return ctrl.Result{}, err
 			}
 
-			// remove local finalizer
-			controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
-
-			// galera DB does not exist, so return
-			return ctrl.Result{}, nil
-		} else {
-			instance.Status.Conditions.Set(condition.FalseCondition(
-				databasev1beta1.MariaDBServerReadyCondition,
-				condition.ErrorReason,
-				condition.SeverityError,
-				"Error retrieving MariaDB/Galera instance %s",
-				err))
-
-			return ctrl.Result{}, err
 		}
+
+		// remove local finalizer
+		controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
+
+		return ctrl.Result{}, nil
+	} else if dbGalera == nil {
+		return result, err
 	}
 
-	var dbContainerImage, serviceAccountName string
+	dbContainerImage := dbGalera.Spec.ContainerImage
+	serviceAccountName := dbGalera.RbacResourceName()
 
-	if !dbGalera.Status.Bootstrapped {
-		log.Info("DB bootstrap not complete. Requeue...")
-
-		instance.Status.Conditions.MarkFalse(
-			databasev1beta1.MariaDBServerReadyCondition,
-			databasev1beta1.ReasonDBWaitingInitialized,
-			condition.SeverityInfo,
-			databasev1beta1.MariaDBServerNotBootstrappedMessage,
-		)
-
-		return ctrl.Result{RequeueAfter: time.Second * 10}, nil
-	}
-
-	dbContainerImage = dbGalera.Spec.ContainerImage
-	serviceAccountName = dbGalera.RbacResourceName()
-
-	dbHostname, dbHostResult, err := databasev1beta1.GetServiceHostname(ctx, helper, dbGalera.Name, dbGalera.Namespace)
-
-	if (err != nil || dbHostResult != ctrl.Result{}) {
-		return dbHostResult, err
-	}
-
-	instance.Status.Conditions.MarkTrue(
-		databasev1beta1.MariaDBServerReadyCondition,
-		databasev1beta1.MariaDBServerReadyMessage,
-	)
-
-	// account delete
-
-	log.Info(fmt.Sprintf("Running account delete '%s' MariaDBDatabase '%s'", instance.Name, mariadbDatabaseName))
+	log.Info(fmt.Sprintf("Running account delete '%s' MariaDBDatabase '%s'", instance.Name, mariadbDatabase.Spec.Name))
 
 	jobDef, err := mariadb.DeleteDbAccountJob(dbGalera, instance, mariadbDatabase.Spec.Name, dbHostname, dbContainerImage, serviceAccountName, dbGalera.Spec.NodeSelector)
 	if err != nil {
@@ -522,12 +325,8 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 		ctx,
 		helper,
 	)
-	if (ctrlResult != ctrl.Result{}) {
-		// TODO: should this be ctrlResult, err ?
-		return ctrlResult, nil
-	}
-	if err != nil {
-		return ctrl.Result{}, err
+	if (ctrlResult != ctrl.Result{} || err != nil) {
+		return ctrlResult, err
 	}
 	if accountDeleteJob.HasChanged() {
 		if instance.Status.Hash == nil {
@@ -540,23 +339,211 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 	// first, remove finalizer from the MariaDBDatabase instance
 	if controllerutil.RemoveFinalizer(mariadbDatabase, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
 		err = r.Update(ctx, mariadbDatabase)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	// then remove finalizer from our own instance
 	controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
 
-	return ctrl.Result{}, err
+	return ctrl.Result{}, nil
 }
 
-// getDatabaseObject - returns either a Galera or MariaDB object (and an associated client.Object interface)
-func (r *MariaDBAccountReconciler) getDatabaseObject(ctx context.Context, mariaDBDatabase *databasev1beta1.MariaDBDatabase, instance *databasev1beta1.MariaDBAccount) (*databasev1beta1.Galera, error) {
-	dbName := mariaDBDatabase.ObjectMeta.Labels["dbName"]
-	return GetDatabaseObject(
-		ctx, r.Client,
-		dbName,
-		instance.Namespace,
+// getMariaDBDatabaseForCreate - waits for a MariaDBDatabase to be available in preparation
+// to create an account
+func (r *MariaDBAccountReconciler) getMariaDBDatabaseForCreate(ctx context.Context, log logr.Logger,
+	instance *databasev1beta1.MariaDBAccount) (*databasev1beta1.MariaDBDatabase, ctrl.Result, error) {
+
+	// the convention of using a label for "things we are dependent on" is
+	// taken from the same practice in MariaDBDatabase where the "dbName" label
+	// refers to the Galera instance.
+	mariadbDatabaseName := instance.ObjectMeta.Labels["mariaDBDatabaseName"]
+	if mariadbDatabaseName == "" {
+
+		log.Info(fmt.Sprintf(
+			"MariaDBAccount '%s' does not have a 'mariaDBDatabaseName' label, create won't proceed",
+			instance.Name,
+		))
+
+		return nil, ctrl.Result{}, nil
+	}
+
+	// locate the MariaDBDatabase object itself
+	mariadbDatabase, err := r.getMariaDBDatabaseObject(ctx, instance, mariadbDatabaseName)
+
+	if err != nil {
+		if k8s_errors.IsNotFound(err) {
+			// doesnt exist yet; requeue
+
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				databasev1beta1.MariaDBDatabaseReadyCondition,
+				databasev1beta1.ReasonDBNotFound,
+				condition.SeverityInfo,
+				databasev1beta1.MariaDBDatabaseReadyInitMessage))
+
+			log.Info(fmt.Sprintf(
+				"MariaDBAccount '%s' didn't find MariaDBDatabase '%s'; requeueing",
+				instance.Name, mariadbDatabaseName))
+
+			return nil, ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
+		} else {
+			// unhandled error; exit without requeue
+			log.Error(err, "unhandled error retrieving MariaDBDatabase instance")
+
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				databasev1beta1.MariaDBDatabaseReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityError,
+				databasev1beta1.MariaDBErrorRetrievingMariaDBDatabaseMessage,
+				err))
+
+			return nil, ctrl.Result{}, err
+		}
+	} else if mariadbDatabase.Status.Conditions.IsFalse(databasev1beta1.MariaDBDatabaseReadyCondition) {
+		// found but not ready; requeue
+
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			databasev1beta1.MariaDBDatabaseReadyCondition,
+			databasev1beta1.ReasonDBWaitingInitialized,
+			condition.SeverityInfo,
+			databasev1beta1.MariaDBDatabaseReadyInitMessage))
+
+		log.Info(fmt.Sprintf(
+			"MariaDBAccount '%s' MariaDBDatabase '%s' not yet complete; requeueing",
+			instance.Name, mariadbDatabaseName))
+
+		return nil, ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
+	}
+
+	// MariaDBDabase is ready, update status
+	instance.Status.Conditions.MarkTrue(
+		databasev1beta1.MariaDBDatabaseReadyCondition,
+		databasev1beta1.MariaDBDatabaseReadyMessage,
 	)
 
+	// return MariaDBDatabase where account create flow will then continue
+	return mariadbDatabase, ctrl.Result{}, nil
+}
+
+// getMariaDBDatabaseForDelete - retrieves a MariaDBDatabase to be available in preparation
+// to delete an account.  if MariaDBDatabase not available, deleted, or not set up,
+// removes account-level finalizers and returns nil for the object
+func (r *MariaDBAccountReconciler) getMariaDBDatabaseForDelete(ctx context.Context, log logr.Logger,
+	helper *helper.Helper, instance *databasev1beta1.MariaDBAccount) (*databasev1beta1.MariaDBDatabase, ctrl.Result, error) {
+
+	mariadbDatabaseName := instance.ObjectMeta.Labels["mariaDBDatabaseName"]
+	if mariadbDatabaseName == "" {
+
+		log.Info(fmt.Sprintf(
+			"MariaDBAccount '%s' does not have a 'mariaDBDatabaseName' label, will remove finalizers",
+			instance.Name,
+		))
+
+		controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
+		return nil, ctrl.Result{}, nil
+	}
+
+	// locate the MariaDBDatabase object itself
+	mariadbDatabase, err := r.getMariaDBDatabaseObject(ctx, instance, mariadbDatabaseName)
+
+	if err != nil {
+		if k8s_errors.IsNotFound(err) {
+			// not found.   this implies MariaDBAccount has no database-level
+			// entry either.   Remove MariaDBAccount / secret finalizers and return
+			log.Info(fmt.Sprintf(
+				"MariaDBAccount '%s' Didn't find MariaDBDatabase '%s'; no account delete needed",
+				instance.Name, mariadbDatabaseName))
+
+			controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
+			return nil, ctrl.Result{}, nil
+		} else {
+			// unhandled error; exit without change
+			log.Error(err, "unhandled error retrieving MariaDBDatabase instance")
+
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				databasev1beta1.MariaDBDatabaseReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityError,
+				databasev1beta1.MariaDBErrorRetrievingMariaDBDatabaseMessage,
+				err))
+
+			return nil, ctrl.Result{}, err
+
+		}
+	} else if mariadbDatabase.Status.Conditions.IsFalse(databasev1beta1.MariaDBDatabaseReadyCondition) {
+		// found but database is not ready.   this implies MariaDBAccount has no database-level
+		// entry either.   Remove MariaDBAccount / secret finalizers and return
+		log.Info(fmt.Sprintf(
+			"MariaDBAccount '%s' MariaDBDatabase '%s' not yet complete; no account delete needed",
+			instance.Name, mariadbDatabaseName))
+
+		if controllerutil.RemoveFinalizer(mariadbDatabase, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
+			err = r.Update(ctx, mariadbDatabase)
+
+			if err != nil && !k8s_errors.IsNotFound(err) {
+				return nil, ctrl.Result{}, err
+			}
+		}
+
+		controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
+		return nil, ctrl.Result{}, nil
+	}
+
+	// return MariaDBDatabase where account delete flow will then continue
+	return mariadbDatabase, ctrl.Result{}, nil
+}
+
+// getGaleraForCreateOrDelete - retrieves the Galera instance in use, and establishes
+// that it's in a ready state.  Sets appropriate statuses and returns requeue
+// or error results as needed.
+func (r *MariaDBAccountReconciler) getGaleraForCreateOrDelete(
+	ctx context.Context, log logr.Logger,
+	helper *helper.Helper, instance *databasev1beta1.MariaDBAccount,
+	mariadbDatabase *databasev1beta1.MariaDBDatabase) (*databasev1beta1.Galera, string, ctrl.Result, error) {
+
+	dbName := mariadbDatabase.ObjectMeta.Labels["dbName"]
+
+	dbGalera, err := GetDatabaseObject(ctx, r.Client, dbName, instance.Namespace)
+
+	if err != nil {
+		log.Error(err, "Error retrieving Galera instance")
+
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			databasev1beta1.MariaDBServerReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityError,
+			databasev1beta1.MariaDBErrorRetrievingMariaDBGaleraMessage,
+			err))
+
+		return nil, "", ctrl.Result{}, err
+	}
+
+	if !dbGalera.Status.Bootstrapped {
+		log.Info("DB bootstrap not complete. Requeue...")
+
+		instance.Status.Conditions.MarkFalse(
+			databasev1beta1.MariaDBServerReadyCondition,
+			databasev1beta1.ReasonDBWaitingInitialized,
+			condition.SeverityInfo,
+			databasev1beta1.MariaDBServerNotBootstrappedMessage,
+		)
+
+		return nil, "", ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
+	}
+
+	dbHostname, dbHostResult, err := databasev1beta1.GetServiceHostname(ctx, helper, dbGalera.Name, dbGalera.Namespace)
+
+	if (err != nil || dbHostResult != ctrl.Result{}) {
+		return nil, "", dbHostResult, err
+	}
+
+	instance.Status.Conditions.MarkTrue(
+		databasev1beta1.MariaDBServerReadyCondition,
+		databasev1beta1.MariaDBServerReadyMessage,
+	)
+
+	return dbGalera, dbHostname, ctrl.Result{}, nil
 }
 
 // getMariaDBDatabaseObject - returns a MariaDBDatabase object
@@ -576,6 +563,6 @@ func (r *MariaDBAccountReconciler) getMariaDBDatabaseObject(ctx context.Context,
 		return nil, err
 	}
 
-	return mariaDBDatabase, err
+	return mariaDBDatabase, nil
 
 }
