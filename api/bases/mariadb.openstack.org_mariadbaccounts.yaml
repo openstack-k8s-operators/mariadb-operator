@@ -48,6 +48,12 @@ spec:
           spec:
             description: MariaDBAccountSpec defines the desired state of MariaDBAccount
             properties:
+              accountType:
+                default: User
+                enum:
+                - User
+                - System
+                type: string
               requireTLS:
                 default: false
                 description: Account must use TLS to connect to the database
