@@ -4,8 +4,11 @@ MYSQL_REMOTE_HOST={{.DatabaseHostname}} source /var/lib/operator-scripts/mysql_r
 
 export DatabasePassword=${DatabasePassword:?"Please specify a DatabasePassword variable."}
 
-mysql -h {{.DatabaseHostname}} -u {{.DatabaseAdminUsername}} -P 3306 -e "GRANT ALL PRIVILEGES ON {{.DatabaseName}}.* TO '{{.UserName}}'@'localhost' IDENTIFIED BY '$DatabasePassword'{{.RequireTLS}};GRANT ALL PRIVILEGES ON {{.DatabaseName}}.* TO '{{.UserName}}'@'%' IDENTIFIED BY '$DatabasePassword'{{.RequireTLS}};"
-
+if [ -n "{{.DatabaseName}}" ]; then
+    mysql -h {{.DatabaseHostname}} -u {{.DatabaseAdminUsername}} -P 3306 -e "GRANT ALL PRIVILEGES ON {{.DatabaseName}}.* TO '{{.UserName}}'@'localhost' IDENTIFIED BY '$DatabasePassword'{{.RequireTLS}};GRANT ALL PRIVILEGES ON {{.DatabaseName}}.* TO '{{.UserName}}'@'%' IDENTIFIED BY '$DatabasePassword'{{.RequireTLS}};"
+else
+    mysql -h {{.DatabaseHostname}} -u {{.DatabaseAdminUsername}} -P 3306 -e "GRANT ALL PRIVILEGES ON *.* TO '{{.UserName}}'@'localhost' IDENTIFIED BY '$DatabasePassword'{{.RequireTLS}};GRANT ALL PRIVILEGES ON *.* TO '{{.UserName}}'@'%' IDENTIFIED BY '$DatabasePassword'{{.RequireTLS}};"
+fi
 
 # search for the account.  not using SHOW CREATE USER to avoid displaying
 # password hash
