@@ -1,0 +1,10 @@
+apiVersion: mariadb.openstack.org/v1beta1
+kind: MariaDBAccount
+metadata:
+  labels:
+    dbName: openstack
+  name: kuttldb-some-system-db-account
+spec:
+  userName: systemuser
+  secret: some-system-db-secret
+  accountType: System
