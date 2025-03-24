@@ -126,11 +126,8 @@ func (spec *GaleraSpecCore) ValidateCreate(basePath *field.Path, namespace strin
 
 	// When a TopologyRef CR is referenced, fail if a different Namespace is
 	// referenced because is not supported
-	if spec.TopologyRef != nil {
-		if err := topologyv1.ValidateTopologyNamespace(spec.TopologyRef.Namespace, *basePath, namespace); err != nil {
-			allErrs = append(allErrs, err)
-		}
-	}
+	allErrs = append(allErrs, topologyv1.ValidateTopologyRef(
+		spec.TopologyRef, *basePath.Child("topologyRef"), namespace)...)
 
 	return allWarn, allErrs
 }
@@ -161,11 +158,7 @@ func (r *GaleraSpec) ValidateUpdate(old GaleraSpec, basePath *field.Path, namesp
 
 	// When a TopologyRef CR is referenced, fail if a different Namespace is
 	// referenced because is not supported
-	if r.TopologyRef != nil {
-		if err := topologyv1.ValidateTopologyNamespace(r.TopologyRef.Namespace, *basePath, namespace); err != nil {
-			allErrs = append(allErrs, err)
-		}
-	}
+	allErrs = append(allErrs, r.ValidateTopology(basePath, namespace)...)
 	return allErrs
 }
 
@@ -181,6 +174,7 @@ func (r *GaleraSpecCore) ValidateUpdate(old GaleraSpecCore, basePath *field.Path
 			allErrs = append(allErrs, err)
 		}
 	}
+	allErrs = append(allErrs, r.ValidateTopology(basePath, namespace)...)
 	return allErrs
 }
 
