@@ -713,7 +713,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		ctx,
 		helper,
 		instance.Spec.TopologyRef,
-		instance.GetLastAppliedTopologyRef(),
+		instance.Status.LastAppliedTopology,
 		instance.Name,
 		labels.GetLabelSelector(serviceLabels),
 	)

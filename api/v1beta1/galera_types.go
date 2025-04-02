@@ -189,19 +189,6 @@ func SetupDefaults() {
 	SetupGaleraDefaults(galeraDefaults)
 }
 
-// GetLastTopologyRef - Returns a TopoRef object that can be passed to the
-// Handle topology logic
-func (instance Galera) GetLastAppliedTopologyRef() *topologyv1.TopoRef {
-	lastAppliedTopologyName := ""
-	if instance.Status.LastAppliedTopology != nil {
-		lastAppliedTopologyName = instance.Status.LastAppliedTopology.Name
-	}
-	return &topologyv1.TopoRef{
-		Name:      lastAppliedTopologyName,
-		Namespace: instance.Namespace,
-	}
-}
-
 // ValidateTopology -
 func (instance *GaleraSpecCore) ValidateTopology(
 	basePath *field.Path,
