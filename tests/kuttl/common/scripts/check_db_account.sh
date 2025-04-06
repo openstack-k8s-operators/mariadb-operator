@@ -17,7 +17,7 @@ if [ "$5" = "--reverse" ];then
     not_found=0
 fi
 
-found_username=$(oc rsh -n ${NAMESPACE} -c galera ${galera} /bin/sh -c 'mysql -uroot -p${DB_ROOT_PASSWORD} -Nse "select user from mysql.user"' | grep -o -w ${username})
+found_username=$(oc rsh -n ${NAMESPACE} -c galera ${galera} /bin/sh -c 'source /var/lib/operator-scripts/root_auth.sh; mysql -uroot -p${DB_ROOT_PASSWORD} -Nse "select user from mysql.user"' | grep -o -w ${username})
 
 # username was not found, exit
 if [ -z "$found_username" ]; then
