@@ -1,5 +1,7 @@
 #!/bin/bash
 
+source /var/lib/operator-scripts/root_auth.sh
+
 mysql -h {{.DatabaseHostname}} -u {{.DatabaseAdminUsername}} -P 3306 -e "DROP DATABASE IF EXISTS {{.DatabaseName}};"
 
 if [[ "${DatabasePassword}" != "" ]]; then
