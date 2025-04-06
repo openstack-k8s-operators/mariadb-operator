@@ -39,20 +39,6 @@ func getGaleraVolumes(g *mariadbv1.Galera) []corev1.Volume {
 
 	volumes := []corev1.Volume{
 		{
-			Name: "secrets",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: g.Spec.Secret,
-					Items: []corev1.KeyToPath{
-						{
-							Key:  "DbRootPassword",
-							Path: "dbpassword",
-						},
-					},
-				},
-			},
-		},
-		{
 			Name: "kolla-config",
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
@@ -117,6 +103,10 @@ func getGaleraVolumes(g *mariadbv1.Galera) []corev1.Volume {
 							Key:  "mysql_wsrep_notify.sh",
 							Path: "mysql_wsrep_notify.sh",
 						},
+						{
+							Key:  "root_auth.sh",
+							Path: "root_auth.sh",
+						},
 					},
 				},
 			},
@@ -141,6 +131,29 @@ func getGaleraVolumes(g *mariadbv1.Galera) []corev1.Volume {
 	return volumes
 }
 
+func getGaleraRootOnlyVolumes(g *mariadbv1.Galera) []corev1.Volume {
+	volumes := []corev1.Volume{
+		{
+			Name: "operator-scripts",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: g.Name + "-scripts",
+					},
+					Items: []corev1.KeyToPath{
+						{
+							Key:  "root_auth.sh",
+							Path: "root_auth.sh",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	return volumes
+}
+
 func getGaleraVolumeMounts(g *mariadbv1.Galera) []corev1.VolumeMount {
 	volumeMounts := []corev1.VolumeMount{
 		{
@@ -154,10 +167,6 @@ func getGaleraVolumeMounts(g *mariadbv1.Galera) []corev1.VolumeMount {
 		}, {
 			MountPath: "/var/lib/config-data/generated",
 			Name:      "config-data-generated",
-		}, {
-			MountPath: "/var/lib/secrets",
-			ReadOnly:  true,
-			Name:      "secrets",
 		}, {
 			MountPath: "/var/lib/operator-scripts",
 			ReadOnly:  true,
@@ -191,6 +200,18 @@ func getGaleraVolumeMounts(g *mariadbv1.Galera) []corev1.VolumeMount {
 	return volumeMounts
 }
 
+func getGaleraRootOnlyVolumeMounts() []corev1.VolumeMount {
+	volumeMounts := []corev1.VolumeMount{
+		{
+			MountPath: "/var/lib/operator-scripts",
+			ReadOnly:  true,
+			Name:      "operator-scripts",
+		},
+	}
+
+	return volumeMounts
+}
+
 func getGaleraInitVolumeMounts(g *mariadbv1.Galera) []corev1.VolumeMount {
 	volumeMounts := []corev1.VolumeMount{
 		{
@@ -204,10 +225,6 @@ func getGaleraInitVolumeMounts(g *mariadbv1.Galera) []corev1.VolumeMount {
 		}, {
 			MountPath: "/var/lib/config-data/generated",
 			Name:      "config-data-generated",
-		}, {
-			MountPath: "/var/lib/secrets",
-			ReadOnly:  true,
-			Name:      "secrets",
 		}, {
 			MountPath: "/var/lib/operator-scripts",
 			ReadOnly:  true,

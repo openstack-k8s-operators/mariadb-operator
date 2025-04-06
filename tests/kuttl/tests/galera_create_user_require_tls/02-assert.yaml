@@ -4,8 +4,8 @@ commands:
   - script: |
       set -euxo pipefail
       # ensure db users are configured to TLS restriction
-      oc rsh -n ${NAMESPACE} -c galera openstack-galera-0 /bin/sh -c 'mysql -uroot -p${DB_ROOT_PASSWORD} -e "show grants for \`kuttldb\`@\`%\`;"' | grep 'REQUIRE SSL'
+      oc rsh -n ${NAMESPACE} -c galera openstack-galera-0 /bin/sh -c 'source /var/lib/operator-scripts/root_auth.sh; mysql -uroot -p${DB_ROOT_PASSWORD} -e "show grants for \`kuttldb\`@\`%\`;"' | grep 'REQUIRE SSL'
   - script: |
       set -euxo pipefail
       # ensure db users are configured to TLS restriction
-      oc rsh -n ${NAMESPACE} -c galera openstack-galera-0 /bin/sh -c 'mysql -uroot -p${DB_ROOT_PASSWORD} -e "show grants for \`anotheruser\`@\`%\`;"' | grep 'REQUIRE SSL'
+      oc rsh -n ${NAMESPACE} -c galera openstack-galera-0 /bin/sh -c 'source /var/lib/operator-scripts/root_auth.sh; mysql -uroot -p${DB_ROOT_PASSWORD} -e "show grants for \`anotheruser\`@\`%\`;"' | grep 'REQUIRE SSL'

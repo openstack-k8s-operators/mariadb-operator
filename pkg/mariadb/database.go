@@ -5,6 +5,7 @@ import (
 
 	util "github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
+	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,7 +21,7 @@ type dbCreateOptions struct {
 }
 
 // DbDatabaseJob -
-func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName string, databaseSecret string, containerImage string, serviceAccountName string, useTLS bool, nodeSelector *map[string]string) (*batchv1.Job, error) {
+func DbDatabaseJob(galera *mariadbv1.Galera, database *databasev1beta1.MariaDBDatabase, databaseHostName string, containerImage string, serviceAccountName string, useTLS bool, nodeSelector *map[string]string) (*batchv1.Job, error) {
 	var tlsStatement string
 	if useTLS {
 		tlsStatement = " REQUIRE SSL"
@@ -48,17 +49,6 @@ func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName s
 
 	if database.Spec.Secret != nil {
 		scriptEnv = []corev1.EnvVar{
-			{
-				Name: "MYSQL_PWD",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: databaseSecret,
-						},
-						Key: "DbRootPassword",
-					},
-				},
-			},
 			// send deprecated Secret field but only if non-nil
 			{
 				Name: "DatabasePassword",
@@ -73,19 +63,7 @@ func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName s
 			},
 		}
 	} else {
-		scriptEnv = []corev1.EnvVar{
-			{
-				Name: "MYSQL_PWD",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: databaseSecret,
-						},
-						Key: "DbRootPassword",
-					},
-				},
-			},
-		}
+		scriptEnv = []corev1.EnvVar{}
 	}
 
 	job := &batchv1.Job{
@@ -104,12 +82,14 @@ func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName s
 					ServiceAccountName: serviceAccountName,
 					Containers: []corev1.Container{
 						{
-							Name:    "mariadb-database-create",
-							Image:   containerImage,
-							Command: []string{"/bin/sh", "-c", dbCmd},
-							Env:     scriptEnv,
+							Name:         "mariadb-database-create",
+							Image:        containerImage,
+							Command:      []string{"/bin/sh", "-c", dbCmd},
+							Env:          scriptEnv,
+							VolumeMounts: getGaleraRootOnlyVolumeMounts(),
 						},
 					},
+					Volumes: getGaleraRootOnlyVolumes(galera),
 				},
 			},
 		},
@@ -123,7 +103,7 @@ func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName s
 }
 
 // DeleteDbDatabaseJob -
-func DeleteDbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName string, databaseSecret string, containerImage string, serviceAccountName string, nodeSelector *map[string]string) (*batchv1.Job, error) {
+func DeleteDbDatabaseJob(galera *mariadbv1.Galera, database *databasev1beta1.MariaDBDatabase, databaseHostName string, containerImage string, serviceAccountName string, nodeSelector *map[string]string) (*batchv1.Job, error) {
 
 	opts := dbCreateOptions{
 		database.Spec.Name,
@@ -145,17 +125,6 @@ func DeleteDbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHost
 
 	if database.Spec.Secret != nil {
 		scriptEnv = []corev1.EnvVar{
-			{
-				Name: "MYSQL_PWD",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: databaseSecret,
-						},
-						Key: databasev1beta1.DbRootPasswordSelector,
-					},
-				},
-			},
 			// send deprecated Secret field but only if non-nil.  otherwise
 			// the script should not try to drop usernames from mysql.user
 			{
@@ -171,19 +140,7 @@ func DeleteDbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHost
 			},
 		}
 	} else {
-		scriptEnv = []corev1.EnvVar{
-			{
-				Name: "MYSQL_PWD",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: databaseSecret,
-						},
-						Key: databasev1beta1.DbRootPasswordSelector,
-					},
-				},
-			},
-		}
+		scriptEnv = []corev1.EnvVar{}
 	}
 
 	job := &batchv1.Job{
@@ -199,12 +156,14 @@ func DeleteDbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHost
 					ServiceAccountName: serviceAccountName,
 					Containers: []corev1.Container{
 						{
-							Name:    "mariadb-database-create",
-							Image:   containerImage,
-							Command: []string{"/bin/sh", "-c", delCmd},
-							Env:     scriptEnv,
+							Name:         "mariadb-database-create",
+							Image:        containerImage,
+							Command:      []string{"/bin/sh", "-c", delCmd},
+							Env:          scriptEnv,
+							VolumeMounts: getGaleraRootOnlyVolumeMounts(),
 						},
 					},
+					Volumes: getGaleraRootOnlyVolumes(galera),
 				},
 			},
 		},
