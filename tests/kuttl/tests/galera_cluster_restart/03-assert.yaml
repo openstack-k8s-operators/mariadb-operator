@@ -3,8 +3,8 @@ kind: TestAssert
 commands:
   - script: |
       # ensure galera/WSREP traffic uses encryption
-      oc rsh -n ${NAMESPACE} -c galera openstack-galera-0 /bin/sh -c 'mysql -uroot -p${DB_ROOT_PASSWORD} -Nse "select @@global.wsrep_provider_options;"' | grep -o -w 'socket.ssl = YES'
+      oc rsh -n ${NAMESPACE} -c galera openstack-galera-0 /bin/sh -c 'source /var/lib/operator-scripts/root_auth.sh; mysql -uroot -p${DB_ROOT_PASSWORD} -Nse "select @@global.wsrep_provider_options;"' | grep -o -w 'socket.ssl = YES'
       # ensure mysql/SQL traffic uses encryption
-      oc rsh -n ${NAMESPACE} -c galera openstack-galera-0 /bin/sh -c 'mysql -uroot -p${DB_ROOT_PASSWORD} -Nse "select @@global.ssl_cipher;"' | grep -v '^NULL$'
+      oc rsh -n ${NAMESPACE} -c galera openstack-galera-0 /bin/sh -c 'source /var/lib/operator-scripts/root_auth.sh; mysql -uroot -p${DB_ROOT_PASSWORD} -Nse "select @@global.ssl_cipher;"' | grep -v '^NULL$'
       # ensure the galera cluster is composed of three nodes
-      oc rsh -n ${NAMESPACE} -c galera openstack-galera-0 /bin/sh -c 'mysql -uroot -p${DB_ROOT_PASSWORD} -Nse "show status like \"wsrep_cluster_size\";"' | grep -w 3
+      oc rsh -n ${NAMESPACE} -c galera openstack-galera-0 /bin/sh -c 'source /var/lib/operator-scripts/root_auth.sh; mysql -uroot -p${DB_ROOT_PASSWORD} -Nse "show status like \"wsrep_cluster_size\";"' | grep -w 3

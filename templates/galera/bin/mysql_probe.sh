@@ -1,9 +1,8 @@
 #!/bin/bash
 set -u
 
-# This secret is mounted by k8s and always up to date
-read -s -u 3 3< /var/lib/secrets/dbpassword MYSQL_PWD || true
-export MYSQL_PWD
+source /var/lib/operator-scripts/root_auth.sh
+
 
 PROBE_USER=root
 
