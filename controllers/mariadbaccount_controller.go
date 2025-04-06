@@ -243,14 +243,13 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 		return ctrl.Result{}, err
 	}
 
-	var dbAdminSecret, dbContainerImage, serviceAccountName string
+	var dbContainerImage, serviceAccountName string
 
 	if !dbGalera.Status.Bootstrapped {
 		log.Info("DB bootstrap not complete. Requeue...")
 		return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
 	}
 
-	dbAdminSecret = dbGalera.Spec.Secret
 	dbContainerImage = dbGalera.Spec.ContainerImage
 	serviceAccountName = dbGalera.RbacResourceName()
 
@@ -289,7 +288,7 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 
 	log.Info(fmt.Sprintf("Running account create '%s' MariaDBDatabase '%s'", instance.Name, mariadbDatabaseName))
 
-	jobDef, err := mariadb.CreateDbAccountJob(instance, mariadbDatabase.Spec.Name, dbHostname, dbAdminSecret, dbContainerImage, serviceAccountName, dbGalera.Spec.NodeSelector)
+	jobDef, err := mariadb.CreateDbAccountJob(dbGalera, instance, mariadbDatabase.Spec.Name, dbHostname, dbContainerImage, serviceAccountName, dbGalera.Spec.NodeSelector)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -480,7 +479,7 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 		}
 	}
 
-	var dbAdminSecret, dbContainerImage, serviceAccountName string
+	var dbContainerImage, serviceAccountName string
 
 	if !dbGalera.Status.Bootstrapped {
 		log.Info("DB bootstrap not complete. Requeue...")
@@ -495,7 +494,6 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 		return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 	}
 
-	dbAdminSecret = dbGalera.Spec.Secret
 	dbContainerImage = dbGalera.Spec.ContainerImage
 	serviceAccountName = dbGalera.RbacResourceName()
 
@@ -514,7 +512,7 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 
 	log.Info(fmt.Sprintf("Running account delete '%s' MariaDBDatabase '%s'", instance.Name, mariadbDatabaseName))
 
-	jobDef, err := mariadb.DeleteDbAccountJob(instance, mariadbDatabase.Spec.Name, dbHostname, dbAdminSecret, dbContainerImage, serviceAccountName, dbGalera.Spec.NodeSelector)
+	jobDef, err := mariadb.DeleteDbAccountJob(dbGalera, instance, mariadbDatabase.Spec.Name, dbHostname, dbContainerImage, serviceAccountName, dbGalera.Spec.NodeSelector)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
