@@ -1,6 +1,8 @@
 #!/bin/bash
 set +eux
 
+source /var/lib/operator-scripts/mysql_root_auth.sh
+
 if [ -e /var/lib/mysql/mysql ]; then
     echo -e "Database already exists. Reuse it."
     # set up permissions of mounted directories before starting

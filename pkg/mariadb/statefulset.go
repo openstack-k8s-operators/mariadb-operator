@@ -104,16 +104,6 @@ func getGaleraInitContainers(g *mariadbv1.Galera) []corev1.Container {
 		}, {
 			Name:  "KOLLA_CONFIG_STRATEGY",
 			Value: "COPY_ALWAYS",
-		}, {
-			Name: "DB_ROOT_PASSWORD",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: g.Spec.Secret,
-					},
-					Key: "DbRootPassword",
-				},
-			},
 		}},
 		Resources:    g.Spec.Resources,
 		VolumeMounts: getGaleraInitVolumeMounts(g),
@@ -132,16 +122,6 @@ func getGaleraContainers(g *mariadbv1.Galera, configHash string) []corev1.Contai
 		}, {
 			Name:  "KOLLA_CONFIG_STRATEGY",
 			Value: "COPY_ALWAYS",
-		}, {
-			Name: "DB_ROOT_PASSWORD",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: g.Spec.Secret,
-					},
-					Key: "DbRootPassword",
-				},
-			},
 		}},
 		Ports: []corev1.ContainerPort{{
 			ContainerPort: 3306,
