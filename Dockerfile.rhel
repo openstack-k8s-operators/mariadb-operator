@@ -1,5 +1,5 @@
 # golang-builder is used in OSBS build
-ARG GOLANG_BUILDER=openshift/golang-builder:1.13
+ARG GOLANG_BUILDER=registry.access.redhat.com/ubi9/go-toolset:1.24
 ARG OPERATOR_BASE_IMAGE=registry.redhat.io/ubi8/ubi-minimal:latest
 
 FROM ${GOLANG_BUILDER} AS builder

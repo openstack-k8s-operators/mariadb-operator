@@ -5,6 +5,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// Service creates a Kubernetes service for MariaDB database
 func Service(db metav1.Object) *corev1.Service {
 	selectors := LabelSelectors(db, "galera")
 	// NOTE(dciabrin) we currently deploy the Galera cluster as A/P,

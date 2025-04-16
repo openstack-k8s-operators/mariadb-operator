@@ -7,6 +7,7 @@ import (
 )
 
 const (
+	// GaleraCertPrefix is the prefix used for Galera cluster certificates
 	GaleraCertPrefix = "galera"
 )
 
@@ -23,7 +24,7 @@ func getGaleraVolumes(g *mariadbv1.Galera) []corev1.Volume {
 	}
 
 	if g.Spec.TLS.Enabled() {
-		if g.Spec.TLS.Ca.CaBundleSecretName != "" {
+		if g.Spec.TLS.CaBundleSecretName != "" {
 			configTemplates = append(configTemplates, corev1.KeyToPath{
 				Key:  "galera_tls.cnf.in",
 				Path: "galera_tls.cnf.in",
@@ -125,15 +126,15 @@ func getGaleraVolumes(g *mariadbv1.Galera) []corev1.Volume {
 
 	if g.Spec.TLS.Enabled() {
 		svc := tls.Service{
-			SecretName: *g.Spec.TLS.GenericService.SecretName,
+			SecretName: *g.Spec.TLS.SecretName,
 			CertMount:  nil,
 			KeyMount:   nil,
 			CaMount:    nil,
 		}
 		serviceVolume := svc.CreateVolume(GaleraCertPrefix)
 		volumes = append(volumes, serviceVolume)
-		if g.Spec.TLS.Ca.CaBundleSecretName != "" {
-			caVolume := g.Spec.TLS.Ca.CreateVolume()
+		if g.Spec.TLS.CaBundleSecretName != "" {
+			caVolume := g.Spec.TLS.CreateVolume()
 			volumes = append(volumes, caVolume)
 		}
 	}
@@ -175,15 +176,15 @@ func getGaleraVolumeMounts(g *mariadbv1.Galera) []corev1.VolumeMount {
 
 	if g.Spec.TLS.Enabled() {
 		svc := tls.Service{
-			SecretName: *g.Spec.TLS.GenericService.SecretName,
+			SecretName: *g.Spec.TLS.SecretName,
 			CertMount:  nil,
 			KeyMount:   nil,
 			CaMount:    nil,
 		}
 		serviceVolumeMounts := svc.CreateVolumeMounts(GaleraCertPrefix)
 		volumeMounts = append(volumeMounts, serviceVolumeMounts...)
-		if g.Spec.TLS.Ca.CaBundleSecretName != "" {
-			caVolumeMounts := g.Spec.TLS.Ca.CreateVolumeMounts(nil)
+		if g.Spec.TLS.CaBundleSecretName != "" {
+			caVolumeMounts := g.Spec.TLS.CreateVolumeMounts(nil)
 			volumeMounts = append(volumeMounts, caVolumeMounts...)
 		}
 	}
