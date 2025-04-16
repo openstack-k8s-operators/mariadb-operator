@@ -7,7 +7,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// // BackupPVC returns the PVC objects used by the backup Job to transfer data and create a SQL backup
+// BackupPVCs returns the PVC objects used by the backup Job to transfer data and create a SQL backup
 func BackupPVCs(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera) (*corev1.PersistentVolumeClaim, *corev1.PersistentVolumeClaim) {
 	backupName := BackupPVCName(b, g)
 	backupSize, err := resource.ParseQuantity(b.Spec.StorageRequest)
