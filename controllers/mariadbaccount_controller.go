@@ -27,12 +27,12 @@ import (
 	helper "github.com/openstack-k8s-operators/lib-common/modules/common/helper"
 	job "github.com/openstack-k8s-operators/lib-common/modules/common/job"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/secret"
+	util "github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	mariadb "github.com/openstack-k8s-operators/mariadb-operator/pkg/mariadb"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -168,28 +168,10 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 
 	// account create
 
-	// ensure secret is present before running a job
-	_, secretResult, err := secret.VerifySecret(
-		ctx,
-		types.NamespacedName{Name: instance.Spec.Secret, Namespace: instance.Namespace},
-		[]string{databasev1beta1.DatabasePasswordSelector},
-		r.Client,
-		time.Duration(30)*time.Second,
-	)
-	if (err != nil || secretResult != ctrl.Result{}) {
-		// Since the account secret should have been manually created by the user and referenced in the spec,
-		// we treat this as a warning because it means that the service will not be able to start.
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			databasev1beta1.MariaDBAccountReadyCondition,
-			secret.ReasonSecretMissing,
-			condition.SeverityWarning,
-			databasev1beta1.MariaDBAccountSecretNotReadyMessage, err))
-
-		log.Info(fmt.Sprintf(
-			"MariaDBAccount '%s' didn't find Secret '%s'; requeueing",
-			instance.Name, instance.Spec.Secret))
-
-		return secretResult, client.IgnoreNotFound(err)
+	// ensure secret is present, add a finalizer for mariadbaccount
+	result, err = r.ensureAccountSecret(ctx, log, helper, instance)
+	if (result != ctrl.Result{} || err != nil) {
+		return result, err
 	}
 
 	log.Info(fmt.Sprintf("Running account create '%s' MariaDBDatabase '%s'",
@@ -291,7 +273,11 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 	// implemented in the database either, so remove all finalizers and
 	// exit
 	if k8s_errors.IsNotFound(err) {
-		// remove finalizer from the MariaDBDatabase instance
+		// remove MariaDBAccount finalizer from MariaDBDatabase - this takes the
+		// form such as openstack.org/mariadbaccount-<accountname> (this naming
+		// scheme allows multiple MariaDBAccounts to claim the same MariaDBDatabase
+		// as a dependency) and allows a delete of the MariaDBDatabase to proceed
+		// assuming no other finalizers
 		if controllerutil.RemoveFinalizer(mariadbDatabase, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
 			err = r.Update(ctx, mariadbDatabase)
 
@@ -301,10 +287,12 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 
 		}
 
-		// remove local finalizer
-		controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
-
-		return ctrl.Result{}, nil
+		// remove finalizer "openstack.org/mariadbaccount" from both the
+		// MariaDBAccount as well as the Secret which is referenced from the
+		// MariaDBAccount, allowing both to be deleted assuming no other
+		// finalizers
+		err = r.removeAccountAndSecretFinalizer(ctx, helper, instance)
+		return ctrl.Result{}, err
 	} else if dbGalera == nil {
 		return result, err
 	}
@@ -342,7 +330,11 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 		log.Info(fmt.Sprintf("Job %s hash added - %s", jobDef.Name, instance.Status.Hash[databasev1beta1.AccountDeleteHash]))
 	}
 
-	// first, remove finalizer from the MariaDBDatabase instance
+	// remove MariaDBAccount finalizer from MariaDBDatabase - this takes the
+	// form such as openstack.org/mariadbaccount-<accountname> (this naming
+	// scheme allows multiple MariaDBAccounts to claim the same MariaDBDatabase
+	// as a dependency) and allows a delete of the MariaDBDatabase to proceed
+	// assuming no other finalizers
 	if controllerutil.RemoveFinalizer(mariadbDatabase, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
 		err = r.Update(ctx, mariadbDatabase)
 		if err != nil {
@@ -350,10 +342,12 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 		}
 	}
 
-	// then remove finalizer from our own instance
-	controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
+	// remove finalizer "openstack.org/mariadbaccount" from
+	// both the MariaDBAccount as well as the Secret which is referenced
+	// from the MariaDBAccount, allowing both to be deleted
+	err = r.removeAccountAndSecretFinalizer(ctx, helper, instance)
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{}, err
 }
 
 // getMariaDBDatabaseForCreate - waits for a MariaDBDatabase to be available in preparation
@@ -446,8 +440,15 @@ func (r *MariaDBAccountReconciler) getMariaDBDatabaseForDelete(ctx context.Conte
 			instance.Name,
 		))
 
-		controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
-		return nil, ctrl.Result{}, nil
+		// tried to locate the MariaDBDatabase for this MariaDBAccount,
+		// but the MariaDBAccount does not reference one.  Therefore this
+		// MariaDBAccount doesn't actually exist in any database and is
+		// safe to be deleted.
+		// So remove finalizer "openstack.org/mariadbaccount" from
+		// both the MariaDBAccount as well as the Secret which is referenced
+		// from the MariaDBAccount, allowing both to be deleted
+		err := r.removeAccountAndSecretFinalizer(ctx, helper, instance)
+		return nil, ctrl.Result{}, err
 	}
 
 	// locate the MariaDBDatabase object itself
@@ -455,14 +456,19 @@ func (r *MariaDBAccountReconciler) getMariaDBDatabaseForDelete(ctx context.Conte
 
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
-			// not found.   this implies MariaDBAccount has no database-level
-			// entry either.   Remove MariaDBAccount / secret finalizers and return
 			log.Info(fmt.Sprintf(
 				"MariaDBAccount '%s' Didn't find MariaDBDatabase '%s'; no account delete needed",
 				instance.Name, mariadbDatabaseName))
 
-			controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
-			return nil, ctrl.Result{}, nil
+			// tried to locate the MariaDBDatabase for this MariaDBAccount,
+			// but it no longer exists (or never did). Therefore this
+			// MariaDBAccount doesn't actually exist in any database and is
+			// safe to be deleted.
+			// So remove finalizer "openstack.org/mariadbaccount" from
+			// both the MariaDBAccount as well as the Secret which is referenced
+			// from the MariaDBAccount, allowing both to be deleted
+			err = r.removeAccountAndSecretFinalizer(ctx, helper, instance)
+			return nil, ctrl.Result{}, err
 		} else {
 			// unhandled error; exit without change
 			log.Error(err, "unhandled error retrieving MariaDBDatabase instance")
@@ -484,6 +490,11 @@ func (r *MariaDBAccountReconciler) getMariaDBDatabaseForDelete(ctx context.Conte
 			"MariaDBAccount '%s' MariaDBDatabase '%s' not yet complete; no account delete needed",
 			instance.Name, mariadbDatabaseName))
 
+		// remove MariaDBAccount finalizer from MariaDBDatabase - this takes
+		// the form such as openstack.org/mariadbaccount-<accountname> (this
+		// naming scheme allows multiple MariaDBAccounts to claim the same
+		// MariaDBDatabase as a dependency) and allows a delete of the
+		// MariaDBDatabase to proceed assuming no other finalizers
 		if controllerutil.RemoveFinalizer(mariadbDatabase, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
 			err = r.Update(ctx, mariadbDatabase)
 
@@ -492,8 +503,15 @@ func (r *MariaDBAccountReconciler) getMariaDBDatabaseForDelete(ctx context.Conte
 			}
 		}
 
-		controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
-		return nil, ctrl.Result{}, nil
+		// tried to locate the MariaDBDatabase for this MariaDBAccount, got the
+		// MariaDBDatabase CR, and saw that it's not in a ready state.
+		// Therefore this MariaDBAccount doesn't actually exist in any database
+		// and is safe to be deleted.
+		// remove finalizer "openstack.org/mariadbaccount" from
+		// both the MariaDBAccount as well as the Secret which is referenced
+		// from the MariaDBAccount
+		err = r.removeAccountAndSecretFinalizer(ctx, helper, instance)
+		return nil, ctrl.Result{}, err
 	}
 
 	// return MariaDBDatabase where account delete flow will then continue
@@ -570,5 +588,91 @@ func (r *MariaDBAccountReconciler) getMariaDBDatabaseObject(ctx context.Context,
 	}
 
 	return mariaDBDatabase, nil
+
+}
+
+// ensureAccountSecret - ensures the Secret exists, is valid, adds a finalizer.
+// includes requeue for secret does not exist
+func (r *MariaDBAccountReconciler) ensureAccountSecret(
+	ctx context.Context,
+	log logr.Logger,
+	h *helper.Helper,
+	instance *databasev1beta1.MariaDBAccount,
+) (ctrl.Result, error) {
+
+	secretName := instance.Spec.Secret
+	secretNamespace := instance.Namespace
+	secretObj, _, err := secret.GetSecret(ctx, h, secretName, secretNamespace)
+	if err != nil {
+		// Since the account secret should have been manually created by the user and referenced in the spec,
+		// we treat this as a warning because it means that the service will not be able to start.
+		if k8s_errors.IsNotFound(err) {
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				databasev1beta1.MariaDBAccountReadyCondition,
+				secret.ReasonSecretMissing,
+				condition.SeverityWarning,
+				databasev1beta1.MariaDBAccountSecretNotReadyMessage, err))
+
+			log.Info(fmt.Sprintf(
+				"MariaDBAccount '%s' didn't find Secret '%s'; requeueing",
+				instance.Name, instance.Spec.Secret))
+
+			return ctrl.Result{RequeueAfter: time.Duration(30) * time.Second}, nil
+
+		} else {
+			return ctrl.Result{}, err
+		}
+	}
+
+	var expectedFields = []string{databasev1beta1.DatabasePasswordSelector}
+
+	// collect the secret values the caller expects to exist
+	for _, field := range expectedFields {
+		_, ok := secretObj.Data[field]
+		if !ok {
+			err := fmt.Errorf("%w: field %s not found in Secret %s", util.ErrFieldNotFound, field, secretName)
+			return ctrl.Result{}, err
+		}
+	}
+
+	// set finalizer "openstack.org/mariadbaccount" on the Secret that the
+	// MariaDBAccount references in its "secret" field, preventing the Secret
+	// from being fully deleted as long as the MariaDBAccount maintains this
+	// finalizer.  As this Secret references the database password that was
+	// used with this MariaDBAccount, the MariaDBAccount itself must have
+	// access to this Secret as long as it corresponds to a real database
+	// account
+	if controllerutil.AddFinalizer(secretObj, h.GetFinalizer()) {
+		err = r.Update(ctx, secretObj)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	return ctrl.Result{}, err
+}
+
+// removeAccountAndSecretFinalizer - removes finalizer from mariadbaccount as well
+// as current primary secret
+func (r *MariaDBAccountReconciler) removeAccountAndSecretFinalizer(ctx context.Context,
+	helper *helper.Helper, instance *databasev1beta1.MariaDBAccount) error {
+
+	accountSecret, _, err := secret.GetSecret(ctx, helper, instance.Spec.Secret, instance.Namespace)
+
+	if err == nil {
+		if controllerutil.RemoveFinalizer(accountSecret, helper.GetFinalizer()) {
+			err = r.Update(ctx, accountSecret)
+			if err != nil {
+				return err
+			}
+		}
+	} else if !k8s_errors.IsNotFound(err) {
+		return err
+	}
+
+	// will take effect when reconcile ends
+	controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
+
+	return nil
 
 }
