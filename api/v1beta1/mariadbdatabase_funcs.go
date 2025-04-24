@@ -449,6 +449,9 @@ func (d *Database) DeleteFinalizer(
 	h *helper.Helper,
 ) error {
 
+	// LEGACY: remove finalizer from the secret in terms of the caller.
+	// we now don't add the caller's finalizer to the secret, we only add
+	// the mariadbaccount finalizer.
 	if d.secretObj != nil && controllerutil.RemoveFinalizer(d.secretObj, h.GetFinalizer()) {
 		err := h.GetClient().Update(ctx, d.secretObj)
 		if err != nil && !k8s_errors.IsNotFound(err) {
@@ -548,6 +551,9 @@ func DeleteDatabaseAndAccountFinalizers(
 				return err
 			}
 
+			// LEGACY: remove finalizer from the secret in terms of the caller.
+			// we now don't add the caller's finalizer to the secret, we only add
+			// the mariadbaccount finalizer.
 			if err == nil && controllerutil.RemoveFinalizer(dbSecret, h.GetFinalizer()) {
 				err := h.GetClient().Update(ctx, dbSecret)
 				if err != nil && !k8s_errors.IsNotFound(err) {
@@ -624,6 +630,9 @@ func DeleteUnusedMariaDBAccountFinalizers(
 				return err
 			}
 
+			// LEGACY: remove finalizer from the secret in terms of the caller.
+			// we now don't add the caller's finalizer to the secret, we only add
+			// the mariadbaccount finalizer.
 			if dbSecret != nil && controllerutil.RemoveFinalizer(dbSecret, h.GetFinalizer()) {
 				err := h.GetClient().Update(ctx, dbSecret)
 				if err != nil && !k8s_errors.IsNotFound(err) {
@@ -708,7 +717,6 @@ func createOrPatchAccountAndSecret(
 			// GetDatabaseByNameAndAccount to locate the Database which is how
 			// they remove finalizers.  this will return not found if secret
 			// is not present, so finalizer will keep it around
-			controllerutil.AddFinalizer(accountSecret, h.GetFinalizer())
 
 			return nil
 		})
