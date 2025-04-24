@@ -449,6 +449,8 @@ func (d *Database) DeleteFinalizer(
 	h *helper.Helper,
 ) error {
 
+	// TODO: if we rely only on MariaDBAccount local secret finalizer, this would
+	// not be needed
 	if d.secretObj != nil && controllerutil.RemoveFinalizer(d.secretObj, h.GetFinalizer()) {
 		err := h.GetClient().Update(ctx, d.secretObj)
 		if err != nil && !k8s_errors.IsNotFound(err) {
@@ -548,6 +550,8 @@ func DeleteDatabaseAndAccountFinalizers(
 				return err
 			}
 
+			// TODO: if we rely only on MariaDBAccount local secret finalizer, this would
+			// not be needed
 			if err == nil && controllerutil.RemoveFinalizer(dbSecret, h.GetFinalizer()) {
 				err := h.GetClient().Update(ctx, dbSecret)
 				if err != nil && !k8s_errors.IsNotFound(err) {
@@ -624,6 +628,8 @@ func DeleteUnusedMariaDBAccountFinalizers(
 				return err
 			}
 
+			// TODO: if we rely only on MariaDBAccount local secret finalizer, this would
+			// not be needed
 			if dbSecret != nil && controllerutil.RemoveFinalizer(dbSecret, h.GetFinalizer()) {
 				err := h.GetClient().Update(ctx, dbSecret)
 				if err != nil && !k8s_errors.IsNotFound(err) {
@@ -708,6 +714,9 @@ func createOrPatchAccountAndSecret(
 			// GetDatabaseByNameAndAccount to locate the Database which is how
 			// they remove finalizers.  this will return not found if secret
 			// is not present, so finalizer will keep it around
+
+			// TODO: since MariaDBAccount adds a finalizer to Secret, we may
+			// want to look at removing this
 			controllerutil.AddFinalizer(accountSecret, h.GetFinalizer())
 
 			return nil
