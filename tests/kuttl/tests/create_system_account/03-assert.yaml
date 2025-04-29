@@ -6,6 +6,7 @@ metadata:
     dbName: openstack
   name: kuttldb-some-system-db-account
 status:
+  currentSecret: some-system-db-secret
   conditions:
   - message: Setup complete
     reason: Ready
