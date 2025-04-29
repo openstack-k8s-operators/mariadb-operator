@@ -19,7 +19,7 @@ type accountCreateOrDeleteOptions struct {
 	RequireTLS            string
 }
 
-func CreateDbAccountJob(galera *mariadbv1.Galera, account *databasev1beta1.MariaDBAccount, databaseName string, databaseHostName string, containerImage string, serviceAccountName string, nodeSelector *map[string]string) (*batchv1.Job, error) {
+func CreateOrUpdateDbAccountJob(galera *mariadbv1.Galera, account *databasev1beta1.MariaDBAccount, databaseName string, databaseHostName string, containerImage string, serviceAccountName string, nodeSelector *map[string]string) (*batchv1.Job, error) {
 	var tlsStatement string
 	if account.Spec.RequireTLS {
 		tlsStatement = " REQUIRE SSL"
@@ -46,7 +46,7 @@ func CreateDbAccountJob(galera *mariadbv1.Galera, account *databasev1beta1.Maria
 			// provided db name is used as metadata name where underscore is a not allowed
 			// character. Lets replace all underscores with hypen. Underscores in the db name are
 			// possible.
-			Name:      strings.Replace(account.Spec.UserName, "_", "-", -1) + "-account-create",
+			Name:      strings.Replace(account.Spec.UserName, "_", "-", -1) + "-account-create-update",
 			Namespace: account.Namespace,
 			Labels:    labels,
 		},
@@ -57,7 +57,7 @@ func CreateDbAccountJob(galera *mariadbv1.Galera, account *databasev1beta1.Maria
 					ServiceAccountName: serviceAccountName,
 					Containers: []corev1.Container{
 						{
-							Name:    "mariadb-account-create",
+							Name:    "mariadb-account-create-update",
 							Image:   containerImage,
 							Command: []string{"/bin/sh", "-c", dbCmd},
 							Env: []corev1.EnvVar{

@@ -1,4 +1,11 @@
 ---
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+commands:
+  - script: |
+      set -e
+      ${MARIADB_KUTTL_DIR:-tests/kuttl/tests}/../common/scripts/check_db_account.sh openstack-galera-0 '' systemuser dbsecret2
+---
 apiVersion: mariadb.openstack.org/v1beta1
 kind: MariaDBAccount
 metadata:
@@ -6,7 +13,7 @@ metadata:
     dbName: openstack
   name: kuttldb-some-system-db-account
 status:
-  currentSecret: some-system-db-secret
+  currentSecret: some-new-system-db-secret
   conditions:
   - message: Setup complete
     reason: Ready
@@ -20,14 +27,3 @@ status:
     reason: Ready
     status: "True"
     type: MariaDBServerReady
----
-apiVersion: v1
-data:
-  DatabasePassword: ZGJzZWNyZXQx
-kind: Secret
-metadata:
-  name: some-system-db-secret
-  # ensure finalizer was added
-  finalizers:
-  - openstack.org/mariadbaccount
-type: Opaque
