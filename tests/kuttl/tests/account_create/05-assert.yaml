@@ -11,7 +11,7 @@ commands:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: someuser-account-create
+  name: someuser-account-create-update
 spec:
   template:
     spec:
