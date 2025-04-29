@@ -6,7 +6,7 @@ metadata:
     dbName: openstack
   name: chainsawdb-some-system-db-account
 status:
-  currentSecret: some-system-db-secret
+  currentSecret: some-new-system-db-secret
   conditions:
   - message: Setup complete
     reason: Ready
@@ -22,22 +22,18 @@ status:
     type: MariaDBServerReady
 ---
 apiVersion: v1
-data:
-  DatabasePassword: ZGJzZWNyZXQx
 kind: Secret
 metadata:
-  name: some-system-db-secret
-  # ensure finalizer was added
+  name: some-new-system-db-secret
+  # ensure finalizer was added to new secret
   finalizers:
   - openstack.org/mariadbaccount
 type: Opaque
 ---
-apiVersion: batch/v1
-kind: Job
+apiVersion: v1
+kind: Secret
 metadata:
-  name: systemuser-account-create-update
-spec:
-  template:
-    spec: {}
-status:
-  succeeded: 1
+  name: some-system-db-secret
+  # ensure finalizer was removed from old secret (field should not exist)
+  (finalizers): null
+type: Opaque

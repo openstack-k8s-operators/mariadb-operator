@@ -129,17 +129,17 @@ func (r *MariaDBAccountReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	instance.Status.Conditions.Init(&cl)
 
 	if instance.DeletionTimestamp.IsZero() || isNewInstance { //revive:disable:indent-error-flow
-		return r.reconcileCreate(ctx, log, helper, instance)
+		return r.reconcileCreateOrUpdate(ctx, log, helper, instance, isNewInstance)
 	} else {
 		return r.reconcileDelete(ctx, log, helper, instance)
 	}
 
 }
 
-// reconcileDelete - run reconcile for case where delete timestamp is zero
-func (r *MariaDBAccountReconciler) reconcileCreate(
+// reconcileCreateOrUpdate - run reconcile for case where delete timestamp is zero
+func (r *MariaDBAccountReconciler) reconcileCreateOrUpdate(
 	ctx context.Context, log logr.Logger,
-	helper *helper.Helper, instance *databasev1beta1.MariaDBAccount) (result ctrl.Result, _err error) {
+	helper *helper.Helper, instance *databasev1beta1.MariaDBAccount, isNewInstance bool) (result ctrl.Result, _err error) {
 
 	var mariadbDatabase *databasev1beta1.MariaDBDatabase
 	var err error
@@ -190,18 +190,27 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 
 	var jobDef *batchv1.Job
 
+	var createOrUpdate string
+	if isNewInstance {
+		createOrUpdate = "create"
+	} else {
+		createOrUpdate = "update"
+	}
+
 	if instance.IsUserAccount() {
-		log.Info(fmt.Sprintf("Running account create '%s' MariaDBDatabase '%s'",
+		log.Info(fmt.Sprintf("Checking %s account job '%s' MariaDBDatabase '%s'",
+			createOrUpdate,
 			instance.Name, mariadbDatabase.Spec.Name))
-		jobDef, err = mariadb.CreateDbAccountJob(
+		jobDef, err = mariadb.CreateOrUpdateDbAccountJob(
 			dbGalera, instance, mariadbDatabase.Spec.Name, dbHostname,
 			dbContainerImage, serviceAccountName, dbGalera.Spec.NodeSelector)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 	} else {
-		log.Info(fmt.Sprintf("Running system account create '%s'", instance.Name))
-		jobDef, err = mariadb.CreateDbAccountJob(
+		log.Info(fmt.Sprintf("Checking %s system account job '%s'", createOrUpdate,
+			instance.Name))
+		jobDef, err = mariadb.CreateOrUpdateDbAccountJob(
 			dbGalera, instance, "", dbHostname,
 			dbContainerImage, serviceAccountName, dbGalera.Spec.NodeSelector)
 		if err != nil {
@@ -209,15 +218,15 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 		}
 	}
 
-	accountCreateHash := instance.Status.Hash[databasev1beta1.AccountCreateHash]
-	accountCreateJob := job.NewJob(
+	accountCreateOrUpdateHash := instance.Status.Hash[databasev1beta1.AccountCreateOrUpdateHash]
+	accountCreateOrUpdateJob := job.NewJob(
 		jobDef,
-		databasev1beta1.AccountCreateHash,
+		databasev1beta1.AccountCreateOrUpdateHash,
 		false,
 		time.Duration(5)*time.Second,
-		accountCreateHash,
+		accountCreateOrUpdateHash,
 	)
-	ctrlResult, err := accountCreateJob.DoJob(
+	ctrlResult, err := accountCreateOrUpdateJob.DoJob(
 		ctx,
 		helper,
 	)
@@ -225,12 +234,25 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 		return ctrlResult, err
 	}
 
-	if accountCreateJob.HasChanged() {
+	if accountCreateOrUpdateJob.HasChanged() {
+
 		if instance.Status.Hash == nil {
 			instance.Status.Hash = make(map[string]string)
 		}
-		instance.Status.Hash[databasev1beta1.AccountCreateHash] = accountCreateJob.GetHash()
-		log.Info(fmt.Sprintf("Job %s hash added - %s", jobDef.Name, instance.Status.Hash[databasev1beta1.AccountCreateHash]))
+		instance.Status.Hash[databasev1beta1.AccountCreateOrUpdateHash] = accountCreateOrUpdateJob.GetHash()
+		log.Info(fmt.Sprintf("Job %s hash added - %s", jobDef.Name, instance.Status.Hash[databasev1beta1.AccountCreateOrUpdateHash]))
+
+		// set up new Secret and remove finalizer from old secret
+		if instance.Status.CurrentSecret != instance.Spec.Secret {
+			currentSecret := instance.Status.CurrentSecret
+			err = r.removeSecretFinalizer(ctx, helper, currentSecret, instance.Namespace)
+			if err == nil {
+				instance.Status.CurrentSecret = instance.Spec.Secret
+			} else {
+				return ctrl.Result{}, err
+			}
+		}
+
 	}
 
 	// database creation finished
@@ -711,7 +733,22 @@ func (r *MariaDBAccountReconciler) ensureAccountSecret(
 func (r *MariaDBAccountReconciler) removeAccountAndSecretFinalizer(ctx context.Context,
 	helper *helper.Helper, instance *databasev1beta1.MariaDBAccount) error {
 
-	accountSecret, _, err := secret.GetSecret(ctx, helper, instance.Spec.Secret, instance.Namespace)
+	err := r.removeSecretFinalizer(
+		ctx, helper, instance.Spec.Secret, instance.Namespace,
+	)
+	if err != nil && !k8s_errors.IsNotFound(err) {
+		return err
+	}
+
+	// remove mariadbaccount finalizer which will update at end of reconcile
+	controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
+
+	return nil
+}
+
+func (r *MariaDBAccountReconciler) removeSecretFinalizer(ctx context.Context,
+	helper *helper.Helper, secretName string, namespace string) error {
+	accountSecret, _, err := secret.GetSecret(ctx, helper, secretName, namespace)
 
 	if err == nil {
 		if controllerutil.RemoveFinalizer(accountSecret, helper.GetFinalizer()) {
@@ -723,9 +760,6 @@ func (r *MariaDBAccountReconciler) removeAccountAndSecretFinalizer(ctx context.C
 	} else if !k8s_errors.IsNotFound(err) {
 		return err
 	}
-
-	// will take effect when reconcile ends
-	controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
 
 	return nil
 
