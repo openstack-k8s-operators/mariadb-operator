@@ -1,0 +1,12 @@
+apiVersion: mariadb.openstack.org/v1beta1
+kind: GaleraBackup
+metadata:
+  labels:
+    app.kubernetes.io/name: galerabackup
+    app.kubernetes.io/instance: galerabackup-sample
+    app.kubernetes.io/part-of: mariadb-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: mariadb-operator
+  name: galerabackup-sample
+spec:
+  # TODO(user): Add fields here
