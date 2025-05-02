@@ -1,0 +1,27 @@
+# permissions for end users to view galerabackups.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: galerabackup-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: mariadb-operator
+    app.kubernetes.io/part-of: mariadb-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: galerabackup-viewer-role
+rules:
+- apiGroups:
+  - mariadb.openstack.org
+  resources:
+  - galerabackups
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - mariadb.openstack.org
+  resources:
+  - galerabackups/status
+  verbs:
+  - get
