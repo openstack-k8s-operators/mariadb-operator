@@ -140,6 +140,32 @@ rules:
 - apiGroups:
   - mariadb.openstack.org
   resources:
+  - galerabackups
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - mariadb.openstack.org
+  resources:
+  - galerabackups/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - mariadb.openstack.org
+  resources:
+  - galerabackups/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - mariadb.openstack.org
+  resources:
   - galeras
   verbs:
   - create
