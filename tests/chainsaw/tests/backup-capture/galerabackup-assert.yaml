@@ -1,0 +1,50 @@
+apiVersion: mariadb.openstack.org/v1beta1
+kind: GaleraBackup
+metadata:
+  name: openstack
+spec:
+  databaseInstance: openstack
+status:
+  conditions:
+  - message: Setup complete
+    reason: Ready
+    status: "True"
+    type: Ready
+  - message: Cronjob created
+    reason: Ready
+    status: "True"
+    type: CronjobReady
+  - message: MariaDB / Galera resource exists
+    reason: Ready
+    status: "True"
+    type: MariaDBResourceExists
+  - message: PersistentVolumeClaim created
+    reason: Ready
+    status: "True"
+    type: PersistentVolumeClaimReady
+  - message: RoleBinding created
+    reason: Ready
+    status: "True"
+    type: RoleBindingReady
+  - message: Service config create completed
+    reason: Ready
+    status: "True"
+    type: ServiceConfigReady
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  labels:
+    galera/name: openstack
+    owner: mariadb-operator
+  name: openstack-backup-openstack
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-db-openstack-backup-openstack
+spec:
+  resources:
+    requests:
+      storage: 500M
+  storageClassName: local-storage

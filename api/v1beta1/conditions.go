@@ -21,6 +21,9 @@ import (
 
 // MariaDB Condition Types used by API objects.
 const (
+	// MariaDBCreatedCondition Status=True indicates if there a Galera CR already exists
+	MariaDBResourceExistsCondition condition.Type = "MariaDBResourceExists"
+
 	// MariaDBInitializedCondition Status=True condition which indicates if the MariaDB dbinit has completed
 	MariaDBInitializedCondition condition.Type = "MariaDBInitialized"
 
@@ -35,6 +38,9 @@ const (
 
 // MariaDB Reasons used by API objects.
 const (
+	// ReasonResourceNotFound - Galera CR not found
+	ReasonResourceNotFound condition.Reason = "Galera CR not found"
+
 	// ReasonDBError - DB error
 	ReasonDBError condition.Reason = "DatabaseError"
 	// ReasonDBPatchError - new resource set to reason Init
@@ -57,6 +63,10 @@ const (
 	//
 	// MariaDBReady condition messages
 	//
+	MariaDBResourceInitMessage = "MariaDB / Galera resource not yet available"
+
+	MariaDBResourceExistsMessage = "MariaDB / Galera resource exists"
+
 	// MariaDBInitializedInitMessage
 	MariaDBInitializedInitMessage = "MariaDB dbinit not started"
 
@@ -97,4 +107,31 @@ const (
 	MariaDBAccountFinalizersRemainMessage = "Waiting for finalizers %s to be removed before dropping username"
 
 	MariaDBAccountReadyForDeleteMessage = "MariaDBAccount ready for delete"
+)
+
+// GaleraBackup Condition Types used by API objects.
+const (
+	PersistentVolumeClaimReadyCondition condition.Type = "PersistentVolumeClaimReady"
+
+	CronjobReadyCondition condition.Type = "CronjobReady"
+)
+
+const (
+	// PersistentVolumeClaimReadyErrorMessage
+	PersistentVolumeClaimReadyErrorMessage = "PersistentVolumeClaim error occurred %s"
+
+	// PersistentVolumeClaimReadyInitMessage
+	PersistentVolumeClaimReadyInitMessage = "PersistentVolumeClaim not created"
+
+	// PersistentVolumeClaimReadyMessage
+	PersistentVolumeClaimReadyMessage = "PersistentVolumeClaim created"
+
+	// CronjobReadyErrorMessage
+	CronjobReadyErrorMessage = "Cronjob error occurred %s"
+
+	// CronjobReadyInitMessage
+	CronjobReadyInitMessage = "Cronjob not created"
+
+	// CronjobReadyMessage
+	CronjobReadyMessage = "Cronjob created"
 )

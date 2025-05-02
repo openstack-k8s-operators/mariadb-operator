@@ -1,0 +1,116 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: backup-capture
+spec:
+  steps:
+  - name: create a backup CR without Galera cluster
+    description: backup CR should not create objects without Galera CR detected
+    try:
+    - apply:
+        file: galerabackup.yaml
+    - assert:
+        resource:
+          apiVersion: mariadb.openstack.org/v1beta1
+          kind: GaleraBackup
+          metadata:
+            name: openstack
+          status:
+            (conditions[0:1]):
+              - type: "Ready"
+                status: "False"
+                reason: Galera CR not found
+
+  - name: setup a backup for a 1-node Galera cluster
+    description: checks that backup CR is correctly set up
+    bindings:
+    - name: replicas
+      value: 1
+    try:
+    - apply:
+        file: ../../common/tls-certificate.yaml
+    - apply:
+        file: ../../common/galera-tls.yaml
+    - assert:
+        # check that all nodes are started and one pod is reacheable via the service endpoint
+        file: ../../common/galera-assert.yaml
+    - assert:
+        # check that all backup resources are created (cronjob, PVC)
+        file: galerabackup-assert.yaml
+
+  - name: backup the 1-node Galera cluster
+    description: checks that the cluster is correctly backed up
+    bindings:
+    - name: replicas
+      value: "1"
+    try:
+    - script: &backup
+        env:
+        - name: REPLICAS
+          value: ($replicas)
+        content: |
+          oc -n $NAMESPACE create job --from=cronjob/openstack-backup-openstack backup-${REPLICAS}node
+          oc -n $NAMESPACE wait --for=condition=complete job/backup-${REPLICAS}node
+    - script: &backup_check
+        env:
+        - name: REPLICAS
+          value: ($replicas)
+        content: |
+          ../../common/backup-assert.sh backup-${REPLICAS}node
+
+  - name: Scale Galera cluster to 3-node
+    bindings:
+    - name: replicas
+      value: 3
+    try:
+    - script:
+        content: |
+          oc -n $NAMESPACE patch galera openstack --type='json' -p='[{"op": "replace", "path": "/spec/replicas", "value":3}]'
+    - assert:
+        file: ../../common/galera-assert.yaml
+
+  - name: backup the 3-node Galera cluster
+    bindings:
+    - name: replicas
+      value: "3"
+    description: checks that the cluster is correctly backed up
+    try:
+    - script: *backup
+    - script: *backup_check
+
+  - name: Scale Galera cluster to 1-node
+    bindings:
+    - name: replicas
+      value: 1
+    try:
+    - script:
+        content: |
+          oc -n $NAMESPACE patch galera openstack --type='json' -p='[{"op": "replace", "path": "/spec/replicas", "value":1}]'
+    - assert:
+        file: ../../common/galera-assert.yaml
+    - script:
+        content: |
+          oc -n $NAMESPACE delete pvc mysql-db-openstack-galera-1 mysql-db-openstack-galera-2 --wait
+
+  - name: Create another 1-node Galera cluster
+    try:
+    - apply:
+        file: galera-1node.yaml
+    - apply:
+        file: backup-openstack2nd.yaml
+    - assert:
+        file: assert-openstack2nd.yaml
+
+
+  - name: backup the two running clusters
+    description: checks that the two clusters can be backed up concurrently
+    try:
+    - script:
+        content: |
+          oc -n $NAMESPACE create job --from=cronjob/openstack-backup-openstack backup-1node
+          oc -n $NAMESPACE create job --from=cronjob/cluster2-backup-openstack2nd backup-1node-2nd
+    - script:
+        content: |
+          oc -n $NAMESPACE wait --for=condition=complete job/backup-1node job/backup-1node-2nd
+          ../../common/backup-assert.sh backup-1node
+          ../../common/backup-assert.sh backup-1node-2nd

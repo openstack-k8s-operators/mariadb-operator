@@ -1,0 +1,9 @@
+apiVersion: mariadb.openstack.org/v1beta1
+kind: Galera
+metadata:
+  name: cluster2
+spec:
+  replicas: 1
+  secret: osp-secret
+  storageClass: local-storage
+  storageRequest: 500M

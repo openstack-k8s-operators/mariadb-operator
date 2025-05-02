@@ -1,0 +1,33 @@
+{
+    "command": "/usr/bin/bash /var/lib/backup-scripts/backup_galera.sh",
+    "config_files": [
+        {
+            "source": "/var/lib/config-data/default/mysql_backup_tls.cnf",
+            "dest": "/etc/mysql_backup_tls.cnf",
+            "owner": "root",
+            "perm": "0644",
+            "optional": true
+        },
+        {
+            "source": "/var/lib/config-data/default/garbd_backup_tls.cnf",
+            "dest": "/etc/garbd_backup_tls.cnf",
+            "owner": "root",
+            "perm": "0644",
+            "optional": true
+        },
+        {
+            "source": "/var/lib/config-data/tls/private/galera.key",
+            "dest": "/etc/pki/tls/private/galera.key",
+            "owner": "mysql",
+            "perm": "0600",
+            "optional": true
+        },
+        {
+            "source": "/var/lib/config-data/tls/certs/galera.crt",
+            "dest": "/etc/pki/tls/certs/galera.crt",
+            "owner": "mysql",
+            "perm": "0755",
+            "optional": true
+        }
+    ]
+}

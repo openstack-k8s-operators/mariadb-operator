@@ -1,0 +1,38 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  labels:
+    galera/name: openstack
+    owner: mariadb-operator
+  name: openstack-backup-openstack
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-db-openstack-backup-openstack
+spec:
+  resources:
+    requests:
+      storage: ($dbpvc.spec.resources.requests.storage)
+  storageClassName: ($dbpvc.spec.storageClassName)
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-db-openstack-backup-openstack-transfer
+spec:
+  resources:
+    requests:
+      storage: 400M
+  storageClassName: ($dbpvc.spec.storageClassName)
+---
+apiVersion: mariadb.openstack.org/v1beta1
+kind: GaleraBackup
+metadata:
+  name: openstack
+spec:
+  databaseInstance: openstack
+status:
+  (conditions[0:1]):
+    - type: Ready
+      status: "True"
