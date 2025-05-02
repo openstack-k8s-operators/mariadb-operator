@@ -1,0 +1,1 @@
+GARBD_TLS_OPTS="socket.ssl_key=/etc/pki/tls/private/galera.key;socket.ssl_cert=/etc/pki/tls/certs/galera.crt;socket.ssl_cipher=AES128-SHA256;socket.ssl_ca=/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"
