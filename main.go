@@ -39,6 +39,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/operator"
 	mariadbv1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/mariadb-operator/controllers"
 	//+kubebuilder:scaffold:imports
@@ -82,7 +83,7 @@ func main() {
 		c.NextProtos = []string{"http/1.1"}
 	}
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	options := ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
 			BindAddress: metricsAddr,
@@ -95,7 +96,15 @@ func main() {
 				Port:    9443,
 				TLSOpts: []func(config *tls.Config){disableHTTP2},
 			}),
-	})
+	}
+
+	err := operator.SetManagerOptions(&options, setupLog)
+	if err != nil {
+		setupLog.Error(err, "unable to set manager options")
+		os.Exit(1)
+	}
+
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), options)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
