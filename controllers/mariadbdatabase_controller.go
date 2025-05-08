@@ -144,14 +144,13 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	// here we know that Galera exists so add a finalizer to ourselves and to the db CR. Before this point there is no reason to have a finalizer on ourselves as nothing to cleanup.
-	if instance.DeletionTimestamp.IsZero() || isNewInstance { // this condition can be removed if you wish as it is always true at this point otherwise we would returned earlier.
-		if controllerutil.AddFinalizer(dbGalera, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
-			err := r.Update(ctx, dbGalera)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
+	if controllerutil.AddFinalizer(dbGalera, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
+		err := r.Update(ctx, dbGalera)
+		if err != nil {
+			return ctrl.Result{}, err
 		}
-
+	}
+	if instance.DeletionTimestamp.IsZero() || isNewInstance { // this condition can be removed if you wish as it is always true at this point otherwise we would returned earlier.
 		if controllerutil.AddFinalizer(instance, helper.GetFinalizer()) {
 			// we need to persist this right away
 			return ctrl.Result{}, nil
