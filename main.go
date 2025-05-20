@@ -39,6 +39,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
+
 	mariadbv1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/mariadb-operator/controllers"
 	//+kubebuilder:scaffold:imports
@@ -149,6 +150,14 @@ func main() {
 		Scheme:  mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MariaDBAccount")
+		os.Exit(1)
+	}
+	if err = (&controllers.GaleraBackupReconciler{
+		Client:  mgr.GetClient(),
+		Kclient: kclient,
+		Scheme:  mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "GaleraBackup")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
