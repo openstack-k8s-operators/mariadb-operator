@@ -76,7 +76,7 @@ func (r *MariaDBAccountReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		r.Client,
 		r.Kclient,
 		r.Scheme,
-		r.Log,
+		log,
 	)
 	if err != nil {
 		return ctrl.Result{}, err
