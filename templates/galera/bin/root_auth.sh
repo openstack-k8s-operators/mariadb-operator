@@ -22,14 +22,14 @@ SECRET_NAME=$(curl -s \
     --header "Content-Type:application/json" \
     --header "Authorization: Bearer ${TOKEN}" \
     "${APISERVER}/${MARIADB_API}/namespaces/${NAMESPACE}/galeras/${GALERA_INSTANCE}" \
-    | python3 -c "import json, sys; print(json.load(sys.stdin)['spec']['secret'])")
+    | python3 -c "import json, sys; print(json.load(sys.stdin)['status']['rootDatabaseSecret'])")
 
 PASSWORD=$(curl -s \
     --cacert ${CACERT} \
     --header "Content-Type:application/json" \
     --header "Authorization: Bearer ${TOKEN}" \
     "${APISERVER}/${K8S_API}/namespaces/${NAMESPACE}/secrets/${SECRET_NAME}" \
-    | python3 -c "import json, sys; print(json.load(sys.stdin)['data']['DbRootPassword'])" \
+    | python3 -c "import json, sys; print(json.load(sys.stdin)['data']['DatabasePassword'])" \
     | base64 -d)
 
 MYSQL_PWD="${PASSWORD}"
