@@ -76,7 +76,7 @@ GALERA_CR=$(curl -s \
     "${APISERVER}/${MARIADB_API}/namespaces/${NAMESPACE}/galeras/${GALERA_INSTANCE}")
 
 # note jq is not installed in the galera image, macgyvering w/ python instead
-SECRET_NAME=$(echo "${GALERA_CR}" | python3 -c "import json, sys; print(json.load(sys.stdin)['spec']['secret'])")
+SECRET_NAME=$(echo "${GALERA_CR}" | python3 -c "import json, sys; print(json.load(sys.stdin)['status']['rootDatabaseSecret'])")
 
 # get password from secret
 PASSWORD=$(curl -s \
@@ -87,13 +87,52 @@ PASSWORD=$(curl -s \
     | python3 -c "import json, sys; print(json.load(sys.stdin)['data']['DatabasePassword'])" \
     | base64 -d)
 
-
-# test again; warn if it doesn't work, however write to my.cnf in any
-# case to allow the calling script to continue
+# Special additional step, test this password and if not working, see if
+# there is a different password in root MariaDBAccount->Spec->Secret, and
+# try that. If the account.sh script runs to change root password, does the
+# change, but then fails before completing, the mariadbaccount /galera
+# controllers will not reconcile the new rootDatabaseSecret.  The account.sh
+# script would be run again on a new pod, but will continue to fail unless
+# it can get past mysql_root_auth.   so the steps below are for that
+# specific case
+PASSWORD_VALID=true
+# test password with mysql command if socket exists, or we are remote
 if [ "${USE_SOCKET}" = "false" ] || [ -S "${MYSQL_SOCKET}" ]; then
     if ! mysql ${MYSQL_CONN_PARAMS} -uroot -p"${PASSWORD}" -e "SELECT 1;" >/dev/null 2>&1; then
-        echo "WARNING: password retrieved from cluster failed authentication" >&2
+        PASSWORD_VALID=false
     fi
+fi
+
+# if password failed, look for alternate password from the mariadbdatabaseaccount
+# spec directly.  assume we are in root pw flight
+if [ "${PASSWORD_VALID}" = "false" ]; then
+
+    MARIADB_ACCOUNT=$(echo "${GALERA_CR}" | python3 -c "import json, sys; print(json.load(sys.stdin)['spec']['rootDatabaseAccount'] or '${GALERA_INSTANCE}-mariadb-root')")
+
+    MARIADB_ACCOUNT_CR=$(curl -s \
+        --cacert ${CACERT} \
+        --header "Content-Type:application/json" \
+        --header "Authorization: Bearer ${TOKEN}" \
+        "${APISERVER}/${MARIADB_API}/namespaces/${NAMESPACE}/mariadbaccounts/${MARIADB_ACCOUNT}")
+
+    # look in spec.secret
+    FALLBACK_SECRET_NAME=$(echo "${MARIADB_ACCOUNT_CR}" | python3 -c "import json, sys; print(json.load(sys.stdin)['spec']['secret'])")
+
+    # Get the new password from the fallback secret
+    PASSWORD=$(curl -s \
+        --cacert ${CACERT} \
+        --header "Content-Type:application/json" \
+        --header "Authorization: Bearer ${TOKEN}" \
+        "${APISERVER}/${K8S_API}/namespaces/${NAMESPACE}/secrets/${FALLBACK_SECRET_NAME}" \
+        | python3 -c "import json, sys; print(json.load(sys.stdin)['data']['DatabasePassword'])" \
+        | base64 -d)
+
+    # test again; warn if it doesn't work, however write to my.cnf in any
+    # case to allow the calling script to continue
+    if ! mysql ${MYSQL_CONN_PARAMS} -uroot -p"${PASSWORD}" -e "SELECT 1;" >/dev/null 2>&1; then
+        echo "WARNING: Both primary and fallback passwords failed authentication, will maintain secondary password" >&2
+    fi
+
 fi
 
 

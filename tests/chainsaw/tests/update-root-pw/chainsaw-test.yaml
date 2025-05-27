@@ -1,0 +1,93 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: update-root-pw
+spec:
+  steps:
+  - name: Deploy 3-node cluster
+    description: Deploy a 3-node galera cluster for root password update test
+    bindings:
+    - name: replicas
+      value: 3
+    try:
+    - apply:
+        file: ../../common/galera.yaml
+    - assert:
+        file: ../../common/galera-assert.yaml
+
+  - name: Verify root MariaDBAccount is created
+    description: Verify the root MariaDBAccount exists and has Status.CurrentSecret set
+    try:
+    - assert:
+        file: root-account-initial-assert.yaml
+
+  - name: Verify initial setup
+    description: Verify the cluster is running with initial root password
+    try:
+    - script:
+        content: |
+          oc exec -n ${NAMESPACE} -c galera openstack-galera-0 -- /bin/sh -c '
+            source /var/lib/operator-scripts/mysql_root_auth.sh
+            if [ "$MYSQL_PWD" = "newrootpassword123" ]; then
+              echo "ERROR: password == 'newrootpassword123', should not have changed yet"
+              exit 1
+            fi
+            echo "PASS: password != 'newrootpassword123' (current: $MYSQL_PWD)"
+            mysql -e "SELECT 1" > /dev/null
+            echo "Initial root password works"
+          '
+
+  - name: Create new root password secret
+    description: Create a new secret with updated root password
+    skipDelete: true
+    try:
+    - apply:
+        file: new-root-secret.yaml
+
+  - name: Update root MariaDBAccount with new secret
+    description: Apply the new secret to the root MariaDBAccount spec
+    skipDelete: true
+    try:
+    - apply:
+        file: root-account-updated.yaml
+    - assert:
+        file: root-account-assert.yaml
+
+  - name: Verify Galera status updated
+    description: Wait for Galera status.rootDatabaseSecret to be updated
+    try:
+    - assert:
+        file: galera-status-assert.yaml
+
+  - name: Verify login with new password on all nodes
+    description: Log into all galera nodes with new root password
+    try:
+    - script:
+        content: |
+          for pod in openstack-galera-0 openstack-galera-1 openstack-galera-2; do
+            echo "Testing login on $pod..."
+            oc exec -n ${NAMESPACE} -c galera $pod -- /bin/sh -c '
+              # Clear the cached credentials to force using new password
+              rm -f $HOME/.my.cnf
+              source /var/lib/operator-scripts/mysql_root_auth.sh
+              if [ "$MYSQL_PWD" != "newrootpassword123" ]; then
+                echo "ERROR: password != 'newrootpassword123' (actual: $MYSQL_PWD)"
+                exit 1
+              fi
+              echo "PASS: password == 'newrootpassword123'"
+              mysql -e "SELECT 1" > /dev/null
+              echo "New root password works on $(hostname)"
+            '
+          done
+          echo "All nodes verified successfully"
+
+  - name: Verify new password persists
+    description: Verify the new password still works after cache refresh
+    try:
+    - script:
+        content: |
+          oc exec -n ${NAMESPACE} -c galera openstack-galera-0 -- /bin/sh -c '
+            source /var/lib/operator-scripts/mysql_root_auth.sh
+            mysql -e "SHOW DATABASES" > /dev/null
+            echo "New password persists and works correctly"
+          '
