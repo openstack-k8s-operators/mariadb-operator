@@ -30,7 +30,7 @@ else
 fi
 
 # Check if we have cached credentials
-if [ -f "${MY_CNF}" ]; then
+if [ "${MYSQL_ROOT_AUTH_BYPASS_CHECKS}" != "true" ] && [ -f "${MY_CNF}" ]; then
     # Read the password from .my.cnf
     PASSWORD=$(grep '^password=' "${MY_CNF}" | cut -d= -f2-)
 
@@ -83,7 +83,7 @@ GALERA_CR=$(curl -s \
     "${APISERVER}/${MARIADB_API}/namespaces/${NAMESPACE}/galeras/${GALERA_INSTANCE}")
 
 # note jq is not installed in the galera image, macgyvering w/ python instead
-SECRET_NAME=$(echo "${GALERA_CR}" | python3 -c "import json, sys; print(json.load(sys.stdin)['spec']['secret'])")
+SECRET_NAME=$(echo "${GALERA_CR}" | python3 -c "import json, sys; print(json.load(sys.stdin)['status']['rootDatabaseSecret'])")
 
 # get password from secret
 PASSWORD=$(curl -s \
@@ -91,16 +91,62 @@ PASSWORD=$(curl -s \
     --header "Content-Type:application/json" \
     --header "Authorization: Bearer ${TOKEN}" \
     "${APISERVER}/${K8S_API}/namespaces/${NAMESPACE}/secrets/${SECRET_NAME}" \
-    | python3 -c "import json, sys; print(json.load(sys.stdin)['data']['DbRootPassword'])" \
+    | python3 -c "import json, sys; print(json.load(sys.stdin)['data']['DatabasePassword'])" \
     | base64 -d)
 
+# Special step for the unlikely case that root PW is being changed but the
+# account.sh script failed to complete.  Test this password (which came from
+# galera->Status->rootDatabaseSecret) and if not working, see if there is a
+# different (newer) password in root galera->Spec->rootDatabaseAccount->Secret,
+# and try that. This suits the case where a new password was placed in
+# galera->Spec->rootDatabaseAccount->Secret, account.sh ran to update the root
+# password, but failed to complete, even though the actual password got
+# updated.   account.sh will run again on a new pod but the password that's in
+# galera->Status->rootDatabaseSecret is no longer valid, and would prevent
+# account.sh from proceeding a second time.  Try the "pending" password just to
+# get through, so that account.sh can succeed and
+# galera->Status->rootDatabaseSecret can then be updated.
 
-# test again; warn if it doesn't work, however write to my.cnf in any
-# case to allow the calling script to continue
-if [ "${USE_SOCKET}" = "false" ] || [ -S "${MYSQL_SOCKET}" ]; then
+PASSWORD_VALID=true
+
+# test password with mysql command if socket exists, or we are remote
+if [ "${MYSQL_ROOT_AUTH_BYPASS_CHECKS}" != "true" ] && { [ "${USE_SOCKET}" = "false" ] || [ -S "${MYSQL_SOCKET}" ]; }; then
     if ! mysql ${MYSQL_CONN_PARAMS} -uroot -p"${PASSWORD}" -e "SELECT 1;" >/dev/null 2>&1; then
-        echo "WARNING: password retrieved from cluster failed authentication" >&2
+        echo "WARNING: primary password retrieved from cluster failed authentication; will try fallback password" >&2
+        PASSWORD_VALID=false
     fi
+fi
+
+# if password failed, look for alternate password from the mariadbdatabaseaccount
+# spec directly.  assume we are in root pw flight
+if [ "${PASSWORD_VALID}" = "false" ]; then
+
+    MARIADB_ACCOUNT=$(echo "${GALERA_CR}" | python3 -c "import json, sys; print(json.load(sys.stdin)['spec']['rootDatabaseAccount'] or '${GALERA_INSTANCE}-mariadb-root')")
+
+    MARIADB_ACCOUNT_CR=$(curl -s \
+        --cacert ${CACERT} \
+        --header "Content-Type:application/json" \
+        --header "Authorization: Bearer ${TOKEN}" \
+        "${APISERVER}/${MARIADB_API}/namespaces/${NAMESPACE}/mariadbaccounts/${MARIADB_ACCOUNT}")
+
+    # look in spec.secret
+    FALLBACK_SECRET_NAME=$(echo "${MARIADB_ACCOUNT_CR}" | python3 -c "import json, sys; print(json.load(sys.stdin)['spec']['secret'])")
+
+    # Get the new password from the fallback secret
+    PASSWORD=$(curl -s \
+        --cacert ${CACERT} \
+        --header "Content-Type:application/json" \
+        --header "Authorization: Bearer ${TOKEN}" \
+        "${APISERVER}/${K8S_API}/namespaces/${NAMESPACE}/secrets/${FALLBACK_SECRET_NAME}" \
+        | python3 -c "import json, sys; print(json.load(sys.stdin)['data']['DatabasePassword'])" \
+        | base64 -d)
+
+    # test again; warn if it doesn't work, however write to my.cnf in any
+    # case to allow the calling script to continue
+    if ! mysql ${MYSQL_CONN_PARAMS} -uroot -p"${PASSWORD}" -e "SELECT 1;" >/dev/null 2>&1; then
+        echo "WARNING: Both primary and fallback passwords failed authentication, will maintain fallback password" >&2
+    fi
+
 fi
 
 
