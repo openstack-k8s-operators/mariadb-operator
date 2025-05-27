@@ -51,9 +51,19 @@ type GaleraSpec struct {
 
 // GaleraSpec defines the desired state of Galera
 type GaleraSpecCore struct {
-	// Name of the secret to look for password keys
-	// +kubebuilder:validation:Required
+	// Name of the legacy secret to locate the initial galera root
+	// password
+	// this field will be removed once scripts can adjust to using root_auth.sh
+	// +kubebuilder:validation:Optional
 	Secret string `json:"secret"`
+
+	// RootDatabaseAccount - name of MariaDBAccount which will be used to
+	// generate root account / password.
+	// this account is generated if not exists, and a name is chosen based
+	// on a naming convention if not present
+	// +kubebuilder:validation:Optional
+	RootDatabaseAccount string `json:"rootDatabaseAccount"`
+
 	// Storage class to host the mariadb databases
 	// +kubebuilder:validation:Required
 	StorageClass string `json:"storageClass"`
@@ -113,6 +123,9 @@ type GaleraAttributes struct {
 type GaleraStatus struct {
 	// A map of database node attributes for each pod
 	Attributes map[string]GaleraAttributes `json:"attributes,omitempty"`
+	// name of the Secret that is being used for the root password
+	// +kubebuilder:validation:Optional
+	RootDatabaseSecret string `json:"rootDatabaseSecret"`
 	// Name of the node that can safely bootstrap a cluster
 	SafeToBootstrap string `json:"safeToBootstrap,omitempty"`
 	// Is the galera cluster currently running

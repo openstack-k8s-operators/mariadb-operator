@@ -35,7 +35,7 @@ import (
 	helper "github.com/openstack-k8s-operators/lib-common/modules/common/helper"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/labels"
 	common_rbac "github.com/openstack-k8s-operators/lib-common/modules/common/rbac"
-	secret "github.com/openstack-k8s-operators/lib-common/modules/common/secret"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/secret"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
 	commonstatefulset "github.com/openstack-k8s-operators/lib-common/modules/common/statefulset"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/tls"
@@ -501,6 +501,11 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 			Verbs:     []string{"get", "list"},
 		},
 		{
+			APIGroups: []string{"mariadb.openstack.org"},
+			Resources: []string{"mariadbaccounts"},
+			Verbs:     []string{"get", "list"},
+		},
+		{
 			APIGroups: []string{""},
 			Resources: []string{"secrets"},
 			Verbs:     []string{"get"},
@@ -576,36 +581,91 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	clusterPropertiesEnv := make(map[string]env.Setter)
 
 	// Check and hash inputs
-	// NOTE do not hash the db root password, as its change requires
-	// more orchestration than a simple rolling restart
-	_, res, err := secret.VerifySecret(
-		ctx,
-		types.NamespacedName{Namespace: instance.Namespace, Name: instance.Spec.Secret},
-		[]string{
-			"DbRootPassword",
-		},
-		helper.GetClient(),
-		time.Duration(5)*time.Second)
-	if err != nil {
-		if k8s_errors.IsNotFound(err) {
-			// Since the OpenStack secret should have been manually created by the user and referenced in the spec,
-			// we treat this as a warning because it means that the service will not be able to start.
-			instance.Status.Conditions.Set(condition.FalseCondition(
-				condition.InputReadyCondition,
-				condition.ErrorReason,
-				condition.SeverityWarning,
-				condition.InputReadyWaitingMessage))
-			return res, fmt.Errorf("%w: %s", ErrOpenStackSecretNotFound, instance.Spec.Secret)
+
+	// ******** TEMPORARY ************
+	// Pull the DbRootPassword from osp-secret to allow CI / external
+	// scripts to work, until they can adapt to root_auth.sh
+
+	legacyRootPassword := ""
+	if instance.Spec.Secret != "" {
+		_, res, err := secret.VerifySecret(
+			ctx,
+			types.NamespacedName{Namespace: instance.Namespace, Name: instance.Spec.Secret},
+			[]string{
+				"DbRootPassword",
+			},
+			helper.GetClient(),
+			time.Duration(5)*time.Second)
+		if err != nil {
+			if k8s_errors.IsNotFound(err) {
+				// Since the OpenStack secret should have been manually created by the user and referenced in the spec,
+				// we treat this as a warning because it means that the service will not be able to start.
+				instance.Status.Conditions.Set(condition.FalseCondition(
+					condition.InputReadyCondition,
+					condition.ErrorReason,
+					condition.SeverityWarning,
+					condition.InputReadyWaitingMessage))
+				return res, fmt.Errorf("%w: %s", ErrOpenStackSecretNotFound, instance.Spec.Secret)
+			}
+			return ctrl.Result{}, err
 		}
+
+		legacySecret, _, err := secret.GetSecret(ctx, helper, instance.Spec.Secret, instance.Namespace)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		legacyRootPassword = string(legacySecret.Data["DbRootPassword"])
+	}
+
+	// ******** END TEMPORARY ************
+
+	databaseAccountName := r.getRootMariadbAccountName(instance)
+
+	mariaDBAccount, rootSecret, err := mariadbv1.EnsureMariaDBSystemAccount(
+		ctx, helper, databaseAccountName,
+		instance.Name, instance.Namespace, false, "root", legacyRootPassword)
+
+	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.InputReadyCondition,
+			mariadbv1.MariaDBAccountReadyCondition,
 			condition.ErrorReason,
 			condition.SeverityWarning,
-			condition.InputReadyErrorMessage,
+			mariadbv1.MariaDBAccountNotReadyMessage,
 			err.Error()))
+
 		return ctrl.Result{}, err
 	}
-	instance.Status.Conditions.MarkTrue(condition.InputReadyCondition, condition.InputReadyMessage)
+
+	// the current root secret for the MariaDBAccount name is copied out to Status.
+	// this allows us to avoid having to change the Spec.
+	// Also by trying to always use CurrentSecret if available, we try to keep
+	// instance.Status.RootDatabaseSecret as the secret that should work for
+	// root right now, independent of changes in the mariadbaccount name
+	// or its secret that have not been reconciled w/ a new job hash.
+	if mariaDBAccount.Status.CurrentSecret != "" {
+		instance.Status.RootDatabaseSecret = mariaDBAccount.Status.CurrentSecret
+	} else if instance.Status.RootDatabaseSecret == "" {
+		// if we dont have any Status.RootDatabaseSecret at all, then use the
+		// new secret we just got. assume this is prior to bootstrap
+		instance.Status.RootDatabaseSecret = rootSecret.Name
+	}
+	// otherwise if mariaDBAccount.Status.CurrentSecret == "" and
+	// instance.Status.RootDatabaseSecret != "", this means we've already
+	// assigned rootSecret.Name to instance.Status.RootDatabaseSecret up front.
+	// if rootSecret.name is now different from what it was originally, that
+	// means the mariadbaccount was updated, and we assume is in the process
+	// of updating the root PW.   if mariaDBAccount.Status.CurrentSecret is blank
+	// while this is happening, this pretty much means a test suite is changing
+	// the root pw on a brand new galera that hasn't had a chance to set up
+	// CurrentSecret in the first place, so just wait for that.
+
+	instance.Status.Conditions.MarkTrue(
+		mariadbv1.MariaDBAccountReadyCondition,
+		mariadbv1.MariaDBSystemAccountReadyMessage, "root")
+
+	instance.Status.Conditions.MarkTrue(
+		condition.InputReadyCondition,
+		condition.InputReadyMessage)
 
 	//
 	// TLS input validation
@@ -1055,6 +1115,11 @@ func (r *GaleraReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&topologyv1.Topology{},
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForSrc),
 			builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Watches(
+			&mariadbv1.MariaDBAccount{},
+			handler.EnqueueRequestsFromMapFunc(r.findGaleraForMariaDBAccount),
+			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+		).
 		Complete(r)
 }
 
@@ -1113,6 +1178,53 @@ func (r *GaleraReconciler) findObjectsForSrc(ctx context.Context, src client.Obj
 	return requests
 }
 
+// findGaleraForMariaDBAccount - returns reconcile requests for Galera instances
+// that should reconcile when a MariaDBAccount changes
+func (r *GaleraReconciler) findGaleraForMariaDBAccount(ctx context.Context, account client.Object) []reconcile.Request {
+	requests := []reconcile.Request{}
+
+	mariadbAccount := account.(*mariadbv1.MariaDBAccount)
+
+	// Only reconcile for system accounts, as these are used by Galera for root credentials
+	if !mariadbAccount.IsSystemAccount() {
+		return requests
+	}
+
+	// List all Galera instances in the same namespace
+	galeraList := &mariadbv1.GaleraList{}
+	if err := r.List(ctx, galeraList, client.InNamespace(mariadbAccount.Namespace)); err != nil {
+		log.FromContext(ctx).Error(err, "Unable to list Galera instances for MariaDBAccount", "account", mariadbAccount.Name)
+		return requests
+	}
+
+	// Find Galera instances that use this MariaDBAccount
+	for _, galera := range galeraList.Items {
+		// Check if this Galera uses this MariaDBAccount for root credentials
+		rootAccountName := r.getRootMariadbAccountName(&galera)
+		if rootAccountName == mariadbAccount.Name {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      galera.Name,
+					Namespace: galera.Namespace,
+				},
+			})
+			log.FromContext(ctx).Info("MariaDBAccount changed, triggering Galera reconcile",
+				"account", mariadbAccount.Name,
+				"galera", galera.Name)
+		}
+	}
+
+	return requests
+}
+
+func (r *GaleraReconciler) getRootMariadbAccountName(instance *mariadbv1.Galera) string {
+	databaseAccountName := instance.Spec.RootDatabaseAccount
+	if databaseAccountName == "" {
+		databaseAccountName = instance.Name + "-mariadb-root"
+	}
+	return databaseAccountName
+}
+
 func (r *GaleraReconciler) reconcileDelete(ctx context.Context, instance *mariadbv1.Galera, helper *helper.Helper) (ctrl.Result, error) {
 	helper.GetLogger().Info("Reconciling Service delete")
 
@@ -1138,6 +1250,13 @@ func (r *GaleraReconciler) reconcileDelete(ctx context.Context, instance *mariad
 		instance.Name,
 	); err != nil {
 		return ctrlResult, err
+	}
+
+	// remove finalizer from the system mariadbaccount and associated secret
+	err = mariadbv1.DeleteAccountFinalizers(
+		ctx, helper, r.getRootMariadbAccountName(instance), instance.Namespace)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
 	// Service is deleted so remove the finalizer.

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-MYSQL_REMOTE_HOST={{.DatabaseHostname}} source /var/lib/operator-scripts/mysql_root_auth.sh
+MYSQL_REMOTE_HOST="{{.DatabaseHostname}}" source /var/lib/operator-scripts/mysql_root_auth.sh
 
 export DatabasePassword=${DatabasePassword:?"Please specify a DatabasePassword variable."}
 
@@ -29,6 +29,10 @@ GRANT ALL PRIVILEGES ON ${GRANT_DATABASE}.* TO '{{.UserName}}'@'localhost';
 GRANT ALL PRIVILEGES ON ${GRANT_DATABASE}.* TO '{{.UserName}}'@'%';
 EOF
 
+# If we just changed the root password, update MYSQL_CMD to use the new password
+if [ "{{.UserName}}" = "{{.DatabaseAdminUsername}}" ]; then
+    MYSQL_CMD="mysql -h {{.DatabaseHostname}} -u {{.DatabaseAdminUsername}} -p${DatabasePassword} -P 3306"
+fi
 
 # search for the account.  not using SHOW CREATE USER to avoid displaying
 # password hash

@@ -1,0 +1,41 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: generate-root-pw
+spec:
+  steps:
+  - name: Deploy 1-node cluster
+    description: Deploy a 1-node galera cluster for root password update test
+    bindings:
+    - name: replicas
+      value: 1
+    try:
+    - apply:
+        file: ../../common/galera-no-secret.yaml
+    - assert:
+        file: ../../common/galera-no-secret-assert.yaml
+
+  - name: Verify root MariaDBAccount is created
+    description: Verify the root MariaDBAccount exists and has Status.CurrentSecret set
+    try:
+    - assert:
+        file: root-account-assert.yaml
+
+  - name: Test root connection with generated password
+    description: Extract password from Galera status and test MySQL connection
+    try:
+    - script:
+        content: |
+          # Get the secret name from Galera status
+          SECRET_NAME=$(oc get galera openstack -n ${NAMESPACE} -o jsonpath='{.status.rootDatabaseSecret}')
+          echo "Root secret name: $SECRET_NAME"
+
+          # Extract the password from the secret (base64 decode)
+          ROOT_PASSWORD=$(oc get secret $SECRET_NAME -n ${NAMESPACE} -o jsonpath='{.data.DatabasePassword}' | base64 -d)
+          echo "Extracted password (length: ${#ROOT_PASSWORD})"
+
+          # Test MySQL connection with the extracted password
+          oc exec -n ${NAMESPACE} -c galera openstack-galera-0 -- /bin/sh -c "
+            mysql -uroot -p'$ROOT_PASSWORD' -e 'SELECT 1' > /dev/null
+            echo 'Successfully connected to MySQL with generated root password'
+          "

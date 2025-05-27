@@ -1,0 +1,11 @@
+apiVersion: mariadb.openstack.org/v1beta1
+kind: MariaDBAccount
+metadata:
+  name: openstack-mariadb-root
+spec:
+  userName: root
+  secret: new-root-secret
+  accountType: System
+status:
+  # Verify that the CurrentSecret field has been updated to the new secret
+  currentSecret: new-root-secret

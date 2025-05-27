@@ -1,6 +1,6 @@
 #!/bin/bash
 
-MYSQL_REMOTE_HOST={{.DatabaseHostname}} source /var/lib/operator-scripts/mysql_root_auth.sh
+MYSQL_REMOTE_HOST="{{.DatabaseHostname}}" source /var/lib/operator-scripts/mysql_root_auth.sh
 
 mysql -h {{.DatabaseHostname}} -u {{.DatabaseAdminUsername}} -P 3306 -e "CREATE DATABASE IF NOT EXISTS {{.DatabaseName}}; ALTER DATABASE {{.DatabaseName}} CHARACTER SET '{{.DefaultCharacterSet}}' COLLATE '{{.DefaultCollation}}';"
 
