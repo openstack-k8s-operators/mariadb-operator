@@ -34,6 +34,10 @@ status:
     reason: Ready
     status: "True"
     type: InputReady
+  - message: MariaDBAccount System account 'root' creation complete
+    reason: Ready
+    status: "True"
+    type: MariaDBAccountReady
   - message: RoleBinding created
     reason: Ready
     status: "True"

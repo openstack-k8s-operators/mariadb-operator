@@ -33,7 +33,7 @@ import (
 	helper "github.com/openstack-k8s-operators/lib-common/modules/common/helper"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/labels"
 	common_rbac "github.com/openstack-k8s-operators/lib-common/modules/common/rbac"
-	secret "github.com/openstack-k8s-operators/lib-common/modules/common/secret"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/secret"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
 	commonstatefulset "github.com/openstack-k8s-operators/lib-common/modules/common/statefulset"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/tls"
@@ -489,7 +489,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		{
 			APIGroups: []string{"mariadb.openstack.org"},
 			Resources: []string{"mariadbaccounts"},
-			Verbs:     []string{"get"},
+			Verbs:     []string{"get", "list"},
 		},
 		{
 			APIGroups: []string{""},
@@ -558,6 +558,8 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		log.Info("", "Kind", instance.Kind, "Name", instance.Name, "database service", service.Name, "operation", string(op))
 	}
 
+	instance.IsReady()
+
 	instance.Status.Conditions.MarkTrue(condition.CreateServiceReadyCondition, condition.CreateServiceReadyMessage)
 
 	// Map of all resources that may cause a rolling service restart
@@ -567,8 +569,10 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	clusterPropertiesEnv := make(map[string]env.Setter)
 
 	// Check and hash inputs
-	// NOTE do not hash the db root password, as its change requires
-	// more orchestration than a simple rolling restart
+
+	// ******** TEMPORARY ************
+	// Pull the DbRootPassword from osp-secret to allow CI / external
+	// scripts to work, until they can adapt to root_auth.sh
 	_, res, err := secret.VerifySecret(
 		ctx,
 		types.NamespacedName{Namespace: instance.Namespace, Name: instance.Spec.Secret},
@@ -586,15 +590,56 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 				condition.InputReadyWaitingMessage))
 			return res, fmt.Errorf("OpenStack secret %s not found", instance.Spec.Secret)
 		}
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.InputReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			condition.InputReadyErrorMessage,
-			err.Error()))
 		return ctrl.Result{}, err
 	}
-	instance.Status.Conditions.MarkTrue(condition.InputReadyCondition, condition.InputReadyMessage)
+
+	legacySecret, _, err := secret.GetSecret(ctx, helper, instance.Spec.Secret, instance.Namespace)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	legacyRootPassword := string(legacySecret.Data["DbRootPassword"])
+	// ******** END TEMPORARY ************
+
+	databaseAccountName := r.getRootMariadbAccountName(instance)
+
+	mariaDBAccount, rootSecret, err := mariadbv1.EnsureMariaDBSystemAccount(
+		ctx, helper, databaseAccountName,
+		instance.Name, instance.Namespace, false, "root", legacyRootPassword)
+
+	if err != nil {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			mariadbv1.MariaDBAccountReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			mariadbv1.MariaDBAccountNotReadyMessage,
+			err.Error()))
+
+		return ctrl.Result{}, err
+	}
+
+	// the current root secret for the MariaDBAccount name is copied out to Status.
+	// this allows us to avoid having to change the Spec, which seems to be not
+	// best practice here and also seems to interfere with the openstack
+	// controller's ability to see the Galera status as Completed (though this
+	// might only be due to CRDs not being in sync between mariadb-operator and
+	// openstack-operator during development)
+	// Also by trying to always use CurrentSecret if available, we try to keep
+	// instance.Status.RootDatabaseSecret as the secret that should work for
+	// root right now, independent of changes in the mariadbaccount name
+	// or its secret that have not been reconciled w/ a new job hash.
+	if mariaDBAccount.Status.CurrentSecret != "" {
+		instance.Status.RootDatabaseSecret = mariaDBAccount.Status.CurrentSecret
+	} else {
+		instance.Status.RootDatabaseSecret = rootSecret.Name
+	}
+
+	instance.Status.Conditions.MarkTrue(
+		mariadbv1.MariaDBAccountReadyCondition,
+		mariadbv1.MariaDBSystemAccountReadyMessage, "root")
+
+	instance.Status.Conditions.MarkTrue(
+		condition.InputReadyCondition,
+		condition.InputReadyMessage)
 
 	//
 	// TLS input validation
@@ -1100,6 +1145,14 @@ func (r *GaleraReconciler) findObjectsForSrc(ctx context.Context, src client.Obj
 	return requests
 }
 
+func (r *GaleraReconciler) getRootMariadbAccountName(instance *databasev1beta1.Galera) string {
+	databaseAccountName := instance.Spec.RootDatabaseAccount
+	if databaseAccountName == "" {
+		databaseAccountName = instance.Name + "-mariadb-root"
+	}
+	return databaseAccountName
+}
+
 func (r *GaleraReconciler) reconcileDelete(ctx context.Context, instance *databasev1beta1.Galera, helper *helper.Helper) (ctrl.Result, error) {
 	helper.GetLogger().Info("Reconciling Service delete")
 
@@ -1125,6 +1178,13 @@ func (r *GaleraReconciler) reconcileDelete(ctx context.Context, instance *databa
 		instance.Name,
 	); err != nil {
 		return ctrlResult, err
+	}
+
+	// remove finalizer from the system mariadbaccount and associated secret
+	err = mariadbv1.DeleteAccountFinalizers(
+		ctx, helper, r.getRootMariadbAccountName(instance), instance.Namespace)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
 	// Service is deleted so remove the finalizer.
