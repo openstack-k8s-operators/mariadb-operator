@@ -28,9 +28,6 @@ const (
 	// AccountDeleteHash hash
 	AccountDeleteHash = "accountdelete"
 
-	// DbRootPassword selector for galera root account
-	DbRootPasswordSelector = "DbRootPassword"
-
 	// DatabasePassword selector for MariaDBAccount->Secret
 	DatabasePasswordSelector = "DatabasePassword"
 )

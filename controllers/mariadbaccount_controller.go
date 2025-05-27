@@ -144,6 +144,8 @@ func (r *MariaDBAccountReconciler) reconcileCreateOrUpdate(
 	var mariadbDatabase *databasev1beta1.MariaDBDatabase
 	var err error
 
+	log.Info("Reconcile MariaDBAccount create or update")
+
 	if instance.IsUserAccount() {
 		// for User account, get a handle to the current, active MariaDBDatabase.
 		// if not ready yet, requeue.
@@ -245,7 +247,7 @@ func (r *MariaDBAccountReconciler) reconcileCreateOrUpdate(
 		// set up new Secret and remove finalizer from old secret
 		if instance.Status.CurrentSecret != instance.Spec.Secret {
 			currentSecret := instance.Status.CurrentSecret
-			err = r.removeSecretFinalizer(ctx, helper, currentSecret, instance.Namespace)
+			err = r.removeSecretFinalizer(ctx, log, helper, currentSecret, instance.Namespace)
 			if err == nil {
 				instance.Status.CurrentSecret = instance.Spec.Secret
 			} else {
@@ -279,6 +281,8 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 	var mariadbDatabase *databasev1beta1.MariaDBDatabase
 	var err error
 
+	log.Info("Reconcile MariaDBAccount delete")
+
 	if instance.IsUserAccount() {
 		mariadbDatabase, result, err = r.getMariaDBDatabaseForDelete(ctx, log, helper, instance)
 		if mariadbDatabase == nil {
@@ -296,6 +300,7 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 			finalizersWeCareAbout = append(finalizersWeCareAbout, f)
 		}
 	}
+
 	if len(finalizersWeCareAbout) > 0 {
 		instance.Status.Conditions.MarkFalse(
 			databasev1beta1.MariaDBAccountReadyCondition,
@@ -324,10 +329,27 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 	dbGalera, dbHostname, result, err := r.getGaleraForCreateOrDelete(
 		ctx, log, helper, instance, mariadbDatabase,
 	)
-	// if Galera CR was not found at all, this indicates MariaDBAccount is not
-	// implemented in the database either, so remove all finalizers and
-	// exit
+
+	// if Galera CR was not found or in a deletion process, this indicates
+	// we won't ever have a DB server with which to run a DROP for the
+	// account, so remove all finalizers and exit
+
+	var galeraGone bool
+
 	if k8s_errors.IsNotFound(err) {
+		log.Info("Galera instance not found, so we will remove finalizers and skip account delete")
+		galeraGone = true
+	} else if err != nil {
+		// unexpected error code
+		return result, err
+	} else if dbGalera == nil || !dbGalera.DeletionTimestamp.IsZero() {
+		log.Info("Galera deleted or deletion timestamp is non-zero, so we will remove finalizers and skip account delete")
+		galeraGone = true
+	} else {
+		galeraGone = false
+	}
+
+	if galeraGone {
 		// remove MariaDBAccount finalizer from MariaDBDatabase - this takes the
 		// form such as openstack.org/mariadbaccount-<accountname> (this naming
 		// scheme allows multiple MariaDBAccounts to claim the same MariaDBDatabase
@@ -347,10 +369,8 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 		// MariaDBAccount as well as the Secret which is referenced from the
 		// MariaDBAccount, allowing both to be deleted assuming no other
 		// finalizers
-		err := r.removeAccountAndSecretFinalizer(ctx, helper, instance)
+		err := r.removeAccountAndSecretFinalizer(ctx, log, helper, instance)
 		return ctrl.Result{}, err
-	} else if dbGalera == nil {
-		return result, err
 	}
 
 	dbContainerImage := dbGalera.Spec.ContainerImage
@@ -414,7 +434,7 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 	// remove finalizer "openstack.org/mariadbaccount" from
 	// both the MariaDBAccount as well as the Secret which is referenced
 	// from the MariaDBAccount, allowing both to be deleted
-	err = r.removeAccountAndSecretFinalizer(ctx, helper, instance)
+	err = r.removeAccountAndSecretFinalizer(ctx, log, helper, instance)
 	return ctrl.Result{}, err
 }
 
@@ -515,7 +535,7 @@ func (r *MariaDBAccountReconciler) getMariaDBDatabaseForDelete(ctx context.Conte
 		// So remove finalizer "openstack.org/mariadbaccount" from
 		// both the MariaDBAccount as well as the Secret which is referenced
 		// from the MariaDBAccount, allowing both to be deleted
-		err := r.removeAccountAndSecretFinalizer(ctx, helper, instance)
+		err := r.removeAccountAndSecretFinalizer(ctx, log, helper, instance)
 		return nil, ctrl.Result{}, err
 	}
 
@@ -535,7 +555,7 @@ func (r *MariaDBAccountReconciler) getMariaDBDatabaseForDelete(ctx context.Conte
 			// So remove finalizer "openstack.org/mariadbaccount" from
 			// both the MariaDBAccount as well as the Secret which is referenced
 			// from the MariaDBAccount, allowing both to be deleted
-			err = r.removeAccountAndSecretFinalizer(ctx, helper, instance)
+			err = r.removeAccountAndSecretFinalizer(ctx, log, helper, instance)
 			return nil, ctrl.Result{}, err
 		} else {
 			// unhandled error; exit without change
@@ -578,7 +598,7 @@ func (r *MariaDBAccountReconciler) getMariaDBDatabaseForDelete(ctx context.Conte
 		// remove finalizer "openstack.org/mariadbaccount" from
 		// both the MariaDBAccount as well as the Secret which is referenced
 		// from the MariaDBAccount
-		err = r.removeAccountAndSecretFinalizer(ctx, helper, instance)
+		err = r.removeAccountAndSecretFinalizer(ctx, log, helper, instance)
 		return nil, ctrl.Result{}, err
 	}
 
@@ -607,7 +627,11 @@ func (r *MariaDBAccountReconciler) getGaleraForCreateOrDelete(
 	dbGalera, err = GetDatabaseObject(ctx, r.Client, dbName, instance.Namespace)
 
 	if err != nil {
-		log.Error(err, "Error retrieving Galera instance")
+		if k8s_errors.IsNotFound(err) {
+			log.Info(fmt.Sprintf("Galera instance '%s' does not exist", dbName))
+		} else {
+			log.Error(err, "Error retrieving Galera instance")
+		}
 
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			databasev1beta1.MariaDBServerReadyCondition,
@@ -630,6 +654,19 @@ func (r *MariaDBAccountReconciler) getGaleraForCreateOrDelete(
 		)
 
 		return nil, "", ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
+	}
+
+	if !dbGalera.DeletionTimestamp.IsZero() {
+		log.Info("DB server marked for deletion, preventing account operations from proceeding.  Will seek to remove finalizers and exit")
+
+		instance.Status.Conditions.MarkFalse(
+			databasev1beta1.MariaDBServerReadyCondition,
+			databasev1beta1.ReasonDBResourceDeleted,
+			condition.SeverityInfo,
+			databasev1beta1.MariaDBServerDeletedMessage,
+		)
+
+		return dbGalera, "", ctrl.Result{}, nil
 	}
 
 	dbHostname, dbHostResult, err := databasev1beta1.GetServiceHostname(ctx, helper, dbGalera.Name, dbGalera.Namespace)
@@ -731,10 +768,10 @@ func (r *MariaDBAccountReconciler) ensureAccountSecret(
 // removeAccountAndSecretFinalizer - removes finalizer from mariadbaccount as well
 // as current primary secret
 func (r *MariaDBAccountReconciler) removeAccountAndSecretFinalizer(ctx context.Context,
-	helper *helper.Helper, instance *databasev1beta1.MariaDBAccount) error {
+	log logr.Logger, helper *helper.Helper, instance *databasev1beta1.MariaDBAccount) error {
 
 	err := r.removeSecretFinalizer(
-		ctx, helper, instance.Spec.Secret, instance.Namespace,
+		ctx, log, helper, instance.Spec.Secret, instance.Namespace,
 	)
 	if err != nil && !k8s_errors.IsNotFound(err) {
 		return err
@@ -747,14 +784,19 @@ func (r *MariaDBAccountReconciler) removeAccountAndSecretFinalizer(ctx context.C
 }
 
 func (r *MariaDBAccountReconciler) removeSecretFinalizer(ctx context.Context,
-	helper *helper.Helper, secretName string, namespace string) error {
+	log logr.Logger, helper *helper.Helper, secretName string, namespace string) error {
 	accountSecret, _, err := secret.GetSecret(ctx, helper, secretName, namespace)
 
 	if err == nil {
 		if controllerutil.RemoveFinalizer(accountSecret, helper.GetFinalizer()) {
 			err = r.Update(ctx, accountSecret)
 			if err != nil {
+				log.Error(
+					err,
+					fmt.Sprintf("Error removing mariadbaccount finalizer from secret '%s', will try again", secretName))
 				return err
+			} else {
+				log.Info(fmt.Sprintf("Successfully removed mariadbaccount finalizer from secret '%s'", secretName))
 			}
 		}
 	} else if !k8s_errors.IsNotFound(err) {
