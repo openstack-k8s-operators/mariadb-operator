@@ -541,6 +541,50 @@ func DeleteDatabaseAndAccountFinalizers(
 	namespace string,
 ) error {
 
+	err := DeleteAccountFinalizers(
+		ctx,
+		h,
+		accountName,
+		namespace,
+	)
+	if err != nil {
+		return err
+	}
+
+	// also do a delete for "unused" MariaDBAccounts, associated with
+	// this MariaDBDatabase.
+	err = DeleteUnusedMariaDBAccountFinalizers(
+		ctx, h, name, accountName, namespace,
+	)
+	if err != nil && !k8s_errors.IsNotFound(err) {
+		return err
+	}
+
+	mariaDBDatabase, err := GetDatabase(ctx, h, name, namespace)
+	if err != nil && !k8s_errors.IsNotFound(err) {
+		return err
+	} else if err == nil && controllerutil.RemoveFinalizer(mariaDBDatabase, h.GetFinalizer()) {
+		err := h.GetClient().Update(ctx, mariaDBDatabase)
+		if err != nil && !k8s_errors.IsNotFound(err) {
+			return err
+		}
+		util.LogForObject(h, fmt.Sprintf("Removed finalizer %s from MariaDBDatabase %s", h.GetFinalizer(), mariaDBDatabase.Spec.Name), mariaDBDatabase)
+	}
+
+	return nil
+}
+
+// DeleteAccountFinalizers performs just the primary account + secret finalizer
+// removal part of DeleteDatabaseAndAccountFinalizers
+func DeleteAccountFinalizers(
+	ctx context.Context,
+	h *helper.Helper,
+	accountName string,
+	namespace string,
+) error {
+	if accountName == "" {
+		return fmt.Errorf("Account name is blank")
+	}
 	databaseAccount, err := GetAccount(ctx, h, accountName, namespace)
 	if err != nil && !k8s_errors.IsNotFound(err) {
 		return err
@@ -570,26 +614,6 @@ func DeleteDatabaseAndAccountFinalizers(
 			}
 			util.LogForObject(h, fmt.Sprintf("Removed finalizer %s from MariaDBAccount %s", h.GetFinalizer(), databaseAccount.Name), databaseAccount)
 		}
-	}
-
-	// also do a delete for "unused" MariaDBAccounts, associated with
-	// this MariaDBDatabase.
-	err = DeleteUnusedMariaDBAccountFinalizers(
-		ctx, h, name, accountName, namespace,
-	)
-	if err != nil && !k8s_errors.IsNotFound(err) {
-		return err
-	}
-
-	mariaDBDatabase, err := GetDatabase(ctx, h, name, namespace)
-	if err != nil && !k8s_errors.IsNotFound(err) {
-		return err
-	} else if err == nil && controllerutil.RemoveFinalizer(mariaDBDatabase, h.GetFinalizer()) {
-		err := h.GetClient().Update(ctx, mariaDBDatabase)
-		if err != nil && !k8s_errors.IsNotFound(err) {
-			return err
-		}
-		util.LogForObject(h, fmt.Sprintf("Removed finalizer %s from MariaDBDatabase %s", h.GetFinalizer(), mariaDBDatabase.Spec.Name), mariaDBDatabase)
 	}
 
 	return nil
@@ -811,6 +835,32 @@ func EnsureMariaDBAccount(ctx context.Context,
 	userNamePrefix string,
 ) (*MariaDBAccount, *corev1.Secret, error) {
 
+	return ensureMariaDBAccount(
+		ctx, helper, accountName, namespace, requireTLS,
+		userNamePrefix, "", "", map[string]string{})
+
+}
+
+// EnsureMariaDBSystemAccount ensures a MariaDBAccount has been created for a given
+// operator calling the function, and returns the MariaDBAccount and its
+// Secret for use in consumption into a configuration.
+// Unlike EnsureMariaDBAccount, the function accepts an exact username that
+// expected to remain constant, supporting in-place password changes for the
+// account.
+func EnsureMariaDBSystemAccount(ctx context.Context,
+	helper *helper.Helper,
+	accountName string, galeraInstanceName string, namespace string, requireTLS bool,
+	exactUserName string, exactPassword string) (*MariaDBAccount, *corev1.Secret, error) {
+	return ensureMariaDBAccount(
+		ctx, helper, accountName, namespace, requireTLS,
+		"", exactUserName, exactPassword, map[string]string{"dbName": galeraInstanceName})
+}
+
+func ensureMariaDBAccount(ctx context.Context,
+	helper *helper.Helper,
+	accountName string, namespace string, requireTLS bool,
+	userNamePrefix string, exactUserName string, exactPassword string, labels map[string]string,
+) (*MariaDBAccount, *corev1.Secret, error) {
 	if accountName == "" {
 		return nil, nil, fmt.Errorf("accountName is empty")
 	}
@@ -822,9 +872,20 @@ func EnsureMariaDBAccount(ctx context.Context,
 			return nil, nil, err
 		}
 
-		username, err := generateUniqueUsername(userNamePrefix)
-		if err != nil {
-			return nil, nil, err
+		var username string
+		var accountType AccountType
+
+		if exactUserName == "" {
+			accountType = "User"
+			username, err = generateUniqueUsername(userNamePrefix)
+			if err != nil {
+				return nil, nil, err
+			}
+		} else if userNamePrefix != "" {
+			return nil, nil, fmt.Errorf("userNamePrefix and exactUserName are mutually exclusive")
+		} else {
+			accountType = "System"
+			username = exactUserName
 		}
 
 		account = &MariaDBAccount{
@@ -837,9 +898,10 @@ func EnsureMariaDBAccount(ctx context.Context,
 				// MariaDBAccount once this is filled in
 			},
 			Spec: MariaDBAccountSpec{
-				UserName:   username,
-				Secret:     fmt.Sprintf("%s-db-secret", accountName),
-				RequireTLS: requireTLS,
+				UserName:    username,
+				Secret:      fmt.Sprintf("%s-db-secret", accountName),
+				RequireTLS:  requireTLS,
+				AccountType: accountType,
 			},
 		}
 
@@ -849,6 +911,7 @@ func EnsureMariaDBAccount(ctx context.Context,
 		if account.Spec.Secret == "" {
 			account.Spec.Secret = fmt.Sprintf("%s-db-secret", accountName)
 		}
+
 	}
 
 	dbSecret, _, err := secret.GetSecret(ctx, helper, account.Spec.Secret, namespace)
@@ -858,9 +921,14 @@ func EnsureMariaDBAccount(ctx context.Context,
 			return nil, nil, err
 		}
 
-		dbPassword, err := generateDBPassword()
-		if err != nil {
-			return nil, nil, err
+		var dbPassword string
+		if exactPassword == "" {
+			dbPassword, err = generateDBPassword()
+			if err != nil {
+				return nil, nil, err
+			}
+		} else {
+			dbPassword = exactPassword
 		}
 
 		dbSecret = &corev1.Secret{
@@ -874,7 +942,7 @@ func EnsureMariaDBAccount(ctx context.Context,
 		}
 	}
 
-	_, err = createOrPatchAccountAndSecret(ctx, helper, account, dbSecret, map[string]string{})
+	_, err = createOrPatchAccountAndSecret(ctx, helper, account, dbSecret, labels)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -890,6 +958,7 @@ func EnsureMariaDBAccount(ctx context.Context,
 	)
 
 	return account, dbSecret, nil
+
 }
 
 // generateUniqueUsername creates a MySQL-compliant database username based on
