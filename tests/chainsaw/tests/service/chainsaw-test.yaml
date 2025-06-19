@@ -74,6 +74,11 @@ spec:
         check:
           # we dont want "ERROR 1047 (08S01) at line 495: WSREP has not yet prepared node for application use"
           (find_first($stdout,'(08S01)') == NULL): true
+    catch: &catch_logs
+    - script:
+        content: |
+          # get full logs for all pods except copy logs from kolla start
+          oc logs -n $NAMESPACE --prefix=true --tail=-1 -l galera/name=openstack | grep -v -e ' INFO:'
 
   - name: Service failover on pod crash
     description: Check that service is failing over when the current endpoint pod crashes
@@ -97,6 +102,7 @@ spec:
         check:
           ($stdout != $endpoint): true
     - script: *no_wsrep_in_failover_check
+    catch: *catch_logs
 
   - name: No failover on random pod restart
     description: Check that service is not impacted when a pod that is not the current endpoint is stopped
@@ -114,3 +120,4 @@ spec:
         check:
           ($stdout == $endpoint): true
     - script: *no_wsrep_in_failover_check
+    catch: *catch_logs
