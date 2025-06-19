@@ -11,9 +11,14 @@ NAMESPACE=$(cat ${SERVICEACCOUNT}/namespace)
 TOKEN=$(cat ${SERVICEACCOUNT}/token)
 CACERT=${SERVICEACCOUNT}/ca.crt
 
-# Retry config
-RETRIES=6
-WAIT=1
+# OSPRH-17604: use default timeout and retry parameters for fast failover
+# default parameters for curl calls to the API server
+: ${WSREP_NOTIFY_CURL_CONNECT_TIMEOUT:=5}
+: ${WSREP_NOTIFY_CURL_MAX_TIME:=30}
+CURL="curl --connect-timeout ${WSREP_NOTIFY_CURL_CONNECT_TIMEOUT} --max-time ${WSREP_NOTIFY_CURL_MAX_TIME}"
+# defaults parameters for retry on error
+: ${WSREP_NOTIFY_RETRIES:=30}
+: ${WSREP_NOTIFY_RETRY_WAIT:=1}
 
 
 ##
@@ -66,7 +71,7 @@ function api_server {
         request="$request -d @-"
     fi
     local output
-    output=$(curl -s --cacert ${CACERT} --header "Content-Type:application/json" --header "Authorization: Bearer ${TOKEN}" --request $request ${APISERVER}/api/v1/namespaces/${NAMESPACE}/services/${service})
+    output=$(${CURL} -s --cacert ${CACERT} --header "Content-Type:application/json" --header "Authorization: Bearer ${TOKEN}" --request $request ${APISERVER}/api/v1/namespaces/${NAMESPACE}/services/${service})
 
     local rc=$?
     if [ $rc != 0 ]; then
@@ -109,8 +114,8 @@ function parse_output {
 # Generic retry logic for an action function
 function retry {
     local action=$1
-    local retries=$RETRIES
-    local wait=$WAIT
+    local retries=$WSREP_NOTIFY_RETRIES
+    local wait=$WSREP_NOTIFY_RETRY_WAIT
     local rc=1
 
     $action
@@ -132,7 +137,7 @@ function retry {
         mysql_probe_state reprobe
     done
     if [ $rc -ne 0 ]; then
-        log_error "Could not run action after ${RETRIES} tries. Stop retrying."
+        log_error "Could not run action after ${WSREP_NOTIFY_RETRIES} tries. Stop retrying."
     fi
     return $rc
 }
