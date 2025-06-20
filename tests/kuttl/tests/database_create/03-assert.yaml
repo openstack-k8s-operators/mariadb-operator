@@ -13,8 +13,8 @@ commands:
   # for legacy secret non-present, test that a mariadb username was *not* made
   - script: |
       set -euxo pipefail
-      ${MARIADB_KUTTL_DIR:-tests/kuttl/tests}/../common/scripts/check_db_account.sh openstack-galera-0 kuttldb_utf8 kuttldb_utf_8 12345678 --reverse
+      ../../common/scripts/check_db_account.sh openstack-galera-0 kuttldb_utf8 kuttldb_utf_8 12345678 --reverse
   # for legacy secret present, test that a mariadb username was made
   - script: |
       set -euxo pipefail
-      ${MARIADB_KUTTL_DIR:-tests/kuttl/tests}/../common/scripts/check_db_account.sh openstack-galera-0 kuttldb_legacy_secret kuttldb_legacy_secret dbsecret1
+      ../../common/scripts/check_db_account.sh openstack-galera-0 kuttldb_legacy_secret kuttldb_legacy_secret dbsecret1
