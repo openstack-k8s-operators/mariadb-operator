@@ -1,0 +1,21 @@
+---
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+commands:
+  - script: |
+      set -e
+      ${MARIADB_KUTTL_DIR:-tests/kuttl/tests}/../common/scripts/check_db_account.sh openstack-galera-0 '' systemuser dbsecret1
+      # ensure db users are configured without TLS connection restriction
+      oc rsh -n ${NAMESPACE} -c galera openstack-galera-0 /bin/sh -c 'source /var/lib/operator-scripts/root_auth.sh; mysql -uroot -p${DB_ROOT_PASSWORD} -e "show grants for \`systemuser\`@\`%\`;"' | grep 'GRANT ALL' | grep -v 'REQUIRE SSL'
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: systemuser-account-create-update
+spec:
+  template:
+    spec:
+      nodeSelector:
+        node-role.kubernetes.io/worker: ""
+status:
+  succeeded: 1
