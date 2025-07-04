@@ -25,6 +25,8 @@ spec:
 
   - name: create account without secret
     description: account CR has to wait for a secret to create account in the database
+    # we will delete the account manually
+    skipDelete: true
     try:
     - apply:
         file: account.yaml
@@ -33,8 +35,20 @@ spec:
 
   - name: add secret and finish account creation
     description: make sure the account is created in the database
+    # we will delete the secret manually
+    skipDelete: true
     try:
     - apply:
         file: account-secret.yaml
     - assert:
         file: account-assert.yaml
+    finally:
+    - delete:
+        # delete account first, otherwise the secret can't be deleted b.c.
+        # it has a finalizer from the account
+        # perhaps I shouldn't have allowed MariaDBAccount to be created without
+        # a secret, but here we are...
+        file: account.yaml
+    - delete:
+        # then delete the secret
+        file: account-secret.yaml
