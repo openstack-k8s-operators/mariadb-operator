@@ -1,0 +1,129 @@
+#
+# Check for:
+#
+# - 1 MariaDB CR
+# - 1 Pod for MariaDB CR
+#
+
+apiVersion: mariadb.openstack.org/v1beta1
+kind: Galera
+metadata:
+  name: openstack
+spec:
+  replicas: 1
+  secret: osp-secret
+  storageRequest: 500M
+  nodeSelector:
+    node-role.kubernetes.io/worker: ""
+status:
+  bootstrapped: true
+  conditions:
+  - message: Setup complete
+    reason: Ready
+    status: "True"
+    type: Ready
+  - message: Create service completed
+    reason: Ready
+    status: "True"
+    type: CreateServiceReady
+  - message: Deployment completed
+    reason: Ready
+    status: "True"
+    type: DeploymentReady
+  - message: Input data complete
+    reason: Ready
+    status: "True"
+    type: InputReady
+  - message: RoleBinding created
+    reason: Ready
+    status: "True"
+    type: RoleBindingReady
+  - message: Role created
+    reason: Ready
+    status: "True"
+    type: RoleReady
+  - message: ServiceAccount created
+    reason: Ready
+    status: "True"
+    type: ServiceAccountReady
+  - message: Service config create completed
+    reason: Ready
+    status: "True"
+    type: ServiceConfigReady
+  - message: Input data complete
+    reason: Ready
+    status: "True"
+    type: TLSInputReady
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: openstack-galera
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: galera
+      cr: galera-openstack
+      galera/name: openstack
+  serviceName: openstack-galera
+  template:
+    metadata:
+      labels:
+        app: galera
+        cr: galera-openstack
+        galera/name: openstack
+    spec:
+      nodeSelector:
+        node-role.kubernetes.io/worker: ""
+      containers:
+      - command:
+        - /usr/bin/dumb-init
+        - --
+        - /usr/local/bin/kolla_start
+        name: galera
+        ports:
+        - containerPort: 3306
+          name: mysql
+          protocol: TCP
+        - containerPort: 4567
+          name: galera
+          protocol: TCP
+      serviceAccount: galera-openstack
+      serviceAccountName: galera-openstack
+status:
+  availableReplicas: 1
+  readyReplicas: 1
+  replicas: 1
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: openstack-galera-0
+spec:
+  nodeSelector:
+    node-role.kubernetes.io/worker: ""
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openstack-galera
+spec:
+  ports:
+  - name: mysql
+    port: 3306
+    protocol: TCP
+    targetPort: 3306
+  selector:
+    app: galera
+    cr: galera-openstack
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: openstack-galera
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openstack-config-data
