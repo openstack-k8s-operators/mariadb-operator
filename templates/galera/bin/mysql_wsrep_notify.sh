@@ -42,9 +42,22 @@ function mysql_get_status {
 }
 
 function mysql_get_members {
-    mysql -nN -uroot -p"${DB_ROOT_PASSWORD}" -e "select node_name from mysql.wsrep_cluster_members;"
-    local rc=$?
-    [ $rc = 0 ] || log_error "could not get cluster members from mysql' (rc=$rc)"
+    # The up-to-date list of members in this partition are precisely the incoming gcomm
+    # addresses, which can be extracted from mysql status.
+    # system table mysql.wsrep_cluster_members also exposes that information, but it
+    # contains stale information during a state transition (e.g. when a node just
+    # disappeared).
+    # For accuracy, we only rely on current mysql status, as the data exactly matches
+    # the value of argument `--members` passed to this script.
+    local addresses
+    local rc
+    addresses=$(mysql_get_status wsrep_incoming_addresses)
+    rc=$?
+    if [ $rc = 0 ]; then
+        # galera-0.subdomain:3306,galera-1.subdomain:3306,galera-2.subdomain:3306
+        echo -n "${addresses}" | tr ',' '\n' | cut -d. -f1
+    fi
+    return $rc
 }
 
 # When optional script parameters are not provided, set up the environment
