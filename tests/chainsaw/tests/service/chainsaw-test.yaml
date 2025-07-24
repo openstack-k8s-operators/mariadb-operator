@@ -91,7 +91,7 @@ spec:
         content: |
           oc wait -n $NAMESPACE --for=jsonpath='{.status.readyReplicas}'=3 statefulset openstack-galera
           current=$ENDPOINT
-          oc rsh -n $NAMESPACE $ENDPOINT killall -9 /usr/libexec/mysqld
+          oc rsh -n $NAMESPACE $ENDPOINT killall -s STOP /usr/libexec/mysqld
           while [ "$current" = "$ENDPOINT" ]; do
             echo $(date) "$current" "$ENDPOINT"
             sleep 1
