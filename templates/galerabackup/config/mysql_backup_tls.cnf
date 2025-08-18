@@ -1,0 +1,10 @@
+[client]
+ssl
+
+[sst]
+sockopt = cipher=!SSLv2:kEECDH:kRSA:kEDH:kPSK:+3DES:!aNULL:!eNULL:!MD5:!EXP:!RC4:!SEED:!IDEA:!DES:!SSLv3:!TLSv1
+tcert = /etc/pki/tls/certs/galera.crt
+tkey = /etc/pki/tls/private/galera.key
+tca = /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
+encrypt = 3
+ssl-mode = REQUIRED

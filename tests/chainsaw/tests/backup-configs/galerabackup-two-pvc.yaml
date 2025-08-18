@@ -1,0 +1,8 @@
+apiVersion: mariadb.openstack.org/v1beta1
+kind: GaleraBackup
+metadata:
+  name: openstack
+spec:
+  databaseInstance: openstack
+  transferStorage:
+    storageRequest: 400M
