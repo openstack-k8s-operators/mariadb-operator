@@ -5,7 +5,6 @@ aliases:
   - dciabrin
   - lmiccini
   ci-approvers:
-  - lewisdenny
   - frenzyfriday
   - viroel
   openstack-approvers:
