@@ -7,7 +7,13 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - configmaps
   - cronjobs
+  - endpoints
+  - persistentvolumeclaims
+  - pods
+  - secrets
+  - services
   verbs:
   - create
   - delete
@@ -19,15 +25,9 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - pods
+  - pods/exec
   verbs:
   - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
 - apiGroups:
   - ""
   resources:
@@ -63,96 +63,7 @@ rules:
   - batch
   resources:
   - cronjobs
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - batch
-  resources:
   - jobs
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - configmaps
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - endpoints
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - persistentvolumeclaims
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - pods/exec
-  verbs:
-  - create
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - services
   verbs:
   - create
   - delete
@@ -165,6 +76,9 @@ rules:
   - mariadb.openstack.org
   resources:
   - galerabackups
+  - galeras
+  - mariadbaccounts
+  - mariadbdatabases
   verbs:
   - create
   - delete
@@ -183,26 +97,18 @@ rules:
   - mariadb.openstack.org
   resources:
   - galerabackups/status
+  - mariadbaccounts/status
+  - mariadbdatabases/status
   verbs:
   - get
   - patch
   - update
-- apiGroups:
-  - mariadb.openstack.org
-  resources:
-  - galeras
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
 - apiGroups:
   - mariadb.openstack.org
   resources:
   - galeras/finalizers
+  - mariadbaccounts/finalizers
+  - mariadbdatabases/finalizers
   verbs:
   - patch
   - update
@@ -216,73 +122,9 @@ rules:
   - patch
   - update
 - apiGroups:
-  - mariadb.openstack.org
-  resources:
-  - mariadbaccounts
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - mariadb.openstack.org
-  resources:
-  - mariadbaccounts/finalizers
-  verbs:
-  - patch
-  - update
-- apiGroups:
-  - mariadb.openstack.org
-  resources:
-  - mariadbaccounts/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - mariadb.openstack.org
-  resources:
-  - mariadbdatabases
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - mariadb.openstack.org
-  resources:
-  - mariadbdatabases/finalizers
-  verbs:
-  - patch
-  - update
-- apiGroups:
-  - mariadb.openstack.org
-  resources:
-  - mariadbdatabases/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
   - rbac.authorization.k8s.io
   resources:
   - rolebindings
-  verbs:
-  - create
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - rbac.authorization.k8s.io
-  resources:
   - roles
   verbs:
   - create
