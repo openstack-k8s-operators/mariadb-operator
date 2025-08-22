@@ -59,14 +59,14 @@ func (r *MariaDBAccountReconciler) SetupWithManager(mgr ctrl.Manager) error {
 //+kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbaccounts/finalizers,verbs=update;patch
 //+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;create;update;delete;patch
 
-// Reconcile
+// Reconcile reconciles a MariaDBAccount object
 func (r *MariaDBAccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, _err error) {
 	log := GetLog(ctx, "MariaDBAccount")
 
 	var err error
 
 	instance := &databasev1beta1.MariaDBAccount{}
-	err = r.Client.Get(ctx, req.NamespacedName, instance)
+	err = r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -142,7 +142,7 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 	// the reference to the secret itself is given in the spec
 	// the convention appears to be: "things we are dependent on are named in labels,
 	// things we are setting up are named in the spec"
-	mariadbDatabaseName := instance.ObjectMeta.Labels["mariaDBDatabaseName"]
+	mariadbDatabaseName := instance.Labels["mariaDBDatabaseName"]
 	if mariadbDatabaseName == "" {
 
 		log.Info(fmt.Sprintf(
@@ -169,7 +169,7 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 
 		log.Info(fmt.Sprintf(
 			"MariaDBAccount '%s' didn't find MariaDBDatabase '%s'; requeueing",
-			instance.Name, instance.ObjectMeta.Labels["mariaDBDatabaseName"]))
+			instance.Name, instance.Labels["mariaDBDatabaseName"]))
 
 		return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
 	} else if err == nil && !mariadbDatabase.Status.Conditions.IsTrue(databasev1beta1.MariaDBDatabaseReadyCondition) {
@@ -186,7 +186,7 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 
 		log.Info(fmt.Sprintf(
 			"MariaDBAccount '%s' MariaDBDatabase '%s' not yet complete; requeueing",
-			instance.Name, instance.ObjectMeta.Labels["mariaDBDatabaseName"]))
+			instance.Name, instance.Labels["mariaDBDatabaseName"]))
 
 		return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
 	} else if err != nil {
@@ -345,7 +345,7 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 	// the reference to the secret itself is given in the spec
 	// the convention appears to be: "things we are dependent on are named in labels,
 	// things we are setting up are named in the spec"
-	mariadbDatabaseName := instance.ObjectMeta.Labels["mariaDBDatabaseName"]
+	mariadbDatabaseName := instance.Labels["mariaDBDatabaseName"]
 	if mariadbDatabaseName == "" {
 
 		log.Info(fmt.Sprintf(
@@ -367,7 +367,7 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 		// our own instance and return
 		log.Info(fmt.Sprintf(
 			"MariaDBAccount '%s' Didn't find MariaDBDatabase '%s'; no account delete needed",
-			instance.Name, instance.ObjectMeta.Labels["mariaDBDatabaseName"]))
+			instance.Name, instance.Labels["mariaDBDatabaseName"]))
 
 		controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
 
@@ -380,7 +380,7 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 		// our own instance and return
 		log.Info(fmt.Sprintf(
 			"MariaDBAccount '%s' MariaDBDatabase '%s' not yet complete; no account delete needed",
-			instance.Name, instance.ObjectMeta.Labels["mariaDBDatabaseName"]))
+			instance.Name, instance.Labels["mariaDBDatabaseName"]))
 
 		// first, remove finalizer from the MariaDBDatabase instance
 		if controllerutil.RemoveFinalizer(mariadbDatabase, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
@@ -557,7 +557,7 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 
 // getDatabaseObject - returns either a Galera or MariaDB object (and an associated client.Object interface)
 func (r *MariaDBAccountReconciler) getDatabaseObject(ctx context.Context, mariaDBDatabase *databasev1beta1.MariaDBDatabase, instance *databasev1beta1.MariaDBAccount) (*databasev1beta1.Galera, error) {
-	dbName := mariaDBDatabase.ObjectMeta.Labels["dbName"]
+	dbName := mariaDBDatabase.Labels["dbName"]
 	return GetDatabaseObject(
 		ctx, r.Client,
 		dbName,
@@ -578,7 +578,7 @@ func (r *MariaDBAccountReconciler) getMariaDBDatabaseObject(ctx context.Context,
 
 	objectKey := client.ObjectKeyFromObject(mariaDBDatabase)
 
-	err := r.Client.Get(ctx, objectKey, mariaDBDatabase)
+	err := r.Get(ctx, objectKey, mariaDBDatabase)
 	if err != nil {
 		return nil, err
 	}

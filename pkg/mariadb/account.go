@@ -1,3 +1,4 @@
+// Package mariadb contains MariaDB database management functionality.
 package mariadb
 
 import (
@@ -18,6 +19,7 @@ type accountCreateOrDeleteOptions struct {
 	RequireTLS            string
 }
 
+// CreateDbAccountJob creates a Kubernetes job for creating a MariaDB database account
 func CreateDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName string, databaseHostName string, databaseSecret string, containerImage string, serviceAccountName string, nodeSelector *map[string]string) (*batchv1.Job, error) {
 	var tlsStatement string
 	if account.Spec.RequireTLS {
@@ -45,7 +47,7 @@ func CreateDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName st
 			// provided db name is used as metadata name where underscore is a not allowed
 			// character. Lets replace all underscores with hypen. Underscores in the db name are
 			// possible.
-			Name:      strings.Replace(account.Spec.UserName, "_", "-", -1) + "-account-create",
+			Name:      strings.ReplaceAll(account.Spec.UserName, "_", "-") + "-account-create",
 			Namespace: account.Namespace,
 			Labels:    labels,
 		},
@@ -97,6 +99,7 @@ func CreateDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName st
 	return job, nil
 }
 
+// DeleteDbAccountJob creates a Kubernetes job for deleting a MariaDB database account
 func DeleteDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName string, databaseHostName string, databaseSecret string, containerImage string, serviceAccountName string, nodeSelector *map[string]string) (*batchv1.Job, error) {
 
 	opts := accountCreateOrDeleteOptions{account.Spec.UserName, databaseName, databaseHostName, "root", ""}
@@ -110,7 +113,7 @@ func DeleteDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName st
 	}
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      strings.Replace(account.Spec.UserName, "_", "", -1) + "-account-delete",
+			Name:      strings.ReplaceAll(account.Spec.UserName, "_", "") + "-account-delete",
 			Namespace: account.Namespace,
 			Labels:    labels,
 		},
