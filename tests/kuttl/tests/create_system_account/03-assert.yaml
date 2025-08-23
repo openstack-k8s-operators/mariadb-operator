@@ -3,9 +3,10 @@ apiVersion: mariadb.openstack.org/v1beta1
 kind: MariaDBAccount
 metadata:
   labels:
-    mariaDBDatabaseName: kuttldb-accounttest
-  name: kuttldb-some-db-account
+    dbName: openstack
+  name: kuttldb-some-system-db-account
 status:
+  currentSecret: some-system-db-secret
   conditions:
   - message: Setup complete
     reason: Ready
@@ -15,10 +16,6 @@ status:
     reason: Ready
     status: "True"
     type: MariaDBAccountReady
-  - message: MariaDBDatabase ready
-    reason: Ready
-    status: "True"
-    type: MariaDBDatabaseReady
   - message: MariaDB / Galera server ready
     reason: Ready
     status: "True"
@@ -29,7 +26,7 @@ data:
   DatabasePassword: ZGJzZWNyZXQx
 kind: Secret
 metadata:
-  name: some-db-secret
+  name: some-system-db-secret
   # ensure finalizer was added
   finalizers:
   - openstack.org/mariadbaccount
