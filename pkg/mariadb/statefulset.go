@@ -115,6 +115,7 @@ func getGaleraInitContainers(g *mariadbv1.Galera) []corev1.Container {
 				},
 			},
 		}},
+		Resources:    g.Spec.Resources,
 		VolumeMounts: getGaleraInitVolumeMounts(g),
 	}}
 }
@@ -149,6 +150,7 @@ func getGaleraContainers(g *mariadbv1.Galera, configHash string) []corev1.Contai
 			ContainerPort: 4567,
 			Name:          "galera",
 		}},
+		Resources:    g.Spec.Resources,
 		VolumeMounts: getGaleraVolumeMounts(g),
 		StartupProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{

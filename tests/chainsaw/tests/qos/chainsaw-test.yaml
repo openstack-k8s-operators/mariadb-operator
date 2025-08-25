@@ -1,0 +1,113 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: qos
+spec:
+  steps:
+  - name: Deploy 1-node cluster without pod QoS
+    description: Deploy a 1-node cluster and wait for readiness
+    bindings:
+    - name: replicas
+      value: 1
+    try:
+    - apply:
+        file: ../../common/galera.yaml
+    - assert:
+        # check if all nodes are started and one pod is reacheable via the service endpoint
+        file: ../../common/galera-assert.yaml
+    - script: &check
+        # check if galera can be accessed and cluster is correct
+        content: |
+          ../../scripts/mysql-cli.sh -sNEe "show status like 'wsrep_cluster_size';" | tail -1 | tr -d '\n'
+        check:
+          (to_number($stdout)): ($replicas)
+
+  - name: Update QoS to Burstable
+    description: Ensure that requested resource is configured in the pod
+    try:
+    - patch:
+        resource:
+          apiVersion: mariadb.openstack.org/v1beta1
+          kind: Galera
+          metadata:
+            name: openstack
+          spec:
+            resources: &res_burstable
+              requests:
+                memory: "128M"
+                cpu: "700m"
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: openstack-galera-0
+          spec:
+            initContainers:
+              - resources: *res_burstable
+            containers:
+              - name: galera
+                resources: *res_burstable
+          status:
+            qosClass: Burstable
+            containerStatuses:
+              - name: galera
+                ready: true
+
+  - name: Update QoS to Guaranteed
+    description: Ensure that requested and limit resources are configured in the pod
+    try:
+    - patch:
+        resource:
+          apiVersion: mariadb.openstack.org/v1beta1
+          kind: Galera
+          metadata:
+            name: openstack
+          spec:
+            resources: &res_guaranteed
+              limits:
+                memory: "256M"
+                cpu: "700m"
+              requests:
+                memory: "256M"
+                cpu: "700m"
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: openstack-galera-0
+          spec:
+            initContainers:
+              - resources: *res_guaranteed
+            containers:
+              - name: galera
+                resources: *res_guaranteed
+          status:
+            qosClass: Guaranteed
+            containerStatuses:
+              - name: galera
+                ready: true
+
+  - name: Remove pod QoS
+    description: Ensure that a pod QoS can be removed
+    try:
+    - patch:
+        resource:
+          apiVersion: mariadb.openstack.org/v1beta1
+          kind: Galera
+          metadata:
+            name: openstack
+          spec:
+            resources:
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: openstack-galera-0
+          status:
+            qosClass: BestEffort
+            containerStatuses:
+              - name: galera
+                ready: true
