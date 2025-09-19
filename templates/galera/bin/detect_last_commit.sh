@@ -2,6 +2,9 @@
 
 set -eu
 
+source /var/lib/operator-scripts/root_auth.sh
+
+
 # Adapted from clusterlab's galera resource agent
 recover_args="--datadir=/var/lib/mysql \
                 --user=mysql \
