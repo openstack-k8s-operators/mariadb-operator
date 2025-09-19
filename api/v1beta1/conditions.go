@@ -54,6 +54,9 @@ const (
 	// ReasonDBServiceNameError - error getting the DB service hostname
 	ReasonDBServiceNameError condition.Reason = "DatabaseServiceNameError"
 
+	// ReasonDBResourceDeleted - the galera resource has been marked for deletion
+	ReasonDBResourceDeleted condition.Reason = "DatabaseResourceDeleted"
+
 	// ReasonDBSync - Database sync in progress
 	ReasonDBSync condition.Reason = "DBSync"
 )
@@ -92,7 +95,11 @@ const (
 
 	MariaDBServerNotBootstrappedMessage = "MariaDB / Galera server not bootstrapped"
 
+	MariaDBServerDeletedMessage = "MariaDB / Galera server has been marked for deletion"
+
 	MariaDBAccountReadyInitMessage = "MariaDBAccount create / drop not started"
+
+	MariaDBSystemAccountReadyMessage = "MariaDBAccount System account '%s' creation complete"
 
 	MariaDBAccountReadyMessage = "MariaDBAccount creation complete"
 
