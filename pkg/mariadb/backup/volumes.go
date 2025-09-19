@@ -7,9 +7,11 @@ import (
 )
 
 const (
+	// GaleraCertPrefix is the prefix used for Galera certificate volume names
 	GaleraCertPrefix = "galera"
 )
 
+// BackupVolumes returns the volumes needed for the backup job
 func BackupVolumes(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera) []corev1.Volume {
 	volumes := []corev1.Volume{{
 		Name: "kolla-config",
@@ -82,15 +84,15 @@ func BackupVolumes(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera) []corev1.Volu
 
 	if g.Spec.TLS.Enabled() {
 		svc := tls.Service{
-			SecretName: *g.Spec.TLS.GenericService.SecretName,
+			SecretName: *g.Spec.TLS.SecretName,
 			CertMount:  nil,
 			KeyMount:   nil,
 			CaMount:    nil,
 		}
 		serviceVolume := svc.CreateVolume(GaleraCertPrefix)
 		volumes = append(volumes, serviceVolume)
-		if g.Spec.TLS.Ca.CaBundleSecretName != "" {
-			caVolume := g.Spec.TLS.Ca.CreateVolume()
+		if g.Spec.TLS.CaBundleSecretName != "" {
+			caVolume := g.Spec.TLS.CreateVolume()
 			volumes = append(volumes, caVolume)
 			volumes = append(volumes, volumesTLS...)
 		}
@@ -99,6 +101,7 @@ func BackupVolumes(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera) []corev1.Volu
 	return volumes
 }
 
+// BackupVolumeMounts returns the volume mounts needed for the backup job
 func BackupVolumeMounts(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera) []corev1.VolumeMount {
 	volumeMounts := []corev1.VolumeMount{{
 		MountPath: "/var/lib/kolla/config_files",
@@ -135,15 +138,15 @@ func BackupVolumeMounts(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera) []corev1
 
 	if g.Spec.TLS.Enabled() {
 		svc := tls.Service{
-			SecretName: *g.Spec.TLS.GenericService.SecretName,
+			SecretName: *g.Spec.TLS.SecretName,
 			CertMount:  nil,
 			KeyMount:   nil,
 			CaMount:    nil,
 		}
 		serviceVolumeMounts := svc.CreateVolumeMounts(GaleraCertPrefix)
 		volumeMounts = append(volumeMounts, serviceVolumeMounts...)
-		if g.Spec.TLS.Ca.CaBundleSecretName != "" {
-			caVolumeMounts := g.Spec.TLS.Ca.CreateVolumeMounts(nil)
+		if g.Spec.TLS.CaBundleSecretName != "" {
+			caVolumeMounts := g.Spec.TLS.CreateVolumeMounts(nil)
 			volumeMounts = append(volumeMounts, caVolumeMounts...)
 			volumeMounts = append(volumeMounts, volumeMountsTLS...)
 		}
