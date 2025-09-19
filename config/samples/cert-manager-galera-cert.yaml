@@ -47,7 +47,7 @@ spec:
   secretTemplate:
     labels:
        mariadb-ref: openstack
-  duration: 6h
+  duration: 12720h
   renewBefore: 1h
   subject:
     organizations:
