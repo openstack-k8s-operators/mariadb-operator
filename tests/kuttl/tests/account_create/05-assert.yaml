@@ -6,12 +6,12 @@ commands:
       set -e
       ../../common/scripts/check_db_account.sh openstack-galera-0 kuttldb_accounttest someuser dbsecret1
       # ensure db users are configured without TLS connection restriction
-      oc rsh -n ${NAMESPACE} -c galera openstack-galera-0 /bin/sh -c 'mysql -uroot -p${DB_ROOT_PASSWORD} -e "show grants for \`someuser\`@\`%\`;"' | grep 'GRANT USAGE' | grep -v 'REQUIRE SSL'
+      oc rsh -n ${NAMESPACE} -c galera openstack-galera-0 /bin/sh -c 'source /var/lib/operator-scripts/root_auth.sh; mysql -uroot -p${DB_ROOT_PASSWORD} -e "show grants for \`someuser\`@\`%\`;"' | grep 'GRANT USAGE' | grep -v 'REQUIRE SSL'
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: someuser-account-create
+  name: someuser-account-create-update
 spec:
   template:
     spec:
