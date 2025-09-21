@@ -1,0 +1,16 @@
+apiVersion: kuttl.dev/v1beta
+kind: TestStep
+delete:
+- apiVersion: mariadb.openstack.org/v1beta1
+  kind: Galera
+  name: openstack
+- apiVersion: mariadb.openstack.org/v1beta1
+  kind: MariaDBAccount
+  name: kuttldb-some-system-db-account
+- apiVersion: v1
+  kind: Secret
+  name: some-system-db-secret
+commands:
+  - script: |
+      oc delete -n $NAMESPACE pvc mysql-db-openstack-galera-0
+      for i in `oc get pv | awk '/'$NAMESPACE'\/mysql-db-openstack-galera/ {print $1}'`; do oc patch pv $i -p '{"spec":{"claimRef": null}}'; done

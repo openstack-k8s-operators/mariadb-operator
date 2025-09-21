@@ -5,6 +5,7 @@ import (
 
 	util "github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
+	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,7 +19,7 @@ type accountCreateOrDeleteOptions struct {
 	RequireTLS            string
 }
 
-func CreateDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName string, databaseHostName string, databaseSecret string, containerImage string, serviceAccountName string, nodeSelector *map[string]string) (*batchv1.Job, error) {
+func CreateDbAccountJob(galera *mariadbv1.Galera, account *databasev1beta1.MariaDBAccount, databaseName string, databaseHostName string, containerImage string, serviceAccountName string, nodeSelector *map[string]string) (*batchv1.Job, error) {
 	var tlsStatement string
 	if account.Spec.RequireTLS {
 		tlsStatement = " REQUIRE SSL"
@@ -61,17 +62,6 @@ func CreateDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName st
 							Command: []string{"/bin/sh", "-c", dbCmd},
 							Env: []corev1.EnvVar{
 								{
-									Name: "MYSQL_PWD",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: databaseSecret,
-											},
-											Key: databasev1beta1.DbRootPasswordSelector,
-										},
-									},
-								},
-								{
 									Name: "DatabasePassword",
 									ValueFrom: &corev1.EnvVarSource{
 										SecretKeyRef: &corev1.SecretKeySelector{
@@ -83,8 +73,10 @@ func CreateDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName st
 									},
 								},
 							},
+							VolumeMounts: getGaleraRootOnlyVolumeMounts(),
 						},
 					},
+					Volumes: getGaleraRootOnlyVolumes(galera),
 				},
 			},
 		},
@@ -97,7 +89,7 @@ func CreateDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName st
 	return job, nil
 }
 
-func DeleteDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName string, databaseHostName string, databaseSecret string, containerImage string, serviceAccountName string, nodeSelector *map[string]string) (*batchv1.Job, error) {
+func DeleteDbAccountJob(galera *mariadbv1.Galera, account *databasev1beta1.MariaDBAccount, databaseName string, databaseHostName string, containerImage string, serviceAccountName string, nodeSelector *map[string]string) (*batchv1.Job, error) {
 
 	opts := accountCreateOrDeleteOptions{account.Spec.UserName, databaseName, databaseHostName, "root", ""}
 
@@ -121,24 +113,13 @@ func DeleteDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName st
 					ServiceAccountName: serviceAccountName,
 					Containers: []corev1.Container{
 						{
-							Name:    "mariadb-account-delete",
-							Image:   containerImage,
-							Command: []string{"/bin/sh", "-c", delCmd},
-							Env: []corev1.EnvVar{
-								{
-									Name: "MYSQL_PWD",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: databaseSecret,
-											},
-											Key: databasev1beta1.DbRootPasswordSelector,
-										},
-									},
-								},
-							},
+							Name:         "mariadb-account-delete",
+							Image:        containerImage,
+							Command:      []string{"/bin/sh", "-c", delCmd},
+							VolumeMounts: getGaleraRootOnlyVolumeMounts(),
 						},
 					},
+					Volumes: getGaleraRootOnlyVolumes(galera),
 				},
 			},
 		},
