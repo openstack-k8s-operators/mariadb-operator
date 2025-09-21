@@ -35,6 +35,15 @@
 #     group: cert-manager.io
 #     kind: Issuer
 # ---
+#
+# STEPS TO RECREATE, WHEN CERT EXPIRES (errors in pod logs):
+#
+# 1. make sure cert-manager-operator is installed and running
+# 2. install galera-cert and dependencies:
+#     oc apply -f config/samples/cert-manager-galera-cert.yaml
+# 3. copy secret/galera-tls data below, change ca.crt to tls-ca-bundle.pem
+# 4. add # notsecret suffix to the tls.key value
+#
 apiVersion: v1
 kind: Secret
 metadata:
