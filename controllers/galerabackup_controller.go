@@ -39,9 +39,7 @@ import (
 	helper "github.com/openstack-k8s-operators/lib-common/modules/common/helper"
 	common_rbac "github.com/openstack-k8s-operators/lib-common/modules/common/rbac"
 	util "github.com/openstack-k8s-operators/lib-common/modules/common/util"
-	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
-	mariadbv1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	backup "github.com/openstack-k8s-operators/mariadb-operator/pkg/mariadb/backup"
 )
 
@@ -79,6 +77,7 @@ type GaleraBackupReconciler struct {
 // +kubebuilder:rbac:groups="",resources=cronjobs,verbs=get;list;watch;create;update;delete;patch
 // +kubebuilder:rbac:groups=batch,resources=cronjobs,verbs=get;list;watch;create;update;delete;patch
 
+// Reconcile handles the reconciliation logic for GaleraBackup resources
 func (r *GaleraBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, _err error) {
 	log := GetLog(ctx, "galerabackup")
 
@@ -385,11 +384,11 @@ func (r *GaleraBackupReconciler) generateConfigMaps(
 // SetupWithManager sets up the controller with the Manager.
 func (r *GaleraBackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&mariadbv1beta1.GaleraBackup{}).
+		For(&mariadbv1.GaleraBackup{}).
 		Complete(r)
 }
 
-func (r *GaleraBackupReconciler) reconcileDelete(_ context.Context, instance *databasev1beta1.GaleraBackup, helper *helper.Helper) (ctrl.Result, error) {
+func (r *GaleraBackupReconciler) reconcileDelete(_ context.Context, instance *mariadbv1.GaleraBackup, helper *helper.Helper) (ctrl.Result, error) {
 	controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
 	helper.GetLogger().Info("Reconciled Galera backup delete successfully")
 

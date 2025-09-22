@@ -56,7 +56,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	// Fetch the MariaDBDatabase instance
 	instance := &databasev1beta1.MariaDBDatabase{}
-	err = r.Client.Get(ctx, req.NamespacedName, instance)
+	err = r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -258,7 +258,7 @@ func (r *MariaDBDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *MariaDBDatabaseReconciler) getDatabaseObject(ctx context.Context, instance *databasev1beta1.MariaDBDatabase) (*databasev1beta1.Galera, error) {
 	return GetDatabaseObject(
 		ctx, r.Client,
-		instance.ObjectMeta.Labels["dbName"],
+		instance.Labels["dbName"],
 		instance.Namespace,
 	)
 }

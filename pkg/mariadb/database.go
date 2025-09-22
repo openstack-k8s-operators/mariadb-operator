@@ -93,7 +93,7 @@ func DbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHostName s
 			// provided db name is used as metadata name where underscore is a not allowed
 			// character. Lets replace all underscores with hypen. Underscores in the db name are
 			// possible.
-			Name:      strings.Replace(database.Spec.Name, "_", "-", -1) + "-db-create",
+			Name:      strings.ReplaceAll(database.Spec.Name, "_", "-") + "-db-create",
 			Namespace: database.Namespace,
 			Labels:    labels,
 		},
@@ -188,7 +188,7 @@ func DeleteDbDatabaseJob(database *databasev1beta1.MariaDBDatabase, databaseHost
 
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      strings.Replace(database.Spec.Name, "_", "", -1) + "-database-delete",
+			Name:      strings.ReplaceAll(database.Spec.Name, "_", "") + "-database-delete",
 			Namespace: database.Namespace,
 			Labels:    labels,
 		},

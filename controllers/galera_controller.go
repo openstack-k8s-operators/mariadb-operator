@@ -14,12 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package controllers contains the Galera and MariaDB account controllers for the mariadb-operator.
 package controllers
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -63,16 +65,23 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
-	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	mariadb "github.com/openstack-k8s-operators/mariadb-operator/pkg/mariadb"
 )
 
 // fields to index to reconcile on CR change
 const (
-	serviceSecretNameField = ".spec.tls.genericService.SecretName"
-	caSecretNameField      = ".spec.tls.ca.caBundleSecretName"
-	topologyField          = ".spec.topologyRef.Name"
+	// serviceSecretNameField specifies the field path for TLS service secret name
+	serviceSecretNameField = ".spec.tls.genericService.SecretName" // #nosec G101 -- This is a field path, not a credential
+	// caSecretNameField specifies the field path for CA bundle secret name
+	caSecretNameField = ".spec.tls.ca.caBundleSecretName" // #nosec G101 -- This is a field path, not a credential
+	topologyField     = ".spec.topologyRef.Name"
+)
+
+// Static errors
+var (
+	// ErrOpenStackSecretNotFound indicates that the OpenStack secret was not found
+	ErrOpenStackSecretNotFound = errors.New("OpenStack secret not found")
 )
 
 var allWatchFields = []string{
@@ -574,7 +583,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 				condition.RequestedReason,
 				condition.SeverityInfo,
 				condition.InputReadyWaitingMessage))
-			return res, fmt.Errorf("OpenStack secret %s not found", instance.Spec.Secret)
+			return res, fmt.Errorf("%w: %s", ErrOpenStackSecretNotFound, instance.Spec.Secret)
 		}
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.InputReadyCondition,
@@ -605,7 +614,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 					condition.TLSInputReadyCondition,
 					condition.RequestedReason,
 					condition.SeverityInfo,
-					fmt.Sprintf(condition.TLSInputReadyWaitingMessage, instance.Spec.TLS.CaBundleSecretName)))
+					condition.TLSInputReadyWaitingMessage, instance.Spec.TLS.CaBundleSecretName))
 				return ctrl.Result{}, nil
 			}
 			instance.Status.Conditions.Set(condition.FalseCondition(
@@ -631,7 +640,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 					condition.TLSInputReadyCondition,
 					condition.RequestedReason,
 					condition.SeverityInfo,
-					fmt.Sprintf(condition.TLSInputReadyWaitingMessage, err.Error())))
+					condition.TLSInputReadyWaitingMessage, err.Error()))
 				return ctrl.Result{}, nil
 			}
 			instance.Status.Conditions.Set(condition.FalseCondition(
@@ -662,7 +671,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 
 	// build state of the restart hash. this is used to decide whether the
 	// statefulset must stop all its pods before applying a config update
-	clusterPropertiesEnv["GCommTLS"] = env.SetValue(strconv.FormatBool(instance.Spec.TLS.Enabled() && instance.Spec.TLS.Ca.CaBundleSecretName != ""))
+	clusterPropertiesEnv["GCommTLS"] = env.SetValue(strconv.FormatBool(instance.Spec.TLS.Enabled() && instance.Spec.TLS.CaBundleSecretName != ""))
 	clusterPropertiesHash, err := util.HashOfInputHashes(clusterPropertiesEnv)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -981,8 +990,8 @@ func (r *GaleraReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// Extract the secret name from the spec, if one is provided
 		cr := rawObj.(*mariadbv1.Galera)
 		tls := &cr.Spec.TLS
-		if tls.Ca.CaBundleSecretName != "" {
-			return []string{tls.Ca.CaBundleSecretName}
+		if tls.CaBundleSecretName != "" {
+			return []string{tls.CaBundleSecretName}
 		}
 		return nil
 	}); err != nil {
@@ -994,7 +1003,7 @@ func (r *GaleraReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		cr := rawObj.(*mariadbv1.Galera)
 		tls := &cr.Spec.TLS
 		if tls.Enabled() {
-			return []string{*tls.GenericService.SecretName}
+			return []string{*tls.SecretName}
 		}
 		return nil
 	}); err != nil {
@@ -1036,8 +1045,8 @@ func (r *GaleraReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // GetDatabaseObject - returns either a Galera or MariaDB object (and an associated client.Object interface).
 // used by both MariaDBDatabaseReconciler and MariaDBAccountReconciler
 // this will later return only Galera objects, so as a lookup it's part of the galera controller
-func GetDatabaseObject(ctx context.Context, clientObj client.Client, name string, namespace string) (*databasev1beta1.Galera, error) {
-	dbGalera := &databasev1beta1.Galera{
+func GetDatabaseObject(ctx context.Context, clientObj client.Client, name string, namespace string) (*mariadbv1.Galera, error) {
+	dbGalera := &mariadbv1.Galera{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
@@ -1089,7 +1098,7 @@ func (r *GaleraReconciler) findObjectsForSrc(ctx context.Context, src client.Obj
 	return requests
 }
 
-func (r *GaleraReconciler) reconcileDelete(ctx context.Context, instance *databasev1beta1.Galera, helper *helper.Helper) (ctrl.Result, error) {
+func (r *GaleraReconciler) reconcileDelete(ctx context.Context, instance *mariadbv1.Galera, helper *helper.Helper) (ctrl.Result, error) {
 	helper.GetLogger().Info("Reconciling Service delete")
 
 	// Remove our finalizer from the db svc

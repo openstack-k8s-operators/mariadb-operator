@@ -1,3 +1,4 @@
+// Package mariadbbackup provides utilities for creating and managing MariaDB backup jobs and resources
 package mariadbbackup
 
 import (
@@ -11,7 +12,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// StatefulSet returns a StatefulSet object for the galera cluster
+// BackupCronJob returns a CronJob object for the galera backup
 func BackupCronJob(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera, configHash string) *batchv1.CronJob {
 	ls := mariadb.StatefulSetLabels(g)
 	name := BackupCronJobName(b, g)
@@ -63,7 +64,7 @@ func getBackupPodTemplate(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera, config
 		Name:  "RETENTION",
 		Value: retentionTime,
 	}}
-	if g.Spec.TLS.Enabled() && g.Spec.TLS.Ca.CaBundleSecretName != "" {
+	if g.Spec.TLS.Enabled() && g.Spec.TLS.CaBundleSecretName != "" {
 		environ = append(environ, corev1.EnvVar{
 			Name:  "TLS",
 			Value: "true",
