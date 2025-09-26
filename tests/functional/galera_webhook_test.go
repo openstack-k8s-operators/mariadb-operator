@@ -46,10 +46,10 @@ var _ = Describe("Galera webhook", func() {
 	When("a Galera gets created with a name longer then 46 chars", func() {
 		It("gets blocked by the webhook and fail", func() {
 
-			raw := map[string]interface{}{
+			raw := map[string]any{
 				"apiVersion": "mariadb.openstack.org/v1beta1",
 				"kind":       "Galera",
-				"metadata": map[string]interface{}{
+				"metadata": map[string]any{
 					"name":      "foo-1234567890-1234567890-1234567890-1234567890",
 					"namespace": namespace,
 				},
