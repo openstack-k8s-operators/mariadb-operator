@@ -142,7 +142,7 @@ func buildGcommURI(instance *mariadbv1.Galera) string {
 	basename := instance.Name + "-galera"
 	res := []string{}
 
-	for i := 0; i < replicas; i++ {
+	for i := range replicas {
 		// Generate Gcomm with subdomains for TLS validation
 		res = append(res, basename+"-"+strconv.Itoa(i)+"."+basename+"."+instance.Namespace+".svc")
 	}
@@ -943,7 +943,7 @@ func (r *GaleraReconciler) generateConfigMaps(
 	envVars *map[string]env.Setter,
 ) error {
 	log := GetLog(ctx, "galera")
-	templateParameters := map[string]interface{}{
+	templateParameters := map[string]any{
 		"logToDisk": instance.Spec.LogToDisk,
 	}
 	customData := make(map[string]string)

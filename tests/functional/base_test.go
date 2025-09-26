@@ -34,13 +34,13 @@ const (
 	interval = timeout / 100
 )
 
-func CreateGaleraConfig(namespace string, spec map[string]interface{}) client.Object {
+func CreateGaleraConfig(namespace string, spec map[string]any) client.Object {
 	name := uuid.New().String()
 
-	raw := map[string]interface{}{
+	raw := map[string]any{
 		"apiVersion": "mariadb.openstack.org/v1beta1",
 		"kind":       "Galera",
-		"metadata": map[string]interface{}{
+		"metadata": map[string]any{
 			"name":      name,
 			"namespace": namespace,
 		},
@@ -50,8 +50,8 @@ func CreateGaleraConfig(namespace string, spec map[string]interface{}) client.Ob
 	return th.CreateUnstructured(raw)
 }
 
-func GetDefaultGaleraSpec() map[string]interface{} {
-	return map[string]interface{}{
+func GetDefaultGaleraSpec() map[string]any {
+	return map[string]any{
 		"replicas":       1,
 		"logToDisk":      false,
 		"secret":         "osp-secret",
