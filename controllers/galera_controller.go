@@ -578,10 +578,12 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		time.Duration(5)*time.Second)
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
+			// Since the OpenStack secret should have been manually created by the user and referenced in the spec,
+			// we treat this as a warning because it means that the service will not be able to start.
 			instance.Status.Conditions.Set(condition.FalseCondition(
 				condition.InputReadyCondition,
-				condition.RequestedReason,
-				condition.SeverityInfo,
+				condition.ErrorReason,
+				condition.SeverityWarning,
 				condition.InputReadyWaitingMessage))
 			return res, fmt.Errorf("%w: %s", ErrOpenStackSecretNotFound, instance.Spec.Secret)
 		}
@@ -610,10 +612,12 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		)
 		if err != nil {
 			if k8s_errors.IsNotFound(err) {
+				// Since the CA bundle secret should have been manually created by the user and provided in the spec,
+				// we treat this as a warning because it means that the service will not be able to start.
 				instance.Status.Conditions.Set(condition.FalseCondition(
 					condition.TLSInputReadyCondition,
-					condition.RequestedReason,
-					condition.SeverityInfo,
+					condition.ErrorReason,
+					condition.SeverityWarning,
 					condition.TLSInputReadyWaitingMessage, instance.Spec.TLS.CaBundleSecretName))
 				return ctrl.Result{}, nil
 			}

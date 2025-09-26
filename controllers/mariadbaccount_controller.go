@@ -160,11 +160,12 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 	if err != nil && k8s_errors.IsNotFound(err) {
 		// for the create case, need to wait for the MariaDBDatabase to exists before we can continue;
 		// requeue
+		// Since the MariaDBDatabase object should already exist, we treat this as a warning.
 
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			databasev1beta1.MariaDBDatabaseReadyCondition,
 			databasev1beta1.ReasonDBNotFound,
-			condition.SeverityInfo,
+			condition.SeverityWarning,
 			databasev1beta1.MariaDBDatabaseReadyInitMessage))
 
 		log.Info(fmt.Sprintf(
@@ -275,11 +276,12 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 		time.Duration(30)*time.Second,
 	)
 	if (err != nil || secretResult != ctrl.Result{}) {
-
+		// Since the account secret should have been manually created by the user and referenced in the spec,
+		// we treat this as a warning because it means that the service will not be able to start.
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			databasev1beta1.MariaDBAccountReadyCondition,
 			secret.ReasonSecretMissing,
-			condition.SeverityInfo,
+			condition.SeverityWarning,
 			databasev1beta1.MariaDBAccountSecretNotReadyMessage, err))
 
 		return secretResult, err
