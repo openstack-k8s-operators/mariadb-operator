@@ -235,10 +235,11 @@ func (r *GaleraBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
 			// Wait for a Galera object to exist before creating any object (cronjob, PVs...)
+			// Since the Galera object should already exist, we treat this as a warning.
 			instance.Status.Conditions.MarkFalse(
 				mariadbv1.MariaDBResourceExistsCondition,
 				mariadbv1.ReasonResourceNotFound,
-				condition.SeverityInfo,
+				condition.SeverityWarning,
 				mariadbv1.MariaDBResourceInitMessage,
 			)
 			return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
@@ -316,8 +317,8 @@ func (r *GaleraBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			helper.GetLogger().Error(err, "CreateOrPatch failed", "pod", backupCronJob.Name)
 			instance.Status.Conditions.MarkFalse(
 				mariadbv1.CronjobReadyCondition,
-				condition.ReadyReason,
-				condition.SeverityInfo,
+				condition.ErrorReason,
+				condition.SeverityWarning,
 				mariadbv1.CronjobReadyErrorMessage,
 				err,
 			)
