@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	util "github.com/openstack-k8s-operators/lib-common/modules/common/util"
-	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
+	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,8 +19,8 @@ type accountCreateOrDeleteOptions struct {
 	RequireTLS            string
 }
 
-// CreateDbAccountJob creates a Kubernetes job for creating a MariaDB database account
-func CreateDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName string, databaseHostName string, databaseSecret string, containerImage string, serviceAccountName string, nodeSelector *map[string]string) (*batchv1.Job, error) {
+// CreateOrUpdateDbAccountJob creates or updates a Kubernetes job for creating a MariaDB database account
+func CreateOrUpdateDbAccountJob(galera *mariadbv1.Galera, account *mariadbv1.MariaDBAccount, databaseName string, databaseHostName string, containerImage string, serviceAccountName string, nodeSelector *map[string]string) (*batchv1.Job, error) {
 	var tlsStatement string
 	if account.Spec.RequireTLS {
 		tlsStatement = " REQUIRE SSL"
@@ -47,7 +47,7 @@ func CreateDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName st
 			// provided db name is used as metadata name where underscore is a not allowed
 			// character. Lets replace all underscores with hypen. Underscores in the db name are
 			// possible.
-			Name:      strings.ReplaceAll(account.Spec.UserName, "_", "-") + "-account-create",
+			Name:      strings.ReplaceAll(account.Spec.UserName, "_", "-") + "-account-create-update",
 			Namespace: account.Namespace,
 			Labels:    labels,
 		},
@@ -58,21 +58,10 @@ func CreateDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName st
 					ServiceAccountName: serviceAccountName,
 					Containers: []corev1.Container{
 						{
-							Name:    "mariadb-account-create",
+							Name:    "mariadb-account-create-update",
 							Image:   containerImage,
 							Command: []string{"/bin/sh", "-c", dbCmd},
 							Env: []corev1.EnvVar{
-								{
-									Name: "MYSQL_PWD",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: databaseSecret,
-											},
-											Key: databasev1beta1.DbRootPasswordSelector,
-										},
-									},
-								},
 								{
 									Name: "DatabasePassword",
 									ValueFrom: &corev1.EnvVarSource{
@@ -80,13 +69,15 @@ func CreateDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName st
 											LocalObjectReference: corev1.LocalObjectReference{
 												Name: account.Spec.Secret,
 											},
-											Key: databasev1beta1.DatabasePasswordSelector,
+											Key: mariadbv1.DatabasePasswordSelector,
 										},
 									},
 								},
 							},
+							VolumeMounts: getGaleraRootOnlyVolumeMounts(),
 						},
 					},
+					Volumes: getGaleraRootOnlyVolumes(galera),
 				},
 			},
 		},
@@ -100,7 +91,7 @@ func CreateDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName st
 }
 
 // DeleteDbAccountJob creates a Kubernetes job for deleting a MariaDB database account
-func DeleteDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName string, databaseHostName string, databaseSecret string, containerImage string, serviceAccountName string, nodeSelector *map[string]string) (*batchv1.Job, error) {
+func DeleteDbAccountJob(galera *mariadbv1.Galera, account *mariadbv1.MariaDBAccount, databaseName string, databaseHostName string, containerImage string, serviceAccountName string, nodeSelector *map[string]string) (*batchv1.Job, error) {
 
 	opts := accountCreateOrDeleteOptions{account.Spec.UserName, databaseName, databaseHostName, "root", ""}
 
@@ -124,24 +115,13 @@ func DeleteDbAccountJob(account *databasev1beta1.MariaDBAccount, databaseName st
 					ServiceAccountName: serviceAccountName,
 					Containers: []corev1.Container{
 						{
-							Name:    "mariadb-account-delete",
-							Image:   containerImage,
-							Command: []string{"/bin/sh", "-c", delCmd},
-							Env: []corev1.EnvVar{
-								{
-									Name: "MYSQL_PWD",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: databaseSecret,
-											},
-											Key: databasev1beta1.DbRootPasswordSelector,
-										},
-									},
-								},
-							},
+							Name:         "mariadb-account-delete",
+							Image:        containerImage,
+							Command:      []string{"/bin/sh", "-c", delCmd},
+							VolumeMounts: getGaleraRootOnlyVolumeMounts(),
 						},
 					},
+					Volumes: getGaleraRootOnlyVolumes(galera),
 				},
 			},
 		},
