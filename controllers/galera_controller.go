@@ -495,6 +495,16 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 			Resources: []string{"services"},
 			Verbs:     []string{"get", "list", "update", "patch"},
 		},
+		{
+			APIGroups: []string{"mariadb.openstack.org"},
+			Resources: []string{"galeras"},
+			Verbs:     []string{"get", "list"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"secrets"},
+			Verbs:     []string{"get"},
+		},
 	}
 	rbacResult, err := common_rbac.ReconcileRbac(ctx, helper, instance, rbacRules)
 	if err != nil {
@@ -948,7 +958,8 @@ func (r *GaleraReconciler) generateConfigMaps(
 ) error {
 	log := GetLog(ctx, "galera")
 	templateParameters := map[string]any{
-		"logToDisk": instance.Spec.LogToDisk,
+		"logToDisk":          instance.Spec.LogToDisk,
+		"galeraInstanceName": instance.Name,
 	}
 	customData := make(map[string]string)
 	customData[mariadbv1.CustomServiceConfigFile] = instance.Spec.CustomServiceConfig
@@ -956,11 +967,12 @@ func (r *GaleraReconciler) generateConfigMaps(
 	cms := []util.Template{
 		// ScriptsConfigMap
 		{
-			Name:         configMapNameForScripts(instance),
-			Namespace:    instance.Namespace,
-			Type:         util.TemplateTypeScripts,
-			InstanceType: instance.Kind,
-			Labels:       map[string]string{},
+			Name:          configMapNameForScripts(instance),
+			Namespace:     instance.Namespace,
+			Type:          util.TemplateTypeScripts,
+			InstanceType:  instance.Kind,
+			Labels:        map[string]string{},
+			ConfigOptions: templateParameters,
 		},
 		// ConfigMap
 		{
@@ -1046,9 +1058,8 @@ func (r *GaleraReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// GetDatabaseObject - returns either a Galera or MariaDB object (and an associated client.Object interface).
+// GetDatabaseObject - returns a Galera object.
 // used by both MariaDBDatabaseReconciler and MariaDBAccountReconciler
-// this will later return only Galera objects, so as a lookup it's part of the galera controller
 func GetDatabaseObject(ctx context.Context, clientObj client.Client, name string, namespace string) (*mariadbv1.Galera, error) {
 	dbGalera := &mariadbv1.Galera{
 		ObjectMeta: metav1.ObjectMeta{
