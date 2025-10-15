@@ -2,6 +2,8 @@
 
 set -eu
 
+source /var/lib/operator-scripts/mysql_root_auth.sh
+
 URI_FILE=/var/lib/mysql/gcomm_uri
 
 rm -f /var/lib/mysql/mysql.sock
