@@ -1,5 +1,7 @@
 #!/bin/bash
 
+source /var/lib/operator-scripts/mysql_root_auth.sh
+
 # NOTE(dciabrin) we might use downward API to populate those in the future
 PODNAME=$HOSTNAME
 SERVICE=${PODNAME/-galera-[0-9]*/}

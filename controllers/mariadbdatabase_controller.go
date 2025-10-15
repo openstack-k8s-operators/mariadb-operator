@@ -165,7 +165,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	//
 	// Non-deletion (normal) flow follows
 	//
-	var dbSecret, dbContainerImage, serviceAccount string
+	var dbContainerImage, serviceAccount string
 	// NOTE(dciabrin) When configured to only allow TLS connections, all clients
 	// accessing this DB must support client connection via TLS.
 	useTLS := dbGalera.Spec.TLS.Enabled() && dbGalera.Spec.DisableNonTLSListeners
@@ -183,7 +183,6 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 	}
 
-	dbSecret = dbGalera.Spec.Secret
 	dbContainerImage = dbGalera.Spec.ContainerImage
 	serviceAccount = dbGalera.RbacResourceName()
 
@@ -199,7 +198,7 @@ func (r *MariaDBDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	)
 
 	// Define a new Job object (hostname, password, containerImage)
-	jobDef, err := mariadb.DbDatabaseJob(instance, dbHostname, dbSecret, dbContainerImage, serviceAccount, useTLS, dbGalera.Spec.NodeSelector)
+	jobDef, err := mariadb.DbDatabaseJob(dbGalera, instance, dbHostname, dbContainerImage, serviceAccount, useTLS, dbGalera.Spec.NodeSelector)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
