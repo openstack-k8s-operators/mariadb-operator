@@ -23,3 +23,14 @@ status:
     reason: Ready
     status: "True"
     type: MariaDBServerReady
+---
+apiVersion: v1
+data:
+  DatabasePassword: ZGJzZWNyZXQx
+kind: Secret
+metadata:
+  name: some-db-secret
+  # ensure finalizer was added
+  finalizers:
+  - openstack.org/mariadbaccount
+type: Opaque

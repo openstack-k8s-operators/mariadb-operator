@@ -495,6 +495,16 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 			Resources: []string{"services"},
 			Verbs:     []string{"get", "list", "update", "patch"},
 		},
+		{
+			APIGroups: []string{"mariadb.openstack.org"},
+			Resources: []string{"galeras"},
+			Verbs:     []string{"get", "list"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"secrets"},
+			Verbs:     []string{"get"},
+		},
 	}
 	rbacResult, err := common_rbac.ReconcileRbac(ctx, helper, instance, rbacRules)
 	if err != nil {
@@ -948,7 +958,8 @@ func (r *GaleraReconciler) generateConfigMaps(
 ) error {
 	log := GetLog(ctx, "galera")
 	templateParameters := map[string]any{
-		"logToDisk": instance.Spec.LogToDisk,
+		"logToDisk":          instance.Spec.LogToDisk,
+		"galeraInstanceName": instance.Name,
 	}
 	customData := make(map[string]string)
 	customData[mariadbv1.CustomServiceConfigFile] = instance.Spec.CustomServiceConfig
@@ -956,11 +967,12 @@ func (r *GaleraReconciler) generateConfigMaps(
 	cms := []util.Template{
 		// ScriptsConfigMap
 		{
-			Name:         configMapNameForScripts(instance),
-			Namespace:    instance.Namespace,
-			Type:         util.TemplateTypeScripts,
-			InstanceType: instance.Kind,
-			Labels:       map[string]string{},
+			Name:          configMapNameForScripts(instance),
+			Namespace:     instance.Namespace,
+			Type:          util.TemplateTypeScripts,
+			InstanceType:  instance.Kind,
+			Labels:        map[string]string{},
+			ConfigOptions: templateParameters,
 		},
 		// ConfigMap
 		{
