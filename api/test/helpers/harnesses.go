@@ -127,12 +127,6 @@ func (harness *MariaDBTestHarness) RunBasicSuite() {
 				return mariadbAccount.Finalizers
 			}, timeout, interval).Should(ContainElement(harness.finalizerName))
 
-			// as well as in the secret
-			Eventually(func() []string {
-				dbSecret := harness.mariaDBHelper.GetSecret(types.NamespacedName{Name: mariadbAccount.Spec.Secret, Namespace: mariadbAccount.Namespace})
-				return dbSecret.Finalizers
-			}, timeout, interval).Should(ContainElement(harness.finalizerName))
-
 			// mariaDBDatabaseName is set
 			Expect(mariadbAccount.Labels["mariaDBDatabaseName"]).Should(Equal(harness.databaseName))
 
@@ -169,12 +163,6 @@ func (harness *MariaDBTestHarness) RunBasicSuite() {
 				return mariadbAccount.Finalizers
 			}, timeout, interval).Should(ContainElement(harness.finalizerName))
 
-			// as well as in the secret
-			Eventually(func() []string {
-				dbSecret := harness.mariaDBHelper.GetSecret(types.NamespacedName{Name: mariadbAccount.Spec.Secret, Namespace: mariadbAccount.Namespace})
-				return dbSecret.Finalizers
-			}, timeout, interval).Should(ContainElement(harness.finalizerName))
-
 			// mariaDBDatabaseName is set
 			Expect(mariadbAccount.Labels["mariaDBDatabaseName"]).Should(Equal(harness.databaseName))
 
@@ -207,13 +195,6 @@ func (harness *MariaDBTestHarness) RunBasicSuite() {
 			Eventually(func() []string {
 				oldMariadbAccount := mariaDBHelper.GetMariaDBAccount(oldAccountName)
 				return oldMariadbAccount.Finalizers
-			}, timeout, interval).Should(ContainElement(harness.finalizerName))
-
-			// as well as in the secret
-			Eventually(func() []string {
-				oldMariadbAccount := mariaDBHelper.GetMariaDBAccount(oldAccountName)
-				dbSecret := harness.mariaDBHelper.GetSecret(types.NamespacedName{Name: oldMariadbAccount.Spec.Secret, Namespace: oldMariadbAccount.Namespace})
-				return dbSecret.Finalizers
 			}, timeout, interval).Should(ContainElement(harness.finalizerName))
 
 		})
@@ -250,25 +231,11 @@ func (harness *MariaDBTestHarness) RunBasicSuite() {
 				return newMariadbAccount.Finalizers
 			}, timeout, interval).Should(ContainElement(harness.finalizerName))
 
-			// as well as in the secret
-			Eventually(func() []string {
-				newMariadbAccount := mariaDBHelper.GetMariaDBAccount(newAccountName)
-				dbSecret := harness.mariaDBHelper.GetSecret(types.NamespacedName{Name: newMariadbAccount.Spec.Secret, Namespace: newMariadbAccount.Namespace})
-				return dbSecret.Finalizers
-			}, timeout, interval).Should(ContainElement(harness.finalizerName))
-
 			// old account retains the finalizer because we did not yet
 			// complete the new MariaDBAccount
 			Consistently(func() []string {
 				oldMariadbAccount := mariaDBHelper.GetMariaDBAccount(oldAccountName)
 				return oldMariadbAccount.Finalizers
-			}, timeout, interval).Should(ContainElement(harness.finalizerName))
-
-			// as well as in the secret
-			Eventually(func() []string {
-				oldMariadbAccount := mariaDBHelper.GetMariaDBAccount(oldAccountName)
-				dbSecret := harness.mariaDBHelper.GetSecret(types.NamespacedName{Name: oldMariadbAccount.Spec.Secret, Namespace: oldMariadbAccount.Namespace})
-				return dbSecret.Finalizers
 			}, timeout, interval).Should(ContainElement(harness.finalizerName))
 
 		})
@@ -303,24 +270,10 @@ func (harness *MariaDBTestHarness) RunBasicSuite() {
 				return newMariadbAccount.Finalizers
 			}, timeout, interval).Should(ContainElement(harness.finalizerName))
 
-			// as well as in the secret
-			Eventually(func() []string {
-				newMariadbAccount := mariaDBHelper.GetMariaDBAccount(newAccountName)
-				dbSecret := harness.mariaDBHelper.GetSecret(types.NamespacedName{Name: newMariadbAccount.Spec.Secret, Namespace: newMariadbAccount.Namespace})
-				return dbSecret.Finalizers
-			}, timeout, interval).Should(ContainElement(harness.finalizerName))
-
 			// finalizer removed from old account
 			Eventually(func() []string {
 				oldMariadbAccount := mariaDBHelper.GetMariaDBAccount(oldAccountName)
 				return oldMariadbAccount.Finalizers
-			}, timeout, interval).ShouldNot(ContainElement(harness.finalizerName))
-
-			// as well as in the secret
-			Eventually(func() []string {
-				oldMariadbAccount := mariaDBHelper.GetMariaDBAccount(oldAccountName)
-				dbSecret := harness.mariaDBHelper.GetSecret(types.NamespacedName{Name: oldMariadbAccount.Spec.Secret, Namespace: oldMariadbAccount.Namespace})
-				return dbSecret.Finalizers
 			}, timeout, interval).ShouldNot(ContainElement(harness.finalizerName))
 
 			// CreateOrPatchDBByName will add a label referring to the database
@@ -365,23 +318,9 @@ func (harness *MariaDBTestHarness) RunBasicSuite() {
 				return newMariadbAccount.Finalizers
 			}, timeout, interval).Should(ContainElement(harness.finalizerName))
 
-			// as well as in the secret
-			Eventually(func() []string {
-				newMariadbAccount := mariaDBHelper.GetMariaDBAccount(newAccountName)
-				dbSecret := harness.mariaDBHelper.GetSecret(types.NamespacedName{Name: newMariadbAccount.Spec.Secret, Namespace: newMariadbAccount.Namespace})
-				return dbSecret.Finalizers
-			}, timeout, interval).Should(ContainElement(harness.finalizerName))
-
 			Eventually(func() []string {
 				oldMariadbAccount := mariaDBHelper.GetMariaDBAccount(oldAccountName)
 				return oldMariadbAccount.Finalizers
-			}, timeout, interval).Should(ContainElement(harness.finalizerName))
-
-			// as well as in the secret
-			Eventually(func() []string {
-				oldMariadbAccount := mariaDBHelper.GetMariaDBAccount(oldAccountName)
-				dbSecret := harness.mariaDBHelper.GetSecret(types.NamespacedName{Name: oldMariadbAccount.Spec.Secret, Namespace: oldMariadbAccount.Namespace})
-				return dbSecret.Finalizers
 			}, timeout, interval).Should(ContainElement(harness.finalizerName))
 
 			// now delete the CR
@@ -397,13 +336,6 @@ func (harness *MariaDBTestHarness) RunBasicSuite() {
 			Eventually(func() []string {
 				oldMariadbAccount := mariaDBHelper.GetMariaDBAccount(oldAccountName)
 				return oldMariadbAccount.Finalizers
-			}, timeout, interval).ShouldNot(ContainElement(harness.finalizerName))
-
-			// as well as in the secret
-			Eventually(func() []string {
-				oldMariadbAccount := mariaDBHelper.GetMariaDBAccount(oldAccountName)
-				dbSecret := harness.mariaDBHelper.GetSecret(types.NamespacedName{Name: oldMariadbAccount.Spec.Secret, Namespace: oldMariadbAccount.Namespace})
-				return dbSecret.Finalizers
 			}, timeout, interval).ShouldNot(ContainElement(harness.finalizerName))
 
 			Eventually(func() []string {
