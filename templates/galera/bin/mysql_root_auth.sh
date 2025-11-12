@@ -17,6 +17,8 @@ GALERA_INSTANCE="{{.galeraInstanceName}}"
 MY_CNF="$HOME/.my.cnf"
 MYSQL_SOCKET=/var/lib/mysql/mysql.sock
 
+CREDENTIALS_CHECK_TIMEOUT=4
+
 # Set up connection parameters based on whether we're connecting remotely or locally
 if [ -n "${MYSQL_REMOTE_HOST}" ]; then
 
@@ -45,22 +47,27 @@ if [ -f "${MY_CNF}" ]; then
             SHOULD_VALIDATE=true
         fi
 
-        if [ "${SHOULD_VALIDATE}" = "true" ] && mysql ${MYSQL_CONN_PARAMS} -uroot -p"${PASSWORD}" -e "SELECT 1;" >/dev/null 2>&1; then
-            # Credentials are still valid, use cached values
+        credentials_check=1
+        if [ "${SHOULD_VALIDATE}" = "true" ]; then
+            timeout ${CREDENTIALS_CHECK_TIMEOUT} mysql ${MYSQL_CONN_PARAMS} -uroot -p"${PASSWORD}" -e "SELECT 1;" >/dev/null 2>&1
+            credentials_check=$?
+        fi
 
-            MYSQL_PWD="${PASSWORD}"
-            DB_ROOT_PASSWORD="${PASSWORD}"
-            export MYSQL_PWD
-            export DB_ROOT_PASSWORD
-            return 0 2>/dev/null || exit 0
+        if [ "${SHOULD_VALIDATE}" = "true" ] && [ $credentials_check -eq 124 ]; then
+            # MySQL validation timed out, assume cache is valid and will be validated on next probe
+            export MYSQL_PWD="${PASSWORD}"
+            export DB_ROOT_PASSWORD="${PASSWORD}"
+            return 0
+        elif [ "${SHOULD_VALIDATE}" = "true" ] && [ $credentials_check -eq 0 ]; then
+            # Credentials are still valid, use cached values
+            export MYSQL_PWD="${PASSWORD}"
+            export DB_ROOT_PASSWORD="${PASSWORD}"
+            return 0
         elif [ "${USE_SOCKET}" = "true" ] && [ ! -S "${MYSQL_SOCKET}" ]; then
             # MySQL not running locally, assume cache is valid and will be validated on next probe
-
-            MYSQL_PWD="${PASSWORD}"
-            DB_ROOT_PASSWORD="${PASSWORD}"
-            export MYSQL_PWD
-            export DB_ROOT_PASSWORD
-            return 0 2>/dev/null || exit 0
+            export MYSQL_PWD="${PASSWORD}"
+            export DB_ROOT_PASSWORD="${PASSWORD}"
+            return 0
         fi
     fi
     # If we get here, credentials are invalid, fall through to refresh
