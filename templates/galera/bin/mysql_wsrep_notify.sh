@@ -1,7 +1,5 @@
 #!/bin/bash
 
-source /var/lib/operator-scripts/mysql_root_auth.sh
-
 # NOTE(dciabrin) we might use downward API to populate those in the future
 PODNAME=$HOSTNAME
 SERVICE=${PODNAME/-galera-[0-9]*/}
@@ -293,6 +291,9 @@ fi
 
 # Contition: ask for a failover. This should be called when mysql is running
 if echo "${STATUS}" | grep -i -q -e 'failover'; then
+    # note: make sure that the root credentials are up to date
+    # before invoking any mysql command
+    source /var/lib/operator-scripts/mysql_root_auth.sh
     mysql_probe_state
     if [ $? != 0 ]; then
         log_error "Could not probe missing mysql information. Aborting"
@@ -312,6 +313,10 @@ if echo "${STATUS}" | grep -i -q -v -e 'synced'; then
 fi
 
 # At this point mysql is started, query missing arguments
+
+# note: make sure that the root credentials are up to date
+# before invoking any mysql command
+source /var/lib/operator-scripts/mysql_root_auth.sh
 mysql_probe_state
 if [ $? != 0 ]; then
     log_error "Could not probe missing mysql information. Aborting"
