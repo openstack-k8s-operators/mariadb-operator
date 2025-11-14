@@ -1,0 +1,22 @@
+---
+apiVersion: mariadb.openstack.org/v1beta1
+kind: MariaDBAccount
+metadata:
+  labels:
+    dbName: openstack
+  name: chainsawdb-some-system-db-account
+status:
+  currentSecret: some-new-system-db-secret
+  conditions:
+  - message: Setup complete
+    reason: Ready
+    status: "True"
+    type: Ready
+  - message: MariaDBAccount creation complete
+    reason: Ready
+    status: "True"
+    type: MariaDBAccountReady
+  - message: MariaDB / Galera server ready
+    reason: Ready
+    status: "True"
+    type: MariaDBServerReady
