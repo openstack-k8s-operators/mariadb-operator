@@ -48,7 +48,18 @@ type MariaDBAccountSpec struct {
 	// Account must use TLS to connect to the database
 	// +kubebuilder:default=false
 	RequireTLS bool `json:"requireTLS"`
+
+	// +kubebuilder:validation:Enum=User;System
+	// +kubebuilder:default=User
+	AccountType AccountType `json:"accountType,omitempty"`
 }
+
+type AccountType string
+
+const (
+	User   AccountType = "User"
+	System AccountType = "System"
+)
 
 // MariaDBAccountStatus defines the observed state of MariaDBAccount
 type MariaDBAccountStatus struct {
@@ -84,4 +95,12 @@ type MariaDBAccountList struct {
 
 func init() {
 	SchemeBuilder.Register(&MariaDBAccount{}, &MariaDBAccountList{})
+}
+
+func (mariadbAccount MariaDBAccount) IsSystemAccount() bool {
+	return mariadbAccount.Spec.AccountType == System
+}
+
+func (mariadbAccount MariaDBAccount) IsUserAccount() bool {
+	return mariadbAccount.Spec.AccountType == "" || mariadbAccount.Spec.AccountType == User
 }
