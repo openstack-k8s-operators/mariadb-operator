@@ -1058,9 +1058,8 @@ func (r *GaleraReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// GetDatabaseObject - returns either a Galera or MariaDB object (and an associated client.Object interface).
+// GetDatabaseObject - returns a Galera object.
 // used by both MariaDBDatabaseReconciler and MariaDBAccountReconciler
-// this will later return only Galera objects, so as a lookup it's part of the galera controller
 func GetDatabaseObject(ctx context.Context, clientObj client.Client, name string, namespace string) (*mariadbv1.Galera, error) {
 	dbGalera := &mariadbv1.Galera{
 		ObjectMeta: metav1.ObjectMeta{

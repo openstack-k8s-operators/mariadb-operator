@@ -30,6 +30,7 @@ import (
 	util "github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	databasev1beta1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	mariadb "github.com/openstack-k8s-operators/mariadb-operator/pkg/mariadb"
+	batchv1 "k8s.io/api/batch/v1"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -113,12 +114,18 @@ func (r *MariaDBAccountReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}()
 
 	// initialize conditions used later as Status=Unknown
-	cl := condition.CreateList(
-		condition.UnknownCondition(condition.ReadyCondition, condition.InitReason, condition.ReadyInitMessage),
-		condition.UnknownCondition(databasev1beta1.MariaDBServerReadyCondition, condition.InitReason, databasev1beta1.MariaDBServerReadyInitMessage),
-		condition.UnknownCondition(databasev1beta1.MariaDBDatabaseReadyCondition, condition.InitReason, databasev1beta1.MariaDBDatabaseReadyInitMessage),
-		condition.UnknownCondition(databasev1beta1.MariaDBAccountReadyCondition, condition.InitReason, databasev1beta1.MariaDBAccountReadyInitMessage),
-	)
+	cl := condition.Conditions{
+		*condition.UnknownCondition(condition.ReadyCondition, condition.InitReason, condition.ReadyInitMessage),
+		*condition.UnknownCondition(databasev1beta1.MariaDBServerReadyCondition, condition.InitReason, databasev1beta1.MariaDBServerReadyInitMessage),
+	}
+	if instance.IsUserAccount() {
+		// user accounts also need the database ready condition
+		// the element is being inserted into the list in a specific location
+		// to preseve expectations of tests suites that are hardcoded to
+		// expect a specific ordering of Conditions in YAML displays
+		cl = append(cl, *condition.UnknownCondition(databasev1beta1.MariaDBDatabaseReadyCondition, condition.InitReason, databasev1beta1.MariaDBDatabaseReadyInitMessage))
+	}
+	cl = append(cl, *condition.UnknownCondition(databasev1beta1.MariaDBAccountReadyCondition, condition.InitReason, databasev1beta1.MariaDBAccountReadyInitMessage))
 	instance.Status.Conditions.Init(&cl)
 
 	if instance.DeletionTimestamp.IsZero() || isNewInstance { //revive:disable:indent-error-flow
@@ -134,11 +141,16 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 	ctx context.Context, log logr.Logger,
 	helper *helper.Helper, instance *databasev1beta1.MariaDBAccount) (result ctrl.Result, _err error) {
 
-	// get a handle to the current, active MariaDBDatabase.
-	// if not ready yet, requeue.
-	mariadbDatabase, result, err := r.getMariaDBDatabaseForCreate(ctx, log, instance)
-	if mariadbDatabase == nil {
-		return result, err
+	var mariadbDatabase *databasev1beta1.MariaDBDatabase
+	var err error
+
+	if instance.IsUserAccount() {
+		// for User account, get a handle to the current, active MariaDBDatabase.
+		// if not ready yet, requeue.
+		mariadbDatabase, result, err = r.getMariaDBDatabaseForCreate(ctx, log, instance)
+		if mariadbDatabase == nil {
+			return result, err
+		}
 	}
 
 	if controllerutil.AddFinalizer(instance, helper.GetFinalizer()) {
@@ -146,11 +158,13 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 		return ctrl.Result{}, nil
 	}
 
-	// MariaDBdatabase exists and we are a create case.  ensure finalizers set up
-	if controllerutil.AddFinalizer(mariadbDatabase, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
-		err = r.Update(ctx, mariadbDatabase)
-		if err != nil {
-			return ctrl.Result{}, err
+	if instance.IsUserAccount() {
+		// MariaDBdatabase exists and we are a create case.  ensure finalizers set up
+		if controllerutil.AddFinalizer(mariadbDatabase, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
+			err = r.Update(ctx, mariadbDatabase)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
 		}
 	}
 
@@ -174,13 +188,25 @@ func (r *MariaDBAccountReconciler) reconcileCreate(
 		return result, err
 	}
 
-	log.Info(fmt.Sprintf("Running account create '%s' MariaDBDatabase '%s'",
-		instance.Name, mariadbDatabase.Spec.Name))
-	jobDef, err := mariadb.CreateDbAccountJob(
-		dbGalera, instance, mariadbDatabase.Spec.Name, dbHostname,
-		dbContainerImage, serviceAccountName, dbGalera.Spec.NodeSelector)
-	if err != nil {
-		return ctrl.Result{}, err
+	var jobDef *batchv1.Job
+
+	if instance.IsUserAccount() {
+		log.Info(fmt.Sprintf("Running account create '%s' MariaDBDatabase '%s'",
+			instance.Name, mariadbDatabase.Spec.Name))
+		jobDef, err = mariadb.CreateDbAccountJob(
+			dbGalera, instance, mariadbDatabase.Spec.Name, dbHostname,
+			dbContainerImage, serviceAccountName, dbGalera.Spec.NodeSelector)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+	} else {
+		log.Info(fmt.Sprintf("Running system account create '%s'", instance.Name))
+		jobDef, err = mariadb.CreateDbAccountJob(
+			dbGalera, instance, "", dbHostname,
+			dbContainerImage, serviceAccountName, dbGalera.Spec.NodeSelector)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	accountCreateHash := instance.Status.Hash[databasev1beta1.AccountCreateHash]
@@ -228,9 +254,14 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 	ctx context.Context, log logr.Logger,
 	helper *helper.Helper, instance *databasev1beta1.MariaDBAccount) (result ctrl.Result, _err error) {
 
-	mariadbDatabase, result, err := r.getMariaDBDatabaseForDelete(ctx, log, helper, instance)
-	if mariadbDatabase == nil {
-		return result, err
+	var mariadbDatabase *databasev1beta1.MariaDBDatabase
+	var err error
+
+	if instance.IsUserAccount() {
+		mariadbDatabase, result, err = r.getMariaDBDatabaseForDelete(ctx, log, helper, instance)
+		if mariadbDatabase == nil {
+			return result, err
+		}
 	}
 
 	// dont do actual DROP USER until finalizers from downstream controllers
@@ -259,10 +290,12 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 		databasev1beta1.MariaDBAccountReadyForDeleteMessage,
 	)
 
-	instance.Status.Conditions.MarkTrue(
-		databasev1beta1.MariaDBDatabaseReadyCondition,
-		databasev1beta1.MariaDBDatabaseReadyMessage,
-	)
+	if instance.IsUserAccount() {
+		instance.Status.Conditions.MarkTrue(
+			databasev1beta1.MariaDBDatabaseReadyCondition,
+			databasev1beta1.MariaDBDatabaseReadyMessage,
+		)
+	}
 
 	// now proceed to do actual work.  acquire the Galera instance
 	// which will lead us to the hostname and container image to target
@@ -278,20 +311,21 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 		// scheme allows multiple MariaDBAccounts to claim the same MariaDBDatabase
 		// as a dependency) and allows a delete of the MariaDBDatabase to proceed
 		// assuming no other finalizers
-		if controllerutil.RemoveFinalizer(mariadbDatabase, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
-			err = r.Update(ctx, mariadbDatabase)
+		if instance.IsUserAccount() {
+			if controllerutil.RemoveFinalizer(mariadbDatabase, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
+				err = r.Update(ctx, mariadbDatabase)
 
-			if err != nil && !k8s_errors.IsNotFound(err) {
-				return ctrl.Result{}, err
+				if err != nil && !k8s_errors.IsNotFound(err) {
+					return ctrl.Result{}, err
+				}
 			}
-
 		}
 
 		// remove finalizer "openstack.org/mariadbaccount" from both the
 		// MariaDBAccount as well as the Secret which is referenced from the
 		// MariaDBAccount, allowing both to be deleted assuming no other
 		// finalizers
-		err = r.removeAccountAndSecretFinalizer(ctx, helper, instance)
+		err := r.removeAccountAndSecretFinalizer(ctx, helper, instance)
 		return ctrl.Result{}, err
 	} else if dbGalera == nil {
 		return result, err
@@ -300,13 +334,24 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 	dbContainerImage := dbGalera.Spec.ContainerImage
 	serviceAccountName := dbGalera.RbacResourceName()
 
-	log.Info(fmt.Sprintf("Running account delete '%s' MariaDBDatabase '%s'", instance.Name, mariadbDatabase.Spec.Name))
+	var jobDef *batchv1.Job
 
-	jobDef, err := mariadb.DeleteDbAccountJob(dbGalera, instance, mariadbDatabase.Spec.Name, dbHostname, dbContainerImage, serviceAccountName, dbGalera.Spec.NodeSelector)
-	if err != nil {
-		return ctrl.Result{}, err
+	if instance.IsUserAccount() {
+
+		log.Info(fmt.Sprintf("Running account delete '%s' MariaDBDatabase '%s'", instance.Name, mariadbDatabase.Spec.Name))
+
+		jobDef, err = mariadb.DeleteDbAccountJob(dbGalera, instance, mariadbDatabase.Spec.Name, dbHostname, dbContainerImage, serviceAccountName, dbGalera.Spec.NodeSelector)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+	} else {
+		log.Info(fmt.Sprintf("Running system account delete '%s'", instance.Name))
+
+		jobDef, err = mariadb.DeleteDbAccountJob(dbGalera, instance, "", dbHostname, dbContainerImage, serviceAccountName, dbGalera.Spec.NodeSelector)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 	}
-
 	accountDeleteHash := instance.Status.Hash[databasev1beta1.AccountDeleteHash]
 	accountDeleteJob := job.NewJob(
 		jobDef,
@@ -335,10 +380,12 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 	// scheme allows multiple MariaDBAccounts to claim the same MariaDBDatabase
 	// as a dependency) and allows a delete of the MariaDBDatabase to proceed
 	// assuming no other finalizers
-	if controllerutil.RemoveFinalizer(mariadbDatabase, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
-		err = r.Update(ctx, mariadbDatabase)
-		if err != nil {
-			return ctrl.Result{}, err
+	if instance.IsUserAccount() {
+		if controllerutil.RemoveFinalizer(mariadbDatabase, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
+			err = r.Update(ctx, mariadbDatabase)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
 		}
 	}
 
@@ -346,7 +393,6 @@ func (r *MariaDBAccountReconciler) reconcileDelete(
 	// both the MariaDBAccount as well as the Secret which is referenced
 	// from the MariaDBAccount, allowing both to be deleted
 	err = r.removeAccountAndSecretFinalizer(ctx, helper, instance)
-
 	return ctrl.Result{}, err
 }
 
@@ -526,9 +572,17 @@ func (r *MariaDBAccountReconciler) getGaleraForCreateOrDelete(
 	helper *helper.Helper, instance *databasev1beta1.MariaDBAccount,
 	mariadbDatabase *databasev1beta1.MariaDBDatabase) (*databasev1beta1.Galera, string, ctrl.Result, error) {
 
-	dbName := mariadbDatabase.Labels["dbName"]
+	var dbGalera *databasev1beta1.Galera
+	var err error
+	var dbName string
 
-	dbGalera, err := GetDatabaseObject(ctx, r.Client, dbName, instance.Namespace)
+	if instance.IsUserAccount() {
+		dbName = mariadbDatabase.Labels["dbName"]
+	} else {
+		// note mariadbDatabase is passed as nil in this case
+		dbName = instance.Labels["dbName"]
+	}
+	dbGalera, err = GetDatabaseObject(ctx, r.Client, dbName, instance.Namespace)
 
 	if err != nil {
 		log.Error(err, "Error retrieving Galera instance")

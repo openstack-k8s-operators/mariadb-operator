@@ -1,0 +1,67 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: create-system-account
+spec:
+  steps:
+  - name: Deploy 1-node cluster
+    description: Deploy a 1-node cluster for tests
+    bindings:
+    - name: replicas
+      value: 1
+    try:
+    - apply:
+        file: ../../common/galera.yaml
+    - assert:
+        file: ../../common/galera-assert.yaml
+
+  - name: create system account without secret
+    description: system account CR has to wait for a secret to create account in the database
+    # we will delete the account manually
+    skipDelete: true
+    try:
+    - apply:
+        file: ../../common/system-account.yaml
+    - assert:
+        file: system-account-missing-secret-assert.yaml
+
+  - name: add secret and finish system account creation
+    description: make sure the system account is created in the database
+    # we will delete the secret manually
+    skipDelete: true
+    try:
+    - apply:
+        file: ../../common/system-account-secret.yaml
+    - assert:
+        file: ../../common/system-account-assert.yaml
+
+  - name: verify system account in database
+    description: check that system account exists in database with correct permissions
+    try:
+    - script:
+        content: |
+          ../../scripts/check_db_account.sh openstack-galera-0 '' systemuser dbsecret1
+        check:
+          ($error): ~
+    - script:
+        content: |
+          oc exec -n ${NAMESPACE} -c galera openstack-galera-0 -- /bin/sh -c 'source /var/lib/operator-scripts/mysql_root_auth.sh; mysql -uroot -p${DB_ROOT_PASSWORD} -e "show grants for \`systemuser\`@\`%\`;"' | grep 'GRANT ALL' | grep -v 'REQUIRE SSL'
+        check:
+          ($error): ~
+
+  - name: drop system account
+    description: delete the MariaDBAccount CR and verify account is removed from database
+    try:
+    - delete:
+        ref:
+          apiVersion: mariadb.openstack.org/v1beta1
+          kind: MariaDBAccount
+          name: chainsawdb-some-system-db-account
+    - script:
+        content: |
+          ../../scripts/check_db_account.sh openstack-galera-0 "" systemuser dbsecret1 --reverse
+        check:
+          ($error): ~
+    finally:
+    - delete:
+        file: ../../common/system-account-secret.yaml

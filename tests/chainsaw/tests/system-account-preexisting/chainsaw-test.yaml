@@ -1,0 +1,63 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: system-account-preexisting
+spec:
+  steps:
+  - name: Deploy 1-node cluster
+    description: Deploy a 1-node cluster for tests
+    bindings:
+    - name: replicas
+      value: 1
+    try:
+    - apply:
+        file: ../../common/galera.yaml
+    - assert:
+        file: ../../common/galera-assert.yaml
+
+  - name: create user manually with old password
+    description: manually create the systemuser account with a different password than the MariaDBAccount will use
+    try:
+    - script:
+        content: |
+          oc exec -n ${NAMESPACE} -c galera openstack-galera-0 -- /bin/sh -c 'source /var/lib/operator-scripts/mysql_root_auth.sh; mysql -uroot -p${DB_ROOT_PASSWORD} -e "GRANT ALL PRIVILEGES ON *.* TO \`systemuser\`@\`localhost\` IDENTIFIED BY \"oldpassword123\"; GRANT ALL PRIVILEGES ON *.* TO \`systemuser\`@\`%\` IDENTIFIED BY \"oldpassword123\";"'
+        check:
+          ($error): ~
+
+  - name: verify old password works
+    description: verify that the manually created account works with the old password
+    try:
+    - script:
+        content: |
+          ../../scripts/check_db_account.sh openstack-galera-0 '' systemuser oldpassword123
+        check:
+          ($error): ~
+
+  - name: apply secret with new password
+    description: apply the secret with the new password that will be used by MariaDBAccount
+    try:
+    - apply:
+        file: ../../common/system-account-secret.yaml
+
+  - name: apply MariaDBAccount
+    description: apply the MariaDBAccount CR to update the existing account password
+    try:
+    - apply:
+        file: ../../common/system-account.yaml
+    - assert:
+        file: ../../common/system-account-assert.yaml
+
+  - name: verify new password works and old password fails
+    description: verify that the account password was updated to the new password from the secret
+    try:
+    - script:
+        content: |
+          ../../scripts/check_db_account.sh openstack-galera-0 '' systemuser dbsecret1
+        check:
+          ($error): ~
+    - script:
+        content: |
+          # verify old password no longer works
+          ! oc exec -n ${NAMESPACE} -c galera openstack-galera-0 -- /bin/sh -c "mysql -usystemuser -poldpassword123 -Nse 'select 1'"
+        check:
+          ($error): ~
