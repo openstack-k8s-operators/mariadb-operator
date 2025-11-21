@@ -11,7 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-type accountCreateOrDeleteOptions struct {
+type accountCRUDOptions struct {
 	UserName              string
 	DatabaseName          string
 	DatabaseHostname      string
@@ -19,8 +19,8 @@ type accountCreateOrDeleteOptions struct {
 	RequireTLS            string
 }
 
-// CreateDbAccountJob creates a Kubernetes job for creating a MariaDB database account
-func CreateDbAccountJob(galera *mariadbv1.Galera, account *mariadbv1.MariaDBAccount, databaseName string, databaseHostName string, containerImage string, serviceAccountName string, nodeSelector *map[string]string) (*batchv1.Job, error) {
+// CreateOrUpdateDbAccountJob creates or updates a Kubernetes job for creating a MariaDB database account
+func CreateOrUpdateDbAccountJob(galera *mariadbv1.Galera, account *mariadbv1.MariaDBAccount, databaseName string, databaseHostName string, containerImage string, serviceAccountName string, nodeSelector *map[string]string) (*batchv1.Job, error) {
 	var tlsStatement string
 	if account.Spec.RequireTLS {
 		tlsStatement = " REQUIRE SSL"
@@ -28,7 +28,7 @@ func CreateDbAccountJob(galera *mariadbv1.Galera, account *mariadbv1.MariaDBAcco
 		tlsStatement = ""
 	}
 
-	opts := accountCreateOrDeleteOptions{
+	opts := accountCRUDOptions{
 		account.Spec.UserName,
 		databaseName,
 		databaseHostName,
@@ -47,7 +47,7 @@ func CreateDbAccountJob(galera *mariadbv1.Galera, account *mariadbv1.MariaDBAcco
 			// provided db name is used as metadata name where underscore is a not allowed
 			// character. Lets replace all underscores with hypen. Underscores in the db name are
 			// possible.
-			Name:      strings.ReplaceAll(account.Spec.UserName, "_", "-") + "-account-create",
+			Name:      strings.ReplaceAll(account.Spec.UserName, "_", "-") + "-account-create-update",
 			Namespace: account.Namespace,
 			Labels:    labels,
 		},
@@ -58,7 +58,7 @@ func CreateDbAccountJob(galera *mariadbv1.Galera, account *mariadbv1.MariaDBAcco
 					ServiceAccountName: serviceAccountName,
 					Containers: []corev1.Container{
 						{
-							Name:    "mariadb-account-create",
+							Name:    "mariadb-account-create-update",
 							Image:   containerImage,
 							Command: []string{"/bin/sh", "-c", dbCmd},
 							Env: []corev1.EnvVar{
@@ -93,7 +93,7 @@ func CreateDbAccountJob(galera *mariadbv1.Galera, account *mariadbv1.MariaDBAcco
 // DeleteDbAccountJob creates a Kubernetes job for deleting a MariaDB database account
 func DeleteDbAccountJob(galera *mariadbv1.Galera, account *mariadbv1.MariaDBAccount, databaseName string, databaseHostName string, containerImage string, serviceAccountName string, nodeSelector *map[string]string) (*batchv1.Job, error) {
 
-	opts := accountCreateOrDeleteOptions{account.Spec.UserName, databaseName, databaseHostName, "root", ""}
+	opts := accountCRUDOptions{account.Spec.UserName, databaseName, databaseHostName, "root", ""}
 
 	delCmd, err := util.ExecuteTemplateFile("delete_account.sh", &opts)
 	if err != nil {

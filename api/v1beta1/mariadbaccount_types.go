@@ -22,8 +22,8 @@ import (
 )
 
 const (
-	// AccountCreateHash hash
-	AccountCreateHash = "accountcreate"
+	// AccountCreateOrUpdateHash hash
+	AccountCreateOrUpdateHash = "accountcreateorupdate"
 
 	// AccountDeleteHash hash
 	AccountDeleteHash = "accountdelete"
@@ -63,6 +63,13 @@ const (
 
 // MariaDBAccountStatus defines the observed state of MariaDBAccount
 type MariaDBAccountStatus struct {
+	// the Secret that's currently in use for the account.
+	// keeping a handle to this secret allows us to remove its finalizer
+	// when it's replaced with a new one. It also is useful for storing
+	// the current "root" secret separate from a newly proposed one which is
+	// needed when changing the database root password.
+	CurrentSecret string `json:"currentSecret,omitempty"`
+
 	// Deployment Conditions
 	Conditions condition.Conditions `json:"conditions,omitempty" optional:"true"`
 

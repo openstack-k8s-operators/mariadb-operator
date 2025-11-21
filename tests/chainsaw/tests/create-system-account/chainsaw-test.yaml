@@ -49,6 +49,20 @@ spec:
         check:
           ($error): ~
 
+  - name: update secret in place
+    description: change the secret to a new one and verify password is updated in database
+    skipDelete: true
+    try:
+    - apply:
+        file: system-account-update-secret.yaml
+    - assert:
+        file: system-account-update-assert.yaml
+    - script:
+        content: |
+          ../../scripts/check_db_account.sh openstack-galera-0 '' systemuser dbsecret2
+        check:
+          ($error): ~
+
   - name: drop system account
     description: delete the MariaDBAccount CR and verify account is removed from database
     try:
@@ -59,9 +73,11 @@ spec:
           name: chainsawdb-some-system-db-account
     - script:
         content: |
-          ../../scripts/check_db_account.sh openstack-galera-0 "" systemuser dbsecret1 --reverse
+          ../../scripts/check_db_account.sh openstack-galera-0 "" systemuser dbsecret2 --reverse
         check:
           ($error): ~
     finally:
     - delete:
         file: ../../common/system-account-secret.yaml
+    - delete:
+        file: system-account-update-secret.yaml
