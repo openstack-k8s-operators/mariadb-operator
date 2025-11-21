@@ -18,6 +18,11 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
+    - description: GaleraBackup is the Schema for the galerabackups API
+      displayName: Galera Backup
+      kind: GaleraBackup
+      name: galerabackups.mariadb.openstack.org
+      version: v1beta1
     - description: Galera is the Schema for the galeras API
       displayName: Galera
       kind: Galera
@@ -60,6 +65,7 @@ spec:
   - name: MariaDB Operator
     url: https://github.com/openstack-k8s-operators/mariadb-operator
   maturity: beta
+  minKubeVersion: 0.0.0
   provider:
     name: Red Hat Inc.
     url: https://redhat.com/

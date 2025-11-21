@@ -19,11 +19,10 @@ package v1beta1
 import (
 	"fmt"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
-	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -40,15 +39,6 @@ type GaleraDefaults struct {
 }
 
 var galeraDefaults GaleraDefaults
-
-// SetupWebhookWithManager sets up the webhook with the Manager
-func (r *Galera) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(r).
-		Complete()
-}
-
-//+kubebuilder:webhook:path=/mutate-mariadb-openstack-org-v1beta1-galera,mutating=true,failurePolicy=fail,sideEffects=None,groups=mariadb.openstack.org,resources=galeras,verbs=create;update,versions=v1beta1,name=mgalera.kb.io,admissionReviewVersions=v1
 
 var _ webhook.Defaulter = &Galera{}
 
@@ -72,9 +62,6 @@ func (spec *GaleraSpec) Default() {
 func (spec *GaleraSpecCore) Default() {
 	// nothing here yet
 }
-
-// TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
-//+kubebuilder:webhook:path=/validate-mariadb-openstack-org-v1beta1-galera,mutating=false,failurePolicy=fail,sideEffects=None,groups=mariadb.openstack.org,resources=galeras,verbs=create;update,versions=v1beta1,name=vgalera.kb.io,admissionReviewVersions=v1
 
 var _ webhook.Validator = &Galera{}
 
