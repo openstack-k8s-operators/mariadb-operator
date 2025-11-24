@@ -12,7 +12,7 @@ webhooks:
       namespace: system
       path: /mutate-mariadb-openstack-org-v1beta1-galera
   failurePolicy: Fail
-  name: mgalera.kb.io
+  name: mgalera-v1beta1.kb.io
   rules:
   - apiGroups:
     - mariadb.openstack.org
@@ -38,7 +38,7 @@ webhooks:
       namespace: system
       path: /validate-mariadb-openstack-org-v1beta1-galera
   failurePolicy: Fail
-  name: vgalera.kb.io
+  name: vgalera-v1beta1.kb.io
   rules:
   - apiGroups:
     - mariadb.openstack.org
