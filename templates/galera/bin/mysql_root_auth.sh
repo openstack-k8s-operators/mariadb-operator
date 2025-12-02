@@ -91,7 +91,7 @@ PASSWORD=$(curl -s \
     --header "Content-Type:application/json" \
     --header "Authorization: Bearer ${TOKEN}" \
     "${APISERVER}/${K8S_API}/namespaces/${NAMESPACE}/secrets/${SECRET_NAME}" \
-    | python3 -c "import json, sys; print(json.load(sys.stdin)['data']['DatabasePassword'])" \
+    | python3 -c "import json, sys; print(json.load(sys.stdin)['data']['DbRootPassword'])" \
     | base64 -d)
 
 
