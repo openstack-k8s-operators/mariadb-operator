@@ -100,7 +100,7 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/apiextensions-apiserver v0.33.2 // indirect
-	k8s.io/apiserver v0.31.13 // indirect
+	k8s.io/apiserver v0.31.14 // indirect
 	k8s.io/component-base v0.31.14 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250902184714-7fc278399c7f // indirect
