@@ -1,0 +1,16 @@
+apiVersion: mariadb.openstack.org/v1beta1
+kind: MariaDBAccount
+metadata:
+  name: openstack-mariadb-root
+spec:
+  userName: root
+  secret: openstack-mariadb-root-db-secret
+  accountType: System
+status:
+  currentSecret: openstack-mariadb-root-db-secret
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: openstack-mariadb-root-db-secret
+type: Opaque
