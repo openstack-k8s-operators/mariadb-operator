@@ -15,39 +15,39 @@ spec:
     - assert:
         file: ../../common/galera-assert.yaml
 
-  - name: verify .my.cnf created
-    description: Verify that .my.cnf is created after first mysql_root_auth.sh invocation
+  - name: verify mysql_pw_cache.cnf created
+    description: Verify that mysql_pw_cache.cnf is created after first mysql_root_auth.sh invocation
     try:
     - script:
         content: |
           oc exec -n ${NAMESPACE} -c galera openstack-galera-0 -- /bin/sh -c '
             source /var/lib/operator-scripts/mysql_root_auth.sh
-            test -f $HOME/.my.cnf
+            test -f /var/local/my.cnf/mysql_pw_cache.cnf
           '
 
-  - name: verify .my.cnf format
-    description: Verify .my.cnf has proper MySQL client format
+  - name: verify mysql_pw_cache.cnf format
+    description: Verify mysql_pw_cache.cnf has proper MySQL client format
     try:
     - script:
         content: |
           oc exec -n ${NAMESPACE} -c galera openstack-galera-0 -- /bin/sh -c '
-            grep -q "^\[client\]" $HOME/.my.cnf &&
-            grep -q "^user=root" $HOME/.my.cnf &&
-            grep -q "^password=" $HOME/.my.cnf
+            grep -q "^\[client\]" /var/local/my.cnf/mysql_pw_cache.cnf &&
+            grep -q "^user=root" /var/local/my.cnf/mysql_pw_cache.cnf &&
+            grep -q "^password=" /var/local/my.cnf/mysql_pw_cache.cnf
           '
 
-  - name: verify .my.cnf permissions
-    description: Verify .my.cnf has secure permissions (600)
+  - name: verify mysql_pw_cache.cnf permissions
+    description: Verify mysql_pw_cache.cnf has secure permissions (600)
     try:
     - script:
         content: |
           oc exec -n ${NAMESPACE} -c galera openstack-galera-0 -- /bin/sh -c '
-            perms=$(stat -c "%a" $HOME/.my.cnf)
+            perms=$(stat -c "%a" /var/local/my.cnf/mysql_pw_cache.cnf)
             test "$perms" = "600"
           '
 
-  - name: verify mysql works without explicit credentials
-    description: Verify MySQL commands work using .my.cnf without MYSQL_PWD env var
+  - name: verify we can in theory use the file like a my.cnf file
+    description: Verify MySQL commands work using mysql_pw_cache.cnf without MYSQL_PWD env var
     try:
     - script:
         content: |
@@ -56,8 +56,8 @@ spec:
             mysql -e "SELECT 1" > /dev/null
           '
 
-  - name: verify mysqladmin works without explicit credentials
-    description: Verify mysqladmin ping works using .my.cnf
+  - name: verify we can in theory use the file like a my.cnf file with mysqladmin
+    description: Verify mysqladmin ping works using mysql_pw_cache.cnf
     try:
     - script:
         content: |
@@ -90,13 +90,13 @@ spec:
           '
 
   - name: verify cache refresh on invalid credentials
-    description: Verify that invalid credentials in .my.cnf trigger a refresh
+    description: Verify that invalid credentials in mysql_pw_cache.cnf trigger a refresh
     try:
     - script:
         content: |
           oc exec -n ${NAMESPACE} -c galera openstack-galera-0 -- /bin/sh -c '
-            # Write invalid credentials to .my.cnf
-            echo -e "[client]\nuser=root\npassword=wrongpassword" > $HOME/.my.cnf
+            # Write invalid credentials to mysql_pw_cache.cnf
+            echo -e "[client]\nuser=root\npassword=wrongpassword" > /var/local/my.cnf/mysql_pw_cache.cnf
             # Source mysql_root_auth.sh - should detect invalid creds and refresh
             source /var/lib/operator-scripts/mysql_root_auth.sh
             # Verify MySQL works now (credentials were refreshed)

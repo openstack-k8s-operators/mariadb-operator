@@ -1,9 +1,15 @@
 #!/bin/bash
 set +eux
 
+
+# prepare space for mysql_root_auth.sh to place pw cache file
+sudo mkdir -p /var/local/my.cnf
+sudo chown mysql:mysql /var/local/my.cnf
+
 # set up $DB_ROOT_PASSWORD.
 # disable my.cnf caching in mysql_root_auth.sh, so that we definitely
-# use the root password defined in the cluster
+# use the root password defined in the cluster.   this should create
+# a new file in /var/local/my.cnf/
 MYSQL_ROOT_AUTH_BYPASS_CHECKS=true source /var/lib/operator-scripts/mysql_root_auth.sh
 
 
@@ -110,6 +116,9 @@ else
     # we need the right perm on the persistent directory,
     # so use Kolla to set it up before bootstrapping the DB
     cat <<EOF >/var/lib/config-data/generated/galera.cnf
+[client]
+!includedir /var/local/my.cnf/
+
 [mysqld]
 bind_address=localhost
 wsrep_provider=none

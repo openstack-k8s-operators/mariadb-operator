@@ -68,7 +68,7 @@ spec:
             echo "Testing login on $pod..."
             oc exec -n ${NAMESPACE} -c galera $pod -- /bin/sh -c '
               # Clear the cached credentials to force using new password
-              rm -f $HOME/.my.cnf
+              rm -f /var/local/mysql_pw_cache.cnf
               source /var/lib/operator-scripts/mysql_root_auth.sh
               if [ "$MYSQL_PWD" != "newrootpassword123" ]; then
                 echo "ERROR: password != 'newrootpassword123' (actual: $MYSQL_PWD)"
