@@ -14,7 +14,7 @@ MARIADB_API="apis/mariadb.openstack.org/v1beta1"
 
 GALERA_INSTANCE="{{.galeraInstanceName}}"
 
-MY_CNF="$HOME/.my.cnf"
+PW_CACHE_FILE="/var/local/mysql_pw_cache.cnf"
 MYSQL_SOCKET=/var/lib/mysql/mysql.sock
 
 CREDENTIALS_CHECK_TIMEOUT=4
@@ -30,9 +30,9 @@ else
 fi
 
 # Check if we have cached credentials
-if [ "${MYSQL_ROOT_AUTH_BYPASS_CHECKS}" != "true" ] && [ -f "${MY_CNF}" ]; then
+if [ "${MYSQL_ROOT_AUTH_BYPASS_CHECKS}" != "true" ] && [ -f "${PW_CACHE_FILE}" ]; then
     # Read the password from .my.cnf
-    PASSWORD=$(grep '^password=' "${MY_CNF}" | cut -d= -f2-)
+    PASSWORD=$(grep '^password=' "${PW_CACHE_FILE}" | cut -d= -f2-)
 
     # Validate credentials if MySQL is accessible
     if [ -n "${PASSWORD}" ]; then
@@ -153,15 +153,43 @@ fi
 MYSQL_PWD="${PASSWORD}"
 DB_ROOT_PASSWORD="${PASSWORD}"
 
-# Cache credentials to /root/.my.cnf in MySQL client format
-cat > "${MY_CNF}" <<EOF
+# Cache credentials to $PW_CACHE_FILE.
+# we use .my.cnf format, however as this file is not in an official my.cnf
+# location or filename, it's not actually consumed directly by mysql client
+# tools.
+#
+# rationale:
+#
+#   1. all the client tools are called with -uroot -p${PASSWORD}, so we don't
+#      actually need this file to be consumed by mariadb client applications
+#   2. we don't want a mysql-owned/writable server configuration file in
+#      /etc/my.cnf.d, all other files in /etc/my.cnf.d/ are root owned /
+#      read-only
+#   3. we don't want to be overwriting such a file either (in case it had
+#      other actual server conf in it)
+#   4. we dont want the root password in a long-lived, volume-mounted file like
+#      /var/lib/mysql/.my.cnf
+#   5. we don't want to mess around with $MARIADB_HOME, $MYSQL_HOME, as
+#      this is unnecessary due to item 1 above
+#
+if ! cat > "${PW_CACHE_FILE}" <<EOF 2>/dev/null
 [client]
 user=root
 password=${PASSWORD}
 EOF
+then
+    # we are called for the first time from detect_gcomm_and_start.sh which is
+    # called **before** kolla can set directory permissions; so when writing
+    # the file, proceed even if we can't write the file yet
+    echo "WARNING: Failed to write to ${PW_CACHE_FILE} due to permissions; will try again later" >&2
+fi
 
-# Set restrictive permissions on .my.cnf
-chmod 600 "${MY_CNF}"
+# Set restrictive permissions on .my.cnf (only if file was successfully written)
+if [ -f "${PW_CACHE_FILE}" ]; then
+    if ! chmod 600 "${PW_CACHE_FILE}" 2>/dev/null; then
+        echo "WARNING: Failed to set permissions on ${PW_CACHE_FILE}; will try again later" >&2
+    fi
+fi
 
 export MYSQL_PWD
 export DB_ROOT_PASSWORD
