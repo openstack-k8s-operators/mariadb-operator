@@ -1,36 +1,87 @@
 #!/bin/bash
 set +eux
 
+# set up $DB_ROOT_PASSWORD.
 # disable my.cnf caching in mysql_root_auth.sh, so that we definitely
 # use the root password defined in the cluster
 MYSQL_ROOT_AUTH_BYPASS_CHECKS=true source /var/lib/operator-scripts/mysql_root_auth.sh
 
-MARIADB_PIDFILE=/var/lib/mysql/mariadb.pid
+
 function kolla_update_db_root_pw {
     # update the root password given a set of mariadb datafiles
+    # ported from kolla_extend_start with major changes
 
     # because galera controller generates a new root password if one was
     # not sent via pre-existing secret, the root pw has to be updated if
     # existing datafiles are present, as they will still store the previous
     # root pw which we by definition don't know what it is
 
-    # ported from kolla_extend_start
+    # to achieve this, we have to run our own mysqld.
+
+    # before we do any of that, check if the socket file exists and we can log
+    # in with the current password. this happens if we are running in a debug
+    # container for example; sock file is there, works, lets us log in to
+    # the mysqld running on the primary container.  do nothing in that case
+    #
+    # TOPIC: Why does /var/lib/mysql/mysql.sock allow the debug container to
+    # communicate with the primary container?
+    # Having two containers communicate over a sockfile only works when both
+    # containers are on the same host.  "oc debug" will run from the same
+    # host because:
+    #
+    # 1. https://bugzilla.redhat.com/show_bug.cgi?id=1806662 - "oc debug of pod
+    #    with host mounts should target the same node"
+    # 2. ReadWriteOnce volumes enforce single-node mounting, and we mount with
+    #    RWO
+    #    (https://cookbook.openshift.org/storing-data-in-persistent-volumes/how-can-i-scale-applications-using-rwo-persistent-volumes.html)
+    #
+    # So it is functionally impossible for a container from another host to
+    # mount this volume at the same time, we can be assured we're on the same
+    # host in oc debug if we see these files.
+    #
+    if [[ -S /var/lib/mysql/mysql.sock ]]; then
+        echo -e "Socket file /var/lib/mysql/mysql.sock exists, testing current root password"
+        if timeout 5 mysql -u root -p"${DB_ROOT_PASSWORD}" -e "SELECT 1;" &>/dev/null; then
+            echo -e "Successfully logged in via existing /var/lib/mysql/mysql.sock file with current root password, not attempting to change password"
+
+            # hilarity avoided.   trying to run another mysqld when another container
+            # is running one against the same /var/lib/mysql fails to start, claiming
+            # exclusive lock issues.  these exclusive lock issues can only be
+            # detected by reading the logfile of the failed mysqld process
+            # (flock, fcntl, etc. cannot detect it).  this is a slow process
+            # that's best avoided if not needed anyway.
+            return
+        else
+            echo -e "Could not log in with current password, proceeding with password reset"
+        fi
+    fi
+
+    # OK there's no sockfile or we couldn't log in.  let's do this
+
+    # first, use log/pidfile on a non-mounted volume, so that we can see what
+    # happens local to this container (which might be a debug container)
+    # without leaking details from other processes that may share /var/lib/mysql
+    CHANGE_PW_PIDFILE=/var/tmp/updatepw.pid
+    CHANGE_PW_LOGFILE=/var/tmp/updatepw.log
+
     echo -e "Running with --skip-grant-tables to reset root password"
-    rm -fv ${MARIADB_PIDFILE}
-    mysqld_safe --skip-grant-tables --wsrep-on=OFF --pid-file=${MARIADB_PIDFILE} &
+    rm -fv ${CHANGE_PW_PIDFILE}  ${CHANGE_PW_LOGFILE}
+    mysqld_safe --skip-grant-tables --wsrep-on=OFF --log-error=${CHANGE_PW_LOGFILE} --pid-file=${CHANGE_PW_PIDFILE} &
 
     # Wait for the mariadb server to be "Ready" before running root update commands
-    # NOTE(huikang): the location of mysql's socket file varies depending on the OS distributions.
     # Querying the cluster status has to be executed after the existence of mysql.sock and mariadb.pid.
-    TIMEOUT=${DB_MAX_TIMEOUT:-60}
-    while [[ ! -S /var/lib/mysql/mysql.sock ]] && \
-          [[ ! -S /var/run/mysqld/mysqld.sock ]] || \
-          [[ ! -f "${MARIADB_PIDFILE}" ]]; do
+    ORIG_TIMEOUT=${DB_MAX_TIMEOUT:-60}
+    TIMEOUT=${ORIG_TIMEOUT}
+    while [[ ! -S /var/lib/mysql/mysql.sock ]] || \
+            [[ ! -f "${CHANGE_PW_PIDFILE}" ]]; do
+
         if [[ ${TIMEOUT} -gt 0 ]]; then
             let TIMEOUT-=1
             sleep 1
         else
-            echo -e "Surpassed timeout of ${TIMEOUT} without seeing a pidfile"
+            echo -e "Surpassed timeout of ${ORIG_TIMEOUT} without seeing a pidfile"
+            echo -e "Dump of ${CHANGE_PW_LOGFILE}"
+            cat ${CHANGE_PW_LOGFILE}
             exit 1
         fi
     done
@@ -42,7 +93,8 @@ ALTER USER 'root'@'localhost' IDENTIFIED BY '$DB_ROOT_PASSWORD';
 ALTER USER 'root'@'%'  IDENTIFIED BY '$DB_ROOT_PASSWORD';
 FLUSH PRIVILEGES;
 EOF
-    echo -e "shutting down skip-grant mysql instance"
+
+    # we definitely started this mysqld so we definitely stop it
     mysqladmin -uroot -p"${DB_ROOT_PASSWORD}" shutdown
 }
 
