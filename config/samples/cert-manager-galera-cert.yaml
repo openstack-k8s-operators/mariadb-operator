@@ -16,6 +16,7 @@ spec:
   isCA: true
   commonName: my-selfsigned-ca
   secretName: root-secret
+  duration: 32088h
   privateKey:
     algorithm: ECDSA
     size: 256
@@ -47,7 +48,7 @@ spec:
   secretTemplate:
     labels:
        mariadb-ref: openstack
-  duration: 6h
+  duration: 32088h
   renewBefore: 1h
   subject:
     organizations:
