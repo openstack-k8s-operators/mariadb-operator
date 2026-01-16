@@ -29,5 +29,12 @@
             "perm": "0755",
             "optional": true
         }
+    ],
+    "permissions": [
+        {
+            "path": "/var/local",
+            "owner": "mysql:mysql",
+            "recurse": "true"
+        }
     ]
 }

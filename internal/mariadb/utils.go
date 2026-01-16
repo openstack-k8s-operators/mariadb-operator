@@ -48,3 +48,8 @@ func StatefulSetName(name string) string {
 func ResourceName(name string) string {
 	return name + "-galera"
 }
+
+// ScriptConfigMapName - nam of script configmap tied to a galera CR
+func ScriptConfigMapName(name string) string {
+	return name + "-scripts"
+}

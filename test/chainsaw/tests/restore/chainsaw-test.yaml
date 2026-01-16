@@ -1,0 +1,112 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: restore
+spec:
+  steps:
+  - name: setup two different 1-node Galera clusters (TLS and non-TLS)
+    bindings:
+    - name: replicas
+      value: 1
+    try:
+    - apply:
+        file: ../../common/tls-certificate.yaml
+    - apply:
+        file: ../../common/galera-tls.yaml
+    - apply:
+        file: cluster2-1node.yaml
+    - assert:
+        file: ../../common/galera-assert.yaml
+    - assert:
+        file: cluster2-1node-assert.yaml
+
+  - name: add test data into the Galera clusters
+    try:
+    - script:
+        content: |
+          oc -n $NAMESPACE exec -c galera openstack-galera-0 -- mysql -nN -e 'create database if not exists restore_test1; create table if not exists restore_test1.tabletest (i int);' &&
+          oc -n $NAMESPACE exec -c galera cluster2-galera-0  -- mysql -nN -e 'create database if not exists restore_test2; create table if not exists restore_test2.tabletest (i int);'
+
+  - name: create a backup CRs for the two Galera clusters
+    try:
+    - apply:
+        file: openstackbackup.yaml
+    - apply:
+        file: cluster2backup.yaml
+    - assert:
+        file: openstackbackup-assert.yaml
+    - assert:
+        file: cluster2backup-assert.yaml
+    # backup PVCs are not delete automatically, so do it at the end of the test
+    cleanup:
+    - script:
+        content: |
+          oc -n $NAMESPACE delete pvc mysql-backup-cluster2-backup-cluster2backup mysql-backup-openstack-backup-openstackbackup || true
+
+  - name: trigger a backup of Galera cluster
+    description: checks that the cluster is correctly backed up
+    try:
+    - script:
+        content: |
+          oc -n $NAMESPACE create job --from=cronjob/openstack-backup-openstackbackup backupjob1
+          oc -n $NAMESPACE create job --from=cronjob/cluster2-backup-cluster2backup backupjob2
+          oc -n $NAMESPACE wait --for=condition=complete job/backupjob1
+          oc -n $NAMESPACE wait --for=condition=complete job/backupjob2
+
+  - name: remove data in the running Galera clusters
+    try:
+    - script:
+        content: |
+          oc -n $NAMESPACE exec -c galera openstack-galera-0 -- mysql -nN -e 'drop database restore_test1;' &&
+          oc -n $NAMESPACE exec -c galera cluster2-galera-0  -- mysql -nN -e 'drop database restore_test2;'
+
+  - name: instantiate the restore CRs to prepare for restores
+    try:
+    - apply:
+        file: openstackrestore.yaml
+    - apply:
+        file: cluster2restore.yaml
+    - assert:
+        file: openstackrestore-assert.yaml
+    - assert:
+        file: cluster2restore-assert.yaml
+
+  - name: clean up previous files on the PV hosting backups
+    try:
+    - script:
+        content: |
+          oc -n $NAMESPACE get -o json job backupjob1 | jq -r ".status.startTime | fromdate | tostring"
+        outputs:
+        - name: BACKUPTIME1
+          value: ($stdout)
+    - script:
+        content: |
+          oc -n $NAMESPACE get -o json job backupjob2 | jq -r ".status.startTime | fromdate | tostring"
+        outputs:
+        - name: BACKUPTIME2
+          value: ($stdout)
+    - script:
+        env:
+        - name: BACKUPTIME1
+          value: ($BACKUPTIME1)
+        - name: BACKUPTIME2
+          value: ($BACKUPTIME2)
+        content: |
+          oc -n $NAMESPACE exec openstack-restore-openstackrestore -- find /backup/data -type f -not -newermt "@${BACKUPTIME1}" -delete -print
+          oc -n $NAMESPACE exec cluster2-restore-cluster2restore   -- find /backup/data -type f -not -newermt "@${BACKUPTIME2}" -delete -print
+
+  - name: trigger restores to the Galera clusters
+    description: checks that the cluster is correctly backed up
+    try:
+    - script:
+        content: |
+          oc -n $NAMESPACE exec openstack-restore-openstackrestore -- /var/lib/backup-scripts/restore_galera --yes /backup/data/*.gz
+          oc -n $NAMESPACE exec -c galera openstack-galera-0 -- mysql -nN -e 'show databases;'
+        check:
+          (contains($stdout, 'restore_test1')): true
+    - script:
+        content: |
+          oc -n $NAMESPACE exec cluster2-restore-cluster2restore -- /var/lib/backup-scripts/restore_galera --yes /backup/data/*.gz
+          oc -n $NAMESPACE exec -c galera cluster2-galera-0 -- mysql -nN -e 'show databases;'
+        check:
+          (contains($stdout, 'restore_test2')): true

@@ -16,3 +16,8 @@ func BackupPVCName(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera) string {
 func BackupTransferPVCName(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera) string {
 	return "mysql-transfer-" + g.Name + "-backup-" + b.Name
 }
+
+// RestorePodName - name of the pod resource created by a GaleraRestore CR
+func RestorePodName(r *mariadbv1.GaleraRestore, g *mariadbv1.Galera) string {
+	return g.Name + "-restore-" + r.Name
+}

@@ -1,0 +1,23 @@
+apiVersion: mariadb.openstack.org/v1beta1
+kind: GaleraBackup
+metadata:
+  name: openstackbackup
+spec:
+  databaseInstance: openstack
+status:
+  (conditions[0:1]):
+    - type: Ready
+      status: "True"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  labels:
+    galera/name: openstack
+    owner: mariadb-operator
+  name: openstack-backup-openstackbackup
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-backup-openstack-backup-openstackbackup

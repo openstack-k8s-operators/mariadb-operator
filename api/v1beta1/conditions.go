@@ -123,6 +123,35 @@ const (
 	CronjobReadyCondition condition.Type = "CronjobReady"
 )
 
+// GaleraRestore Condition Types used by API objects.
+const (
+	// GaleraBackupReadyCondition Status=True condition which indicates if the GaleraBackup init has completed
+	GaleraBackupReadyCondition condition.Type = "GaleraBackupReady"
+)
+
+// GaleraRestore Reasons used by API objects.
+const (
+	MariaDBServiceConfigNotFound condition.Reason = "MariaDB Service Config not found"
+)
+
+// GaleraRestore Reasons used by API objects.
+const (
+	GaleraBackupNotFound condition.Reason = "GaleraBackup CR not found"
+
+	GaleraBackupNotReady condition.Reason = "GaleraBackup CR not yet ready"
+)
+
+// GaleraRestore Messages used by API objects.
+const (
+	GaleraBackupNotFoundMessage = "GaleraBackup CR not found: %s"
+
+	GaleraBackupInitMessage = "GaleraBackup CR not ready yet: %s"
+
+	GaleraBackupReadyMessage = "GaleraBackup CR ready"
+
+	GaleraBackupErrorMessage = "GaleraBackup error occurred: %s"
+)
+
 const (
 	// PersistentVolumeClaimReadyErrorMessage
 	PersistentVolumeClaimReadyErrorMessage = "PersistentVolumeClaim error occurred %s"
