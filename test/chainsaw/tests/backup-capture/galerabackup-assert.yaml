@@ -42,7 +42,7 @@ metadata:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: mysql-db-openstack-backup-openstack
+  name: mysql-backup-openstack-backup-openstack
 spec:
   resources:
     requests:

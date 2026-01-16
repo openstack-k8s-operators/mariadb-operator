@@ -58,9 +58,6 @@ func getBackupPodTemplate(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera, config
 		Name:  "KOLLA_CONFIG_STRATEGY",
 		Value: "COPY_ALWAYS",
 	}, {
-		Name:  "SECRET",
-		Value: g.Spec.Secret,
-	}, {
 		Name:  "RETENTION",
 		Value: retentionTime,
 	}}

@@ -1,5 +1,5 @@
 {
-    "command": "/usr/bin/bash /var/lib/backup-scripts/backup_galera.sh",
+    "command": "/var/lib/backup-scripts/backup_galera",
     "config_files": [
         {
             "source": "/var/lib/config-data/default/mysql_backup_tls.cnf",

@@ -4,7 +4,7 @@ metadata:
   name: backup-configs
 spec:
   steps:
-  - name: setup a 1-node cluster and a backup CR with dedicated logical PVC
+  - name: setup a 1-node cluster and a backup CR with dedicated transfer PVC
     description: prechecks that backup CR is correctly set up
     bindings:
     - name: replicas
@@ -26,6 +26,11 @@ spec:
           value: (json_parse($stdout))
     - assert:
         file: galerabackup-two-pvc-assert.yaml
+    # backup PVCs are not delete automatically, so do it at the end of the test
+    cleanup:
+    - script:
+        content: |
+          oc -n $NAMESPACE delete pvc mysql-backup-openstack-backup-openstack mysql-transfer-openstack-backup-openstack || true
 
   - name: backup the 1-node Galera cluster
     description: checks that the cluster is correctly backed up

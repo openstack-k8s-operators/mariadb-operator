@@ -20,4 +20,4 @@ metadata:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: mysql-db-cluster2-backup-openstack2nd
+  name: mysql-backup-cluster2-backup-openstack2nd

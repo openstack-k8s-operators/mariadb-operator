@@ -44,7 +44,6 @@ function finally {
 
 # Environment variables
 check_arg DB "name of the Galera CR to backup"
-check_arg SECRET "name of the k8s secret that holds the backup user credentials"
 check_arg RETENTION "time to keep the old backup files on the filesystem"
 
 
@@ -78,10 +77,22 @@ find ${TRANSFER_DIR} -maxdepth 1 -name '*sst.pid' -delete
 # SELECT TARGET GALERA NODE TO TAKE BACKUP FROM
 #  - when possible choose a node that is not the current endpoint
 #
+log "Retrieve secret holding credentials for Galera cluster ${DB}"
+# the secret name currently in use should be in the Galera CR's status
+output=$(curl -s --cacert ${CACERT} --header "Content-Type:application/json" --header "Authorization: Bearer ${TOKEN}" --request GET ${APISERVER}/apis/mariadb.openstack.org/v1beta1/namespaces/${NAMESPACE}/galeras/${DB}/status)
+secret=$(echo "${output}" | python3 -c 'import base64,json,sys;s=json.load(sys.stdin);print(s["status"]["rootDatabaseSecret"])')
+passwordkey="DatabasePassword"
+# if no status was found, check whether the CR uses the old secret location
+if [ -z "$secret" ]; then
+    secret=$(echo "${output}" | python3 -c 'import base64,json,sys;s=json.load(sys.stdin);print(s["spec"]["secret"])')
+    passwordkey="DbRootPassword"
+fi
+
+test -n "$secret"
 
 log "Retrieve user credentials for Galera cluster ${DB}"
-output=$(curl -s --cacert ${CACERT} --header "Content-Type:application/json" --header "Authorization: Bearer ${TOKEN}" --request GET ${APISERVER}/api/v1/namespaces/${NAMESPACE}/secrets/${SECRET})
-dbpass=$(echo "${output}" | python3 -c 'import base64,json,sys;s=json.load(sys.stdin);print(base64.b64decode(s["data"]["DbRootPassword"]).decode())')
+output=$(curl -s --cacert ${CACERT} --header "Content-Type:application/json" --header "Authorization: Bearer ${TOKEN}" --request GET ${APISERVER}/api/v1/namespaces/${NAMESPACE}/secrets/${secret})
+dbpass=$(echo "${output}" | python3 -c 'import base64,json,sys;s=json.load(sys.stdin);print(base64.b64decode(s["data"]["'${passwordkey}'"]).decode())')
 dbuser=root
 
 log "Retrieve the active endpoint for Galera cluster ${DB}"

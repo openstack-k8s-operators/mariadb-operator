@@ -32,7 +32,7 @@ type GaleraBackupSpec struct {
 	// Configuration of storage used for intermediate data transfer
 	TransferStorage *GaleraBackupTransferStorageSpec `json:"transferStorage,omitempty"`
 	// The schedule in Cron format
-	// +kubebuilder:default="@hourly"
+	// +kubebuilder:default="@daily"
 	Schedule string `json:"schedule"`
 	// Time duration after which old backups must be reclaimed on disk
 	// +optional

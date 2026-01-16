@@ -50,6 +50,7 @@ type GaleraBackupReconciler struct {
 	Scheme  *runtime.Scheme
 }
 
+// RBAC for galerabackup resources
 //+kubebuilder:rbac:groups=mariadb.openstack.org,resources=galerabackups,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=mariadb.openstack.org,resources=galerabackups/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=mariadb.openstack.org,resources=galerabackups/finalizers,verbs=update
@@ -178,6 +179,16 @@ func (r *GaleraBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			Verbs:     []string{"get"},
 		},
 		{
+			APIGroups: []string{"mariadb.openstack.org"},
+			Resources: []string{"galeras/status"},
+			Verbs:     []string{"get", "list"},
+		},
+		{
+			APIGroups: []string{"mariadb.openstack.org"},
+			Resources: []string{"galeras"},
+			Verbs:     []string{"get", "list"},
+		},
+		{
 			APIGroups: []string{""},
 			Resources: []string{"secrets"},
 			Verbs:     []string{"get"},
@@ -261,10 +272,8 @@ func (r *GaleraBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		pvc.ObjectMeta = backupPVC.ObjectMeta
 		op, err := controllerutil.CreateOrPatch(ctx, helper.GetClient(), pvc, func() error {
 			pvc.Spec = backupPVC.Spec
-			err := controllerutil.SetControllerReference(helper.GetBeforeObject(), pvc, helper.GetScheme())
-			if err != nil {
-				return err
-			}
+			// We explicitely do not own this PVC so that backups are not lost
+			// if the GaleraBackup CR is removed
 			return nil
 		})
 		if err != nil {
