@@ -18,8 +18,10 @@ FIREWALL_ZONE=${FIREWALL_ZONE:-"libvirt"}
 WEBHOOK_PORT=${WEBHOOK_PORT:-${WEBHOOK_PORT}}
 
 #Open ${WEBHOOK_PORT}
-sudo firewall-cmd --zone=${FIREWALL_ZONE} --add-port=${WEBHOOK_PORT}/tcp
-sudo firewall-cmd --runtime-to-permanent
+if ! firewall-cmd --list-ports --zone=${FIREWALL_ZONE} | grep -wq "${WEBHOOK_PORT}/tcp"; then
+    sudo firewall-cmd --zone=${FIREWALL_ZONE} --add-port=${WEBHOOK_PORT}/tcp
+    sudo firewall-cmd --runtime-to-permanent
+fi
 
 # Generate the certs and the ca bundle
 if [ "$SKIP_CERT" = false ] ; then
@@ -168,13 +170,15 @@ else
     # Handle operator deployed by Openstack Initialization resource
     CSV_NAME="$(oc get csv -n openstack-operators -l operators.coreos.com/openstack-operator.openstack-operators -o name)"
 
-    printf \
-    "\n\tNow patching openstack operator CSV to scale down deployment resource.
-    To restore it, use:
-    oc patch "${CSV_NAME}" -n openstack-operators --type=json -p=\"[{'op': 'replace', 'path': '/spec/install/spec/deployments/0/spec/replicas', 'value': 1}]\""
+    if [ -n "${CSV_NAME}" ]; then
+        printf \
+        "\n\tNow patching openstack operator CSV to scale down deployment resource.
+        To restore it, use:
+        oc patch "${CSV_NAME}" -n openstack-operators --type=json -p=\"[{'op': 'replace', 'path': '/spec/install/spec/deployments/0/spec/replicas', 'value': 1}]\""
 
-    oc patch "${CSV_NAME}" -n openstack-operators --type=json -p="[{'op': 'replace', 'path': '/spec/install/spec/deployments/0/spec/replicas', 'value': 0}]"
-    oc scale --replicas=0 -n openstack-operators deploy/mariadb-operator-controller-manager
+        oc patch "${CSV_NAME}" -n openstack-operators --type=json -p="[{'op': 'replace', 'path': '/spec/install/spec/deployments/0/spec/replicas', 'value': 0}]"
+        oc scale --replicas=0 -n openstack-operators deploy/mariadb-operator-controller-manager
+    fi
 fi
 
 go run ./cmd/main.go -metrics-bind-address ":${METRICS_PORT}" -health-probe-bind-address ":${HEALTH_PORT}" -pprof-bind-address ":${PPROF_PORT}" -webhook-bind-address "${WEBHOOK_PORT}"
