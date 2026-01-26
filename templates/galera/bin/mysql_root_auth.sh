@@ -14,7 +14,7 @@ MARIADB_API="apis/mariadb.openstack.org/v1beta1"
 
 GALERA_INSTANCE="{{.galeraInstanceName}}"
 
-MY_CNF="$HOME/.my.cnf"
+PW_CACHE_FILE="/var/local/my.cnf/mysql_pw_cache.cnf"
 MYSQL_SOCKET=/var/lib/mysql/mysql.sock
 
 CREDENTIALS_CHECK_TIMEOUT=4
@@ -30,9 +30,9 @@ else
 fi
 
 # Check if we have cached credentials
-if [ "${MYSQL_ROOT_AUTH_BYPASS_CHECKS}" != "true" ] && [ -f "${MY_CNF}" ]; then
+if [ "${MYSQL_ROOT_AUTH_BYPASS_CHECKS}" != "true" ] && [ -f "${PW_CACHE_FILE}" ]; then
     # Read the password from .my.cnf
-    PASSWORD=$(grep '^password=' "${MY_CNF}" | cut -d= -f2-)
+    PASSWORD=$(grep '^password=' "${PW_CACHE_FILE}" | cut -d= -f2-)
 
     # Validate credentials if MySQL is accessible
     if [ -n "${PASSWORD}" ]; then
@@ -153,15 +153,33 @@ fi
 MYSQL_PWD="${PASSWORD}"
 DB_ROOT_PASSWORD="${PASSWORD}"
 
-# Cache credentials to /root/.my.cnf in MySQL client format
-cat > "${MY_CNF}" <<EOF
+# Cache credentials to $PW_CACHE_FILE.
+# Create the directory if it doesn't exist
+PW_CACHE_DIR=$(dirname "${PW_CACHE_FILE}")
+if [ ! -d "${PW_CACHE_DIR}" ]; then
+    if ! mkdir -p "${PW_CACHE_DIR}" 2>/dev/null; then
+        echo "WARNING: Failed to create directory ${PW_CACHE_DIR} due to permissions; will try again later" >&2
+    fi
+fi
+
+if ! cat > "${PW_CACHE_FILE}" <<EOF 2>/dev/null
 [client]
 user=root
 password=${PASSWORD}
 EOF
+then
+    # we are called for the first time from detect_gcomm_and_start.sh which is
+    # called **before** kolla can set directory permissions; so when writing
+    # the file, proceed even if we can't write the file yet
+    echo "WARNING: Failed to write to ${PW_CACHE_FILE} due to permissions; will try again later" >&2
+fi
 
-# Set restrictive permissions on .my.cnf
-chmod 600 "${MY_CNF}"
+# Set restrictive permissions on .my.cnf (only if file was successfully written)
+if [ -f "${PW_CACHE_FILE}" ]; then
+    if ! chmod 600 "${PW_CACHE_FILE}" 2>/dev/null; then
+        echo "WARNING: Failed to set permissions on ${PW_CACHE_FILE}; will try again later" >&2
+    fi
+fi
 
 export MYSQL_PWD
 export DB_ROOT_PASSWORD

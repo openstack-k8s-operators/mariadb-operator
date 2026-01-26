@@ -60,6 +60,11 @@
             "path": "/var/log/mariadb",
             "owner": "mysql:mysql",
             "recurse": "true"
+        },
+        {
+            "path": "/var/local",
+            "owner": "mysql:mysql",
+            "recurse": "true"
         }
     ]
 }
