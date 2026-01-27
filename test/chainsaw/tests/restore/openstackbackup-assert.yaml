@@ -1,9 +1,9 @@
 apiVersion: mariadb.openstack.org/v1beta1
 kind: GaleraBackup
 metadata:
-  name: openstack2nd
+  name: openstackbackup
 spec:
-  databaseInstance: cluster2
+  databaseInstance: openstack
 status:
   (conditions[0:1]):
     - type: Ready
@@ -13,11 +13,11 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   labels:
-    galera/name: cluster2
+    galera/name: openstack
     owner: mariadb-operator
-  name: cluster2-backup-openstack2nd
+  name: openstack-backup-openstackbackup
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: mysql-backup-cluster2-backup-openstack2nd
+  name: mysql-backup-openstack-backup-openstackbackup

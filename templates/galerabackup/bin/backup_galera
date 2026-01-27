@@ -44,7 +44,6 @@ function finally {
 
 # Environment variables
 check_arg DB "name of the Galera CR to backup"
-check_arg SECRET "name of the k8s secret that holds the backup user credentials"
 check_arg RETENTION "time to keep the old backup files on the filesystem"
 
 
@@ -59,10 +58,12 @@ trap finally EXIT
 #  - prepare local storage prior to backup
 #
 if [ "${TLS:-}" = "true" ]; then
-    MYSQL_CFG=/etc/mysql_backup_tls.cnf
+    MYSQL_OPTS="--defaults-extra-file=/etc/mysql_backup_tls.cnf"
     WSREP_SST_CFG=/etc/mysql_backup_tls.cnf
     . /etc/garbd_backup_tls.cnf
     GARBD_OPTS=";${GARBD_TLS_OPTS}"
+else
+    MYSQL_OPTS=
 fi
 
 # prepare backup destination
@@ -78,10 +79,11 @@ find ${TRANSFER_DIR} -maxdepth 1 -name '*sst.pid' -delete
 # SELECT TARGET GALERA NODE TO TAKE BACKUP FROM
 #  - when possible choose a node that is not the current endpoint
 #
-
 log "Retrieve user credentials for Galera cluster ${DB}"
-output=$(curl -s --cacert ${CACERT} --header "Content-Type:application/json" --header "Authorization: Bearer ${TOKEN}" --request GET ${APISERVER}/api/v1/namespaces/${NAMESPACE}/secrets/${SECRET})
-dbpass=$(echo "${output}" | python3 -c 'import base64,json,sys;s=json.load(sys.stdin);print(base64.b64decode(s["data"]["DbRootPassword"]).decode())')
+export MYSQL_CONN_PARAMS=$MYSQL_OPTS
+. /var/lib/operator-scripts/mysql_root_auth.sh
+dbpass=$MYSQL_PWD
+test -n "$MYSQL_PWD"
 dbuser=root
 
 log "Retrieve the active endpoint for Galera cluster ${DB}"
@@ -91,7 +93,7 @@ endpoint=$(echo "${output}" | python3 -c 'import json,sys;s=json.load(sys.stdin)
 
 log "Retrieve available members (from the quorated partition)"
 endpointfqdn=${service}.${NAMESPACE}.svc
-members=$(mysql --defaults-file="${MYSQL_CFG:-}" -nN -u${dbuser} -p${dbpass} -h ${endpointfqdn} -e 'select node_name from mysql.wsrep_cluster_members;')
+members=$(mysql ${MYSQL_OPTS} -nN -u${dbuser} -p${dbpass} -h ${endpointfqdn} -e 'select node_name from mysql.wsrep_cluster_members;')
 log "Members found: $(echo ${members}) (service endpoint: $endpoint)"
 
 size=$(echo -n "${members}" | wc -w)

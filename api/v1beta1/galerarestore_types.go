@@ -21,33 +21,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// GaleraBackupSpec defines the desired state of GaleraBackup
-type GaleraBackupSpec struct {
-	// Galera cluster to backup
-	DatabaseInstance string `json:"databaseInstance,omitempty"`
-	// Storage volume for backup data
-	StorageClass string `json:"storageClass,omitempty"`
-	// Storage Request for backup data
-	StorageRequest string `json:"storageRequest,omitempty"`
-	// Configuration of storage used for intermediate data transfer
-	TransferStorage *GaleraBackupTransferStorageSpec `json:"transferStorage,omitempty"`
-	// The schedule in Cron format
-	// +kubebuilder:default="@daily"
-	Schedule string `json:"schedule"`
-	// Time duration after which old backups must be reclaimed on disk
-	// +optional
-	Retention *metav1.Duration `json:"retention,omitempty"`
+// GaleraRestoreSpec defines the desired state of GaleraBackup
+type GaleraRestoreSpec struct {
+	// Galera backup to restore into its associated Galera CR
+	BackupSource string `json:"backupSource,omitempty"`
 }
 
-type GaleraBackupTransferStorageSpec struct {
-	// Storage volume for backup data
-	StorageClass string `json:"storageClass,omitempty"`
-	// Storage Request for backup data
-	StorageRequest string `json:"storageRequest"`
-}
-
-// GaleraBackupStatus defines the observed state of GaleraBackup
-type GaleraBackupStatus struct {
+// GaleraRestoreStatus defines the observed state of GaleraRestore
+type GaleraRestoreStatus struct {
 	// Map of hashes to track input changes
 	Hash map[string]string `json:"hash,omitempty"`
 	// Deployment Conditions
@@ -64,44 +45,39 @@ type GaleraBackupStatus struct {
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[0].status",description="Ready"
 // +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.conditions[0].message",description="Message"
 
-// GaleraBackup is the Schema for the galerabackups API
-type GaleraBackup struct {
+// GaleraRestore is the Schema for the galerabackups API
+type GaleraRestore struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   GaleraBackupSpec   `json:"spec,omitempty"`
-	Status GaleraBackupStatus `json:"status,omitempty"`
+	Spec   GaleraRestoreSpec   `json:"spec,omitempty"`
+	Status GaleraRestoreStatus `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 
-// GaleraBackupList contains a list of GaleraBackup
-type GaleraBackupList struct {
+// GaleraRestoreList contains a list of GaleraRestore
+type GaleraRestoreList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []GaleraBackup `json:"items"`
+	Items           []GaleraRestore `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&GaleraBackup{}, &GaleraBackupList{})
-}
-
-// IsReady - returns true if service is ready to serve requests
-func (instance GaleraBackup) IsReady() bool {
-	return instance.Status.Conditions.IsTrue(condition.ReadyCondition)
+	SchemeBuilder.Register(&GaleraRestore{}, &GaleraRestoreList{})
 }
 
 // RbacConditionsSet - sets the conditions for the rbac object
-func (instance GaleraBackup) RbacConditionsSet(c *condition.Condition) {
+func (instance GaleraRestore) RbacConditionsSet(c *condition.Condition) {
 	instance.Status.Conditions.Set(c)
 }
 
 // RbacNamespace - returns the namespace name
-func (instance GaleraBackup) RbacNamespace() string {
+func (instance GaleraRestore) RbacNamespace() string {
 	return instance.Namespace
 }
 
 // RbacResourceName - return the name to be used for rbac objects (serviceaccount, role, rolebinding)
-func (instance GaleraBackup) RbacResourceName() string {
-	return "galerabackup-" + instance.Name
+func (instance GaleraRestore) RbacResourceName() string {
+	return "galerarestore-" + instance.Name
 }

@@ -272,6 +272,14 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "GaleraBackup")
 		os.Exit(1)
 	}
+	if err := (&controller.GaleraRestoreReconciler{
+		Client:  mgr.GetClient(),
+		Scheme:  mgr.GetScheme(),
+		Kclient: kclient,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "GaleraBackup")
+		os.Exit(1)
+	}
 
 	// Acquire environmental defaults and initialize operator defaults with them
 	mariadbv1beta1.SetupDefaults()

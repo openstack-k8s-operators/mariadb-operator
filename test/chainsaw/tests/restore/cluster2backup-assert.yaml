@@ -1,7 +1,7 @@
 apiVersion: mariadb.openstack.org/v1beta1
 kind: GaleraBackup
 metadata:
-  name: openstack2nd
+  name: cluster2backup
 spec:
   databaseInstance: cluster2
 status:
@@ -15,9 +15,9 @@ metadata:
   labels:
     galera/name: cluster2
     owner: mariadb-operator
-  name: cluster2-backup-openstack2nd
+  name: cluster2-backup-cluster2backup
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: mysql-backup-cluster2-backup-openstack2nd
+  name: mysql-backup-cluster2-backup-cluster2backup

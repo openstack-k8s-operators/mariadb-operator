@@ -40,6 +40,7 @@ import (
 	common_rbac "github.com/openstack-k8s-operators/lib-common/modules/common/rbac"
 	util "github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
+	mariadb "github.com/openstack-k8s-operators/mariadb-operator/internal/mariadb"
 	backup "github.com/openstack-k8s-operators/mariadb-operator/internal/mariadb/backup"
 )
 
@@ -50,6 +51,7 @@ type GaleraBackupReconciler struct {
 	Scheme  *runtime.Scheme
 }
 
+// RBAC for galerabackup resources
 //+kubebuilder:rbac:groups=mariadb.openstack.org,resources=galerabackups,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=mariadb.openstack.org,resources=galerabackups/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=mariadb.openstack.org,resources=galerabackups/finalizers,verbs=update
@@ -143,6 +145,8 @@ func (r *GaleraBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		condition.UnknownCondition(condition.ServiceConfigReadyCondition, condition.InitReason, condition.ServiceConfigReadyInitMessage),
 		// Galera DB exists
 		condition.UnknownCondition(mariadbv1.MariaDBResourceExistsCondition, condition.InitReason, mariadbv1.MariaDBResourceInitMessage),
+		// configmap generation
+		condition.UnknownCondition(condition.ServiceConfigReadyCondition, condition.InitReason, condition.ServiceConfigReadyInitMessage),
 		// PVC objects
 		condition.UnknownCondition(mariadbv1.PersistentVolumeClaimReadyCondition, condition.InitReason, mariadbv1.PersistentVolumeClaimReadyInitMessage),
 		// Cronjob object
@@ -178,6 +182,16 @@ func (r *GaleraBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			Verbs:     []string{"get"},
 		},
 		{
+			APIGroups: []string{"mariadb.openstack.org"},
+			Resources: []string{"galeras/status"},
+			Verbs:     []string{"get", "list"},
+		},
+		{
+			APIGroups: []string{"mariadb.openstack.org"},
+			Resources: []string{"galeras"},
+			Verbs:     []string{"get", "list"},
+		},
+		{
 			APIGroups: []string{""},
 			Resources: []string{"secrets"},
 			Verbs:     []string{"get"},
@@ -194,6 +208,56 @@ func (r *GaleraBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	} else if (rbacResult != ctrl.Result{}) {
 		return rbacResult, nil
 	}
+
+	galera := &mariadbv1.Galera{}
+	galeraName := types.NamespacedName{Name: instance.Spec.DatabaseInstance, Namespace: instance.GetNamespace()}
+	err = r.Get(ctx, galeraName, galera)
+	if err != nil {
+		if k8s_errors.IsNotFound(err) {
+			// Wait for a Galera object to exist before creating any object (cronjob, PVs...)
+			// Since the Galera object should already exist, we treat this as a warning.
+			instance.Status.Conditions.MarkFalse(
+				mariadbv1.MariaDBResourceExistsCondition,
+				mariadbv1.ReasonResourceNotFound,
+				condition.SeverityWarning,
+				mariadbv1.MariaDBResourceInitMessage,
+			)
+			return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
+		}
+		// Error reading the object - requeue the request.
+		return ctrl.Result{}, err
+	}
+
+	instance.Status.Conditions.MarkTrue(
+		mariadbv1.MariaDBResourceExistsCondition,
+		mariadbv1.MariaDBResourceExistsMessage,
+	)
+
+	configMap := &corev1.ConfigMap{}
+	configMapName := types.NamespacedName{
+		Name:      mariadb.ScriptConfigMapName(instance.Spec.DatabaseInstance),
+		Namespace: instance.GetNamespace(),
+	}
+	err = r.Get(ctx, configMapName, configMap)
+	if err != nil {
+		if k8s_errors.IsNotFound(err) {
+			// The Script ConfigMap has not yet be created. Requeue
+			instance.Status.Conditions.MarkFalse(
+				condition.ServiceConfigReadyCondition,
+				mariadbv1.MariaDBServiceConfigNotFound,
+				condition.SeverityWarning,
+				condition.ServiceConfigReadyInitMessage,
+			)
+			return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
+		}
+		// Error reading the object - requeue the request.
+		return ctrl.Result{}, err
+	}
+
+	instance.Status.Conditions.MarkTrue(
+		condition.ServiceConfigReadyCondition,
+		condition.ServiceConfigReadyMessage,
+	)
 
 	// Map of all resources that may cause a rolling service restart
 	inputHashEnv := make(map[string]env.Setter)
@@ -229,30 +293,6 @@ func (r *GaleraBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, nil
 	}
 
-	galera := &mariadbv1.Galera{}
-	galeraName := types.NamespacedName{Name: instance.Spec.DatabaseInstance, Namespace: instance.GetNamespace()}
-	err = r.Get(ctx, galeraName, galera)
-	if err != nil {
-		if k8s_errors.IsNotFound(err) {
-			// Wait for a Galera object to exist before creating any object (cronjob, PVs...)
-			// Since the Galera object should already exist, we treat this as a warning.
-			instance.Status.Conditions.MarkFalse(
-				mariadbv1.MariaDBResourceExistsCondition,
-				mariadbv1.ReasonResourceNotFound,
-				condition.SeverityWarning,
-				mariadbv1.MariaDBResourceInitMessage,
-			)
-			return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
-		}
-		// Error reading the object - requeue the request.
-		return ctrl.Result{}, err
-	}
-
-	instance.Status.Conditions.MarkTrue(
-		mariadbv1.MariaDBResourceExistsCondition,
-		mariadbv1.MariaDBResourceExistsMessage,
-	)
-
 	pvc := &corev1.PersistentVolumeClaim{}
 	backupPVC, transferPVC := backup.BackupPVCs(instance, galera)
 
@@ -261,10 +301,8 @@ func (r *GaleraBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		pvc.ObjectMeta = backupPVC.ObjectMeta
 		op, err := controllerutil.CreateOrPatch(ctx, helper.GetClient(), pvc, func() error {
 			pvc.Spec = backupPVC.Spec
-			err := controllerutil.SetControllerReference(helper.GetBeforeObject(), pvc, helper.GetScheme())
-			if err != nil {
-				return err
-			}
+			// We explicitely do not own this PVC so that backups are not lost
+			// if the GaleraBackup CR is removed
 			return nil
 		})
 		if err != nil {

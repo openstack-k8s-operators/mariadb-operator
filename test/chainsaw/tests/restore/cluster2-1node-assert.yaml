@@ -1,0 +1,9 @@
+apiVersion: mariadb.openstack.org/v1beta1
+kind: Galera
+metadata:
+  name: openstack
+status:
+  bootstrapped: true
+  (conditions[0:1]):
+    - type: Ready
+      status: "True"

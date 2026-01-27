@@ -12,7 +12,8 @@ CACERT=${SERVICEACCOUNT}/ca.crt
 K8S_API="api/v1"
 MARIADB_API="apis/mariadb.openstack.org/v1beta1"
 
-GALERA_INSTANCE="{{.galeraInstanceName}}"
+# default empty value when the env doesn't specify it
+: ${GALERA_INSTANCE={{.galeraInstanceName}}}
 
 PW_CACHE_FILE="/var/local/my.cnf/mysql_pw_cache.cnf"
 MYSQL_SOCKET=/var/lib/mysql/mysql.sock
@@ -20,12 +21,12 @@ MYSQL_SOCKET=/var/lib/mysql/mysql.sock
 CREDENTIALS_CHECK_TIMEOUT=4
 
 # Set up connection parameters based on whether we're connecting remotely or locally
+# default empty value when the env doesn't specify it
+: ${MYSQL_CONN_PARAMS=}
 if [ -n "${MYSQL_REMOTE_HOST}" ]; then
-
-    MYSQL_CONN_PARAMS="-h ${MYSQL_REMOTE_HOST} -P 3306"
+    MYSQL_CONN_PARAMS="${MYSQL_CONN_PARAMS} -h ${MYSQL_REMOTE_HOST} -P 3306"
     USE_SOCKET=false
 else
-    MYSQL_CONN_PARAMS=""
     USE_SOCKET=true
 fi
 

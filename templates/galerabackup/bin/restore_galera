@@ -1,0 +1,152 @@
+#!/bin/bash
+
+set -eu
+
+# API server config
+APISERVER=https://kubernetes.default.svc
+SERVICEACCOUNT=/var/run/secrets/kubernetes.io/serviceaccount
+NAMESPACE=$(cat ${SERVICEACCOUNT}/namespace)
+TOKEN=$(cat ${SERVICEACCOUNT}/token)
+CACERT=${SERVICEACCOUNT}/ca.crt
+
+# script arguments
+confirm=
+target_pod=
+
+
+# Helper functions
+function log() {
+    echo "$*"
+}
+
+function log_n() {
+    echo -n "$* "
+}
+
+function log_status() {
+    echo "$*"
+}
+
+function err() {
+    echo "ERROR: $*"
+    exit 1
+}
+
+function usage() {
+    echo "Usage: `basename $0` [--database GALERA_CR] backupfile.sql.gz ..."
+    exit 1
+}
+
+function set_endpoint() {
+    local svc=$1
+    local pod=$2
+    curl -s --cacert ${CACERT} --header "Content-Type:application/json-patch+json" --header "Authorization: Bearer ${TOKEN}" --request PATCH --data '[{"op": "add", "path": "/spec/selector/statefulset.kubernetes.io~1pod-name", "value": "'${pod}'"}]' ${APISERVER}/api/v1/namespaces/${NAMESPACE}/services/${svc} -o /dev/null
+}
+
+function finalizer_check_endpoint {
+    if [ -n "${target_pod}" ]; then
+        log "Restore traffic to Galera cluster ${DB} via endpoint ${target_pod}"
+        set_endpoint ${service} {$target_pod}
+    fi
+}
+
+
+# validate database restore arguments
+if [ -z "$*" ]; then
+    usage
+fi
+OPTS=$(getopt -o hd:y --long help,database:,yes -- "$@")
+eval set -- "$OPTS"
+while true; do
+    case "$1" in
+        -h | --help)
+            usage
+            ;;
+        -d | --database)
+            $DB=$2
+            shift
+            ;;
+        -y | --yes)
+            confirm=y
+            shift
+            ;;
+        --)
+            shift
+            break
+            ;;
+        *)
+            usage
+            ;;
+    esac
+done
+
+if [ -z "${confirm}" ]; then
+    log "You are about to restore contents of Galera cluster ${DB} with the following backup files:"
+    for backup in $*; do
+        log " - ${backup}"
+    done
+    log_n "OK to proceed? (y/N)"
+    read confirm
+    confirm=$(echo "$confirm" | tr A-Z a-z)
+fi
+
+if [ "${confirm}" != "y" ]; then
+    log "Aborting"
+    exit 0
+fi
+
+if [ -f /etc/mysql_backup_tls.cnf ]; then
+MYSQL_OPTS="--defaults-extra-file=/etc/mysql_backup_tls.cnf"
+else
+MYSQL_OPTS=
+fi
+
+log "Retrieve user credentials for Galera cluster ${DB}"
+export MYSQL_CONN_PARAMS=$MYSQL_OPTS
+. /var/lib/operator-scripts/mysql_root_auth.sh
+dbpass=$MYSQL_PWD
+test -n "$MYSQL_PWD"
+dbuser=root
+
+log "Verify that we can connect to the database with user credentials"
+service=${DB}
+endpoint_fqdn=${service}.${NAMESPACE}.svc
+if ! mysqladmin $MYSQL_OPTS -u$dbuser -p$dbpass -h$endpoint_fqdn ping >/dev/null; then
+    err "Could not connect to service "$endpoint_fqdn" with credentials"
+fi
+
+log_n "Get direct pod name for service ${service}..."
+target_pod=$(mysql $MYSQL_OPTS -u$dbuser -p$dbpass -h$endpoint_fqdn -nN -e 'select @@wsrep_node_name;')
+target_pod_fqdn=${target_pod}.${service}-galera.${NAMESPACE}.svc
+test -n "${target_pod}"
+log_status "selected pod ${target_pod}"
+
+# During the restore, no external traffic should reach the galera cluster
+log "Disable traffic to Galera cluster ${service}"
+trap finalizer_check_endpoint EXIT
+set_endpoint ${service} ""
+
+# restore all backup files passed in argument to this script
+for backup in $*; do
+    if [ ! -f "${backup}" ]; then
+        log "WARNING: ${backup} is invalid, skipping restore for it"
+        continue
+    fi
+    if echo "${backup}" | grep -q '.gz$'; then
+        READ="gunzip -cd"
+    else
+        READ=cat
+    fi
+    log_n "Restore backup ${backup} into Galera pod ${DB}..."
+    $READ ${backup} | mysql $MYSQL_OPTS -u$dbuser -p$dbpass -h$target_pod_fqdn
+    if [ $? -eq 0 ]; then
+        log_status "OK"
+    else
+        log_status "FAILED"
+    fi
+done
+
+log "Restore traffic to Galera cluster ${DB} via endpoint ${target_pod}"
+set_endpoint "${service}" "${target_pod}"
+# no need to run finalizer past this point
+target_pod=

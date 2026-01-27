@@ -20,6 +20,11 @@ spec:
               - type: "Ready"
                 status: "False"
                 reason: Galera CR not found
+    # backup PVCs are not delete automatically, so do it at the end of the test
+    cleanup:
+    - script:
+        content: |
+          oc -n $NAMESPACE delete pvc mysql-backup-openstack-backup-openstack || true
 
   - name: setup a backup for a 1-node Galera cluster
     description: checks that backup CR is correctly set up
@@ -100,6 +105,11 @@ spec:
         file: backup-openstack2nd.yaml
     - assert:
         file: assert-openstack2nd.yaml
+    # backup PVCs are not delete automatically, so do it at the end of the test
+    cleanup:
+    - script:
+        content: |
+          oc -n $NAMESPACE delete pvc mysql-backup-cluster2-backup-openstack2nd || true
 
 
   - name: backup the two running clusters

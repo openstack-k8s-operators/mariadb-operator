@@ -1,0 +1,6 @@
+apiVersion: mariadb.openstack.org/v1beta1
+kind: GaleraRestore
+metadata:
+  name: cluster2restore
+spec:
+  backupSource: cluster2backup

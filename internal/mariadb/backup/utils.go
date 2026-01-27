@@ -9,10 +9,15 @@ func BackupCronJobName(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera) string {
 
 // BackupPVCName returns the name of the PVC resource that stores .sql backup files
 func BackupPVCName(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera) string {
-	return "mysql-db-" + g.Name + "-backup-" + b.Name
+	return "mysql-backup-" + g.Name + "-backup-" + b.Name
 }
 
 // BackupTransferPVCName returns the name of the PVC resource that stores temporary binary backup data
 func BackupTransferPVCName(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera) string {
-	return "mysql-db-" + g.Name + "-backup-" + b.Name + "-transfer"
+	return "mysql-transfer-" + g.Name + "-backup-" + b.Name
+}
+
+// RestorePodName - name of the pod resource created by a GaleraRestore CR
+func RestorePodName(r *mariadbv1.GaleraRestore, g *mariadbv1.Galera) string {
+	return g.Name + "-restore-" + r.Name
 }

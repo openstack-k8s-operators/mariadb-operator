@@ -6,6 +6,7 @@ resources:
 - bases/mariadb.openstack.org_galeras.yaml
 - bases/mariadb.openstack.org_mariadbaccounts.yaml
 - bases/mariadb.openstack.org_galerabackups.yaml
+- bases/mariadb.openstack.org_galerarestores.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

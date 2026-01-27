@@ -3,7 +3,9 @@ package mariadbbackup
 import (
 	tls "github.com/openstack-k8s-operators/lib-common/modules/common/tls"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
+	mariadb "github.com/openstack-k8s-operators/mariadb-operator/internal/mariadb"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/utils/ptr"
 )
 
 const (
@@ -29,6 +31,21 @@ func BackupVolumes(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera) []corev1.Volu
 			},
 		},
 	}, {
+		Name: "operator-scripts",
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: mariadb.ScriptConfigMapName(g.Name),
+				},
+				Items: []corev1.KeyToPath{
+					{
+						Key:  "mysql_root_auth.sh",
+						Path: "mysql_root_auth.sh",
+					},
+				},
+			},
+		},
+	}, {
 		Name: "backup-scripts",
 		VolumeSource: corev1.VolumeSource{
 			ConfigMap: &corev1.ConfigMapVolumeSource{
@@ -37,10 +54,15 @@ func BackupVolumes(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera) []corev1.Volu
 				},
 				Items: []corev1.KeyToPath{
 					{
-						Key:  "backup_galera.sh",
-						Path: "backup_galera.sh",
+						Key:  "backup_galera",
+						Path: "backup_galera",
+					},
+					{
+						Key:  "restore_galera",
+						Path: "restore_galera",
 					},
 				},
+				DefaultMode: ptr.To[int32](0555),
 			},
 		},
 	}, {
@@ -107,6 +129,10 @@ func BackupVolumeMounts(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera) []corev1
 		MountPath: "/var/lib/kolla/config_files",
 		ReadOnly:  true,
 		Name:      "kolla-config",
+	}, {
+		MountPath: "/var/lib/operator-scripts",
+		ReadOnly:  true,
+		Name:      "operator-scripts",
 	}, {
 		MountPath: "/var/lib/backup-scripts",
 		ReadOnly:  true,
