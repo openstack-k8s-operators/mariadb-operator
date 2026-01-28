@@ -588,33 +588,16 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 
 	legacyRootPassword := ""
 	if instance.Spec.Secret != "" {
-		_, res, err := secret.VerifySecret(
-			ctx,
-			types.NamespacedName{Namespace: instance.Namespace, Name: instance.Spec.Secret},
-			[]string{
-				"DbRootPassword",
-			},
-			helper.GetClient(),
-			time.Duration(5)*time.Second)
-		if err != nil {
-			if k8s_errors.IsNotFound(err) {
-				// Since the OpenStack secret should have been manually created by the user and referenced in the spec,
-				// we treat this as a warning because it means that the service will not be able to start.
-				instance.Status.Conditions.Set(condition.FalseCondition(
-					condition.InputReadyCondition,
-					condition.ErrorReason,
-					condition.SeverityWarning,
-					condition.InputReadyWaitingMessage))
-				return res, fmt.Errorf("%w: %s", ErrOpenStackSecretNotFound, instance.Spec.Secret)
-			}
-			return ctrl.Result{}, err
-		}
-
 		legacySecret, _, err := secret.GetSecret(ctx, helper, instance.Spec.Secret, instance.Namespace)
 		if err != nil {
-			return ctrl.Result{}, err
+			if !k8s_errors.IsNotFound(err) {
+				return ctrl.Result{}, err
+			}
+			// Secret not found - continue with blank legacyRootPassword
+		} else if dbRootPw, ok := legacySecret.Data["DbRootPassword"]; ok {
+			legacyRootPassword = string(dbRootPw)
 		}
-		legacyRootPassword = string(legacySecret.Data["DbRootPassword"])
+		// If DbRootPassword key is not present, legacyRootPassword remains blank
 	}
 
 	// ******** END TEMPORARY ************

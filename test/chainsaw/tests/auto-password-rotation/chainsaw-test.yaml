@@ -1,0 +1,143 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: auto-password-rotation
+spec:
+  steps:
+  - name: Create secret without DbRootPassword
+    description: Create a secret that does not have DbRootPassword key
+    try:
+    - apply:
+        file: osp-secret-no-pw.yaml
+
+  - name: Deploy 1-node cluster
+    description: Deploy a 1-node galera cluster with secret pointing to osp-secret-no-pw
+    bindings:
+    - name: replicas
+      value: 1
+    try:
+    - apply:
+        file: galera-with-secret.yaml
+    - assert:
+        file: galera-assert.yaml
+
+  - name: Verify root MariaDBAccount is created
+    description: Verify the root MariaDBAccount exists with auto-generated secret
+    try:
+    - assert:
+        file: root-account-initial-assert.yaml
+
+  - name: Extract and verify initial auto-generated password
+    description: Extract the auto-generated password from the secret and verify it works
+    try:
+    - script:
+        content: |
+          # Get the secret name from Galera status
+          SECRET_NAME=$(oc get galera openstack -n ${NAMESPACE} -o jsonpath='{.status.rootDatabaseSecret}')
+          echo "Initial root secret name: $SECRET_NAME"
+
+          # Extract the password from the secret (base64 decode)
+          INITIAL_PASSWORD=$(oc get secret $SECRET_NAME -n ${NAMESPACE} -o jsonpath='{.data.DatabasePassword}' | base64 -d)
+          echo "Extracted initial password (length: ${#INITIAL_PASSWORD})"
+
+          # Verify it's not empty
+          if [ -z "$INITIAL_PASSWORD" ]; then
+            echo "ERROR: Initial password is empty"
+            exit 1
+          fi
+
+          # Test MySQL connection with the extracted password
+          oc exec -n ${NAMESPACE} -c galera openstack-galera-0 -- /bin/sh -c "
+            mysql -uroot -p'$INITIAL_PASSWORD' -e 'SELECT 1' > /dev/null
+            echo 'Successfully connected to MySQL with initial auto-generated password'
+          "
+
+          # Save the initial password for later comparison
+          echo "$INITIAL_PASSWORD" > /tmp/initial_password_${NAMESPACE}.txt
+          echo "Initial password saved for comparison"
+
+  - name: Update MariaDBAccount secret to nonexistent secret
+    description: Change the MariaDBAccount spec.secret to some-new-secret (which doesn't exist)
+    skipDelete: true
+    try:
+    - apply:
+        file: root-account-updated.yaml
+    - assert:
+        file: root-account-rotated-assert.yaml
+
+  - name: Verify Galera status updated
+    description: Wait for Galera status.rootDatabaseSecret to be updated to some-new-secret
+    try:
+    - assert:
+        file: galera-status-rotated-assert.yaml
+
+  - name: Verify new secret was auto-generated
+    description: Verify some-new-secret was created automatically with a different password
+    try:
+    - script:
+        content: |
+          # Get the new secret name from Galera status
+          NEW_SECRET_NAME=$(oc get galera openstack -n ${NAMESPACE} -o jsonpath='{.status.rootDatabaseSecret}')
+          echo "New root secret name: $NEW_SECRET_NAME"
+
+          if [ "$NEW_SECRET_NAME" != "some-new-secret" ]; then
+            echo "ERROR: Expected new secret name to be 'some-new-secret', got '$NEW_SECRET_NAME'"
+            exit 1
+          fi
+
+          # Extract the new password from the secret (base64 decode)
+          NEW_PASSWORD=$(oc get secret $NEW_SECRET_NAME -n ${NAMESPACE} -o jsonpath='{.data.DatabasePassword}' | base64 -d)
+          echo "Extracted new password (length: ${#NEW_PASSWORD})"
+
+          # Verify it's not empty
+          if [ -z "$NEW_PASSWORD" ]; then
+            echo "ERROR: New password is empty"
+            exit 1
+          fi
+
+          # Compare with initial password - they should be different
+          INITIAL_PASSWORD=$(cat /tmp/initial_password_${NAMESPACE}.txt)
+          if [ "$NEW_PASSWORD" = "$INITIAL_PASSWORD" ]; then
+            echo "ERROR: New password is the same as initial password - rotation failed"
+            exit 1
+          fi
+          echo "PASS: New password is different from initial password"
+
+          # Test MySQL connection with the new password
+          oc exec -n ${NAMESPACE} -c galera openstack-galera-0 -- /bin/sh -c "
+            # Clear the cached credentials to force using new password
+            rm -f \$HOME/.my.cnf
+            mysql -uroot -p'$NEW_PASSWORD' -e 'SELECT 1' > /dev/null
+            echo 'Successfully connected to MySQL with new auto-generated password'
+          "
+
+  - name: Verify new password persists
+    description: Verify the new password still works after cache refresh
+    try:
+    - script:
+        content: |
+          # Extract the new password again
+          NEW_PASSWORD=$(oc get secret some-new-secret -n ${NAMESPACE} -o jsonpath='{.data.DatabasePassword}' | base64 -d)
+
+          oc exec -n ${NAMESPACE} -c galera openstack-galera-0 -- /bin/sh -c "
+            mysql -uroot -p'$NEW_PASSWORD' -e 'SHOW DATABASES' > /dev/null
+            echo 'New password persists and works correctly'
+          "
+
+  - name: Verify old password no longer works
+    description: Verify the initial password no longer works after rotation
+    try:
+    - script:
+        content: |
+          # Extract the old password
+          OLD_PASSWORD=$(cat /tmp/initial_password_${NAMESPACE}.txt)
+
+          # Try to connect with old password - should fail
+          oc exec -n ${NAMESPACE} -c galera openstack-galera-0 -- /bin/sh -c "
+            if mysql -uroot -p'$OLD_PASSWORD' -e 'SELECT 1' > /dev/null 2>&1; then
+              echo 'ERROR: Old password still works - rotation failed'
+              exit 1
+            else
+              echo 'PASS: Old password no longer works as expected'
+            fi
+          "

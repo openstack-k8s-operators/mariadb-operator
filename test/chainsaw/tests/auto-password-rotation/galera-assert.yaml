@@ -1,0 +1,62 @@
+apiVersion: mariadb.openstack.org/v1beta1
+kind: Galera
+metadata:
+  name: openstack
+spec:
+  replicas: ($replicas)
+  secret: osp-secret-no-pw
+  storageRequest: 500M
+status:
+  bootstrapped: true
+  conditions:
+  - message: Setup complete
+    reason: Ready
+    status: "True"
+    type: Ready
+  - message: Create service completed
+    reason: Ready
+    status: "True"
+    type: CreateServiceReady
+  - message: Deployment completed
+    reason: Ready
+    status: "True"
+    type: DeploymentReady
+  - message: Input data complete
+    reason: Ready
+    status: "True"
+    type: InputReady
+  - message: MariaDBAccount System account 'root' creation complete
+    reason: Ready
+    status: "True"
+    type: MariaDBAccountReady
+  - message: RoleBinding created
+    reason: Ready
+    status: "True"
+    type: RoleBindingReady
+  - message: Role created
+    reason: Ready
+    status: "True"
+    type: RoleReady
+  - message: ServiceAccount created
+    reason: Ready
+    status: "True"
+    type: ServiceAccountReady
+  - message: Service config create completed
+    reason: Ready
+    status: "True"
+    type: ServiceConfigReady
+  - message: Input data complete
+    reason: Ready
+    status: "True"
+    type: TLSInputReady
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: openstack-galera
+spec:
+  replicas: ($replicas)
+status:
+  availableReplicas: ($replicas)
+  readyReplicas: ($replicas)
+  replicas: ($replicas)
