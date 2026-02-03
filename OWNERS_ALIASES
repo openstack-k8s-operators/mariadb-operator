@@ -4,9 +4,6 @@ aliases:
   mariadb-approvers:
   - dciabrin
   - lmiccini
-  ci-approvers:
-  - frenzyfriday
-  - viroel
   openstack-approvers:
   - abays
   - dprince
