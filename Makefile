@@ -388,7 +388,7 @@ run-with-webhook: manifests generate fmt vet ## Run a controller from your host.
 CRD_SCHEMA_CHECKER_VERSION ?= release-4.16
 
 PHONY: crd-schema-check
-BRANCH ?= main
+BRANCH ?= 18.0-fr5
 .PHONY: force-bump
 force-bump: ## Force bump operator and lib-common dependencies
 	for dep in $$(cat go.mod | grep openstack-k8s-operators | grep -vE -- 'indirect|mariadb-operator|^replace' | awk '{print $$1}'); do \
