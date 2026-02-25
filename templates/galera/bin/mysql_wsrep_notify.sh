@@ -293,7 +293,11 @@ fi
 if echo "${STATUS}" | grep -i -q -e 'failover'; then
     # note: make sure that the root credentials are up to date
     # before invoking any mysql command
-    source /var/lib/operator-scripts/mysql_root_auth.sh
+    # OSPRH-27031: Conditional sourcing for backwards compatibility with old pods
+    # where script is updated but mysql_root_auth.sh is not yet available
+    if [ -f /var/lib/operator-scripts/mysql_root_auth.sh ]; then
+        source /var/lib/operator-scripts/mysql_root_auth.sh
+    fi
     mysql_probe_state
     if [ $? != 0 ]; then
         log_error "Could not probe missing mysql information. Aborting"
@@ -316,7 +320,11 @@ fi
 
 # note: make sure that the root credentials are up to date
 # before invoking any mysql command
-source /var/lib/operator-scripts/mysql_root_auth.sh
+# OSPRH-27031: Conditional sourcing for backwards compatibility with old pods
+# where script is updated but mysql_root_auth.sh is not yet available
+if [ -f /var/lib/operator-scripts/mysql_root_auth.sh ]; then
+    source /var/lib/operator-scripts/mysql_root_auth.sh
+fi
 mysql_probe_state
 if [ $? != 0 ]; then
     log_error "Could not probe missing mysql information. Aborting"

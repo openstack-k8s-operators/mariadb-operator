@@ -2,7 +2,11 @@
 
 set -eu
 
-source /var/lib/operator-scripts/mysql_root_auth.sh
+# OSPRH-27031: Conditional sourcing for backwards compatibility with old pods
+# where script is updated but mysql_root_auth.sh is not yet available
+if [ -f /var/lib/operator-scripts/mysql_root_auth.sh ]; then
+    source /var/lib/operator-scripts/mysql_root_auth.sh
+fi
 
 # Adapted from clusterlab's galera resource agent
 recover_args="--datadir=/var/lib/mysql \
