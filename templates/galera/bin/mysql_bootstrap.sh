@@ -10,7 +10,11 @@ sudo chown mysql:mysql /var/local/my.cnf
 # disable my.cnf caching in mysql_root_auth.sh, so that we definitely
 # use the root password defined in the cluster.   this should create
 # a new file in /var/local/my.cnf/
-MYSQL_ROOT_AUTH_BYPASS_CHECKS=true source /var/lib/operator-scripts/mysql_root_auth.sh
+# OSPRH-27031: Conditional sourcing for backwards compatibility with old pods
+# where script is updated but mysql_root_auth.sh is not yet available
+if [ -f /var/lib/operator-scripts/mysql_root_auth.sh ]; then
+    MYSQL_ROOT_AUTH_BYPASS_CHECKS=true source /var/lib/operator-scripts/mysql_root_auth.sh
+fi
 
 
 function kolla_update_db_root_pw {
