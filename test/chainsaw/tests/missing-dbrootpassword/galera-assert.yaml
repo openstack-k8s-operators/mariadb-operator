@@ -1,0 +1,49 @@
+apiVersion: mariadb.openstack.org/v1beta1
+kind: Galera
+metadata:
+  name: openstack
+spec:
+  replicas: ($replicas)
+  secret: test-secret-missing-dbrootpassword
+  storageRequest: 500M
+  containerImage: quay.io/podified-antelope-centos9/openstack-mariadb:current-podified
+status:
+  conditions:
+  - message: Input data resources missing
+    reason: Error
+    severity: Warning
+    status: "False"
+    type: Ready
+  - message: Create service completed
+    reason: Ready
+    status: "True"
+    type: CreateServiceReady
+  - message: Deployment not started
+    reason: Init
+    status: Unknown
+    type: DeploymentReady
+  - message: Input data resources missing
+    reason: Error
+    severity: Warning
+    status: "False"
+    type: InputReady
+  - message: RoleBinding created
+    reason: Ready
+    status: "True"
+    type: RoleBindingReady
+  - message: Role created
+    reason: Ready
+    status: "True"
+    type: RoleReady
+  - message: ServiceAccount created
+    reason: Ready
+    status: "True"
+    type: ServiceAccountReady
+  - message: Service config create not started
+    reason: Init
+    status: Unknown
+    type: ServiceConfigReady
+  - message: Input data not checked
+    reason: Init
+    status: Unknown
+    type: TLSInputReady
