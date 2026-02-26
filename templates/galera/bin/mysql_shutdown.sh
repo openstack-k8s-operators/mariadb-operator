@@ -1,6 +1,10 @@
 #!/bin/bash
 
-source /var/lib/operator-scripts/mysql_root_auth.sh
+# OSPRH-27031: Conditional sourcing for backwards compatibility with old pods
+# where script is updated but mysql_root_auth.sh is not yet available
+if [ -f /var/lib/operator-scripts/mysql_root_auth.sh ]; then
+    source /var/lib/operator-scripts/mysql_root_auth.sh
+fi
 
 # NOTE(dciabrin) we might use downward API to populate those in the future
 PODNAME=$HOSTNAME
