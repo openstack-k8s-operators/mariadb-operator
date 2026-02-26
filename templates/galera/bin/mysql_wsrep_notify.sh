@@ -297,6 +297,8 @@ if echo "${STATUS}" | grep -i -q -e 'failover'; then
     # where script is updated but mysql_root_auth.sh is not yet available
     if [ -f /var/lib/operator-scripts/mysql_root_auth.sh ]; then
         source /var/lib/operator-scripts/mysql_root_auth.sh
+    else
+        export MYSQL_PWD="${DB_ROOT_PASSWORD}"
     fi
     mysql_probe_state
     if [ $? != 0 ]; then
@@ -324,6 +326,8 @@ fi
 # where script is updated but mysql_root_auth.sh is not yet available
 if [ -f /var/lib/operator-scripts/mysql_root_auth.sh ]; then
     source /var/lib/operator-scripts/mysql_root_auth.sh
+else
+    export MYSQL_PWD="${DB_ROOT_PASSWORD}"
 fi
 mysql_probe_state
 if [ $? != 0 ]; then

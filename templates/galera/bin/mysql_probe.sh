@@ -5,6 +5,8 @@ set -u
 # where script is updated but mysql_root_auth.sh is not yet available
 if [ -f /var/lib/operator-scripts/mysql_root_auth.sh ]; then
     source /var/lib/operator-scripts/mysql_root_auth.sh
+else
+    export MYSQL_PWD="${DB_ROOT_PASSWORD}"
 fi
 
 
