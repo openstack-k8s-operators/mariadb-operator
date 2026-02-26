@@ -14,6 +14,8 @@ sudo chown mysql:mysql /var/local/my.cnf
 # where script is updated but mysql_root_auth.sh is not yet available
 if [ -f /var/lib/operator-scripts/mysql_root_auth.sh ]; then
     MYSQL_ROOT_AUTH_BYPASS_CHECKS=true source /var/lib/operator-scripts/mysql_root_auth.sh
+else
+    export MYSQL_PWD="${DB_ROOT_PASSWORD}"
 fi
 
 
