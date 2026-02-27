@@ -3,8 +3,8 @@ set +eux
 
 
 # prepare space for mysql_root_auth.sh to place pw cache file
-sudo mkdir -p /var/local/my.cnf
-sudo chown mysql:mysql /var/local/my.cnf
+mkdir -p /var/local/my.cnf
+chown mysql:mysql /var/local/my.cnf
 
 # set up $DB_ROOT_PASSWORD.
 # disable my.cnf caching in mysql_root_auth.sh, so that we definitely
@@ -115,7 +115,7 @@ if [ -e /var/lib/mysql/mysql ]; then
     echo -e "Database already exists. Reuse it."
     # set up permissions of mounted directories before starting
     # galera or the sidecar logging container
-    sudo -E kolla_set_configs
+    kolla_set_configs
     kolla_update_db_root_pw
 else
     echo -e "Creating new mariadb database."
@@ -129,7 +129,7 @@ else
 bind_address=localhost
 wsrep_provider=none
 EOF
-    sudo -E kolla_set_configs
+    kolla_set_configs
     kolla_extend_start
 fi
 
