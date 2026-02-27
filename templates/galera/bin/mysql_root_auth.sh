@@ -159,7 +159,9 @@ DB_ROOT_PASSWORD="${PASSWORD}"
 PW_CACHE_DIR=$(dirname "${PW_CACHE_FILE}")
 if [ ! -d "${PW_CACHE_DIR}" ]; then
     if ! mkdir -p "${PW_CACHE_DIR}" 2>/dev/null; then
-        echo "WARNING: Failed to create directory ${PW_CACHE_DIR} due to permissions; will try again later" >&2
+        echo "Did not yet create directory ${PW_CACHE_DIR} due to permissions; will try again later" >&2
+    else
+        echo "Created password cache directory ${PW_CACHE_DIR}" >&2
     fi
 fi
 
@@ -172,13 +174,17 @@ then
     # we are called for the first time from detect_gcomm_and_start.sh which is
     # called **before** kolla can set directory permissions; so when writing
     # the file, proceed even if we can't write the file yet
-    echo "WARNING: Failed to write to ${PW_CACHE_FILE} due to permissions; will try again later" >&2
+    echo "Did not yet write to ${PW_CACHE_FILE} due to permissions; will try again later" >&2
+else
+    echo "Wrote new credentials to ${PW_CACHE_FILE}" >&2
 fi
 
 # Set restrictive permissions on .my.cnf (only if file was successfully written)
 if [ -f "${PW_CACHE_FILE}" ]; then
     if ! chmod 600 "${PW_CACHE_FILE}" 2>/dev/null; then
-        echo "WARNING: Failed to set permissions on ${PW_CACHE_FILE}; will try again later" >&2
+        echo "Did not yet set permissions on ${PW_CACHE_FILE}; will try again later" >&2
+    else
+        echo "Set chmod 600 on ${PW_CACHE_FILE}" >&2
     fi
 fi
 
