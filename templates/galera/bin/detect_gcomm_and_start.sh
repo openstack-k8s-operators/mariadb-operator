@@ -11,6 +11,7 @@ else
     if [ -z "${DB_ROOT_PASSWORD}" ]; then
         echo "WARNING: mysql_root_auth.sh not found and DB_ROOT_PASSWORD not set" >&2
     fi
+    export MYSQL_PWD="${DB_ROOT_PASSWORD}"
 fi
 
 URI_FILE=/var/lib/mysql/gcomm_uri
