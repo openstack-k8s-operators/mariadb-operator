@@ -587,13 +587,16 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	// scripts to work, until they can adapt to root_auth.sh
 
 	legacyRootPassword := ""
+	// Associate to DbRootPassword field a password validator to
+	// ensure pwd invalid detected patterns are rejected.
+	validateFields := map[string]secret.Validator{
+		"DbRootPassword": secret.PasswordValidator{},
+	}
 	if instance.Spec.Secret != "" {
-		_, res, err := secret.VerifySecret(
+		_, res, err := secret.VerifySecretFields(
 			ctx,
 			types.NamespacedName{Namespace: instance.Namespace, Name: instance.Spec.Secret},
-			[]string{
-				"DbRootPassword",
-			},
+			validateFields,
 			helper.GetClient(),
 			time.Duration(5)*time.Second)
 		if err != nil {
