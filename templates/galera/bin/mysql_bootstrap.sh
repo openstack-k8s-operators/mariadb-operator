@@ -2,22 +2,6 @@
 set +eux
 
 
-# prepare space for mysql_root_auth.sh to place pw cache file
-sudo mkdir -p /var/local/my.cnf
-sudo chown mysql:mysql /var/local/my.cnf
-
-# set up $DB_ROOT_PASSWORD.
-# disable my.cnf caching in mysql_root_auth.sh, so that we definitely
-# use the root password defined in the cluster.   this should create
-# a new file in /var/local/my.cnf/
-# OSPRH-27031: Conditional sourcing for backwards compatibility with old pods
-# where script is updated but mysql_root_auth.sh is not yet available
-if [ -f /var/lib/operator-scripts/mysql_root_auth.sh ]; then
-    MYSQL_ROOT_AUTH_BYPASS_CHECKS=true source /var/lib/operator-scripts/mysql_root_auth.sh
-else
-    export MYSQL_PWD="${DB_ROOT_PASSWORD}"
-fi
-
 
 function kolla_update_db_root_pw {
     # update the root password given a set of mariadb datafiles
@@ -111,11 +95,54 @@ EOF
 }
 
 
-if [ -e /var/lib/mysql/mysql ]; then
-    echo -e "Database already exists. Reuse it."
+function kolla_set_all_configs {
+    # set up mounts, permissions, required files
+
     # set up permissions of mounted directories before starting
     # galera or the sidecar logging container
+    # NOTE: kolla_set_configs is explicitly allowed in sudoers and needs
+    # sudo to set up permissions
     sudo -E kolla_set_configs
+
+    # now that /var/local/ is owned by mysql, prepare space for invocations of
+    # mysql_root_auth.sh to place pw cache file. we do this by running the
+    # mysql_root_auth.sh which will also set up $DB_ROOT_PASSWORD for the
+    # remainder of this script.
+    #
+    # OSPRH-27031: The conditional is for backwards compatibility with old pods
+    # where script is updated but mysql_root_auth.sh is not yet available; in those
+    # cases we rely upon DB_ROOT_PASSWORD already part of the pods environment as
+    # was the case before the introduction of mysql_root_auth.sh.
+    #
+    if [ -f /var/lib/operator-scripts/mysql_root_auth.sh ]; then
+        # MYSQL_ROOT_AUTH_BYPASS_CHECKS=true: disable my.cnf caching in
+        # mysql_root_auth.sh, so that we definitely use the root password defined in
+        # the cluster, not whatever possibly stale PW is in local files.
+        MYSQL_ROOT_AUTH_BYPASS_CHECKS=true source /var/lib/operator-scripts/mysql_root_auth.sh
+    else
+        echo -e "Could not access /var/lib/operator-scripts/mysql_root_auth.sh script; "
+        echo -e "using environment DB_ROOT_PASSWORD and creating pw cache directory manually"
+        export MYSQL_PWD="${DB_ROOT_PASSWORD}"
+
+        PW_CACHE_DIR=/var/local/my.cnf
+
+        mkdir -p ${PW_CACHE_DIR}
+        chown mysql:mysql ${PW_CACHE_DIR}
+        echo -e "Created ${PW_CACHE_DIR} pw cache directory and set ownership"
+    fi
+
+}
+
+if [ -e /var/lib/mysql/mysql ]; then
+    echo -e "Database already exists. Reuse it."
+
+    # ensure at least an empty galera.cnf is present, which may not be
+    # the case in some pod restart scenarios.   kolla_set_configs will want
+    # this file to be present before writing to it.
+    touch /var/lib/config-data/generated/galera.cnf
+
+    kolla_set_all_configs
+
     kolla_update_db_root_pw
 else
     echo -e "Creating new mariadb database."
@@ -129,7 +156,9 @@ else
 bind_address=localhost
 wsrep_provider=none
 EOF
-    sudo -E kolla_set_configs
+
+    kolla_set_all_configs
+
     kolla_extend_start
 fi
 
