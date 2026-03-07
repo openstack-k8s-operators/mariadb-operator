@@ -1,0 +1,23 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: missing-dbrootpassword
+spec:
+  description: Test that missing DbRootPassword field in secret is handled gracefully
+  steps:
+  - name: Create incomplete secret
+    description: Create a secret that is missing the DbRootPassword field
+    try:
+    - apply:
+        file: incomplete-secret.yaml
+
+  - name: Deploy Galera cluster
+    description: Deploy a Galera cluster that references the incomplete secret
+    bindings:
+    - name: replicas
+      value: 1
+    try:
+    - apply:
+        file: galera.yaml
+    - assert:
+        file: galera-assert.yaml
