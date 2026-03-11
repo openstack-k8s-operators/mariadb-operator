@@ -47,8 +47,10 @@ check_arg DB "name of the Galera CR to backup"
 check_arg RETENTION "time to keep the old backup files on the filesystem"
 
 
-timestamp=$(date -u +'%Y-%m-%d_%H-%M-%S')
-log "Starting backup of Galera cluster ${DB} - ${timestamp}"
+TIMESTAMP=${BACKUP_TIMESTAMP:-$(date -u +'%Y-%m-%d_%H-%M-%S')}
+DATA_FILE="openstack_backup_${TIMESTAMP}.sql.gz"
+GRANTS_FILE="openstack_backup-grants_${TIMESTAMP}.sql.gz"
+log "Starting backup of Galera cluster ${DB} - ${TIMESTAMP}"
 trap finally EXIT
 
 
@@ -174,17 +176,17 @@ done
 
 # Mark backup files as temporary until the dumps finish succesfully
 log "Preparing a logical backup of the database"
-mysql -u${dbuser} -p${dbpass} --socket=/tmp/mariadb.sock -s -N -e "select distinct table_schema from information_schema.tables where engine='innodb' and table_schema != 'mysql';" | xargs -r mysqldump -u${dbuser} -p${dbpass} --socket=/tmp/mariadb.sock --single-transaction --databases | gzip -c > ${BACKUP_DIR}/${DB}_backup_${timestamp}.sql.gz.tmp
+mysql -u${dbuser} -p${dbpass} --socket=/tmp/mariadb.sock -s -N -e "select distinct table_schema from information_schema.tables where engine='innodb' and table_schema != 'mysql';" | xargs -r mysqldump -u${dbuser} -p${dbpass} --socket=/tmp/mariadb.sock --single-transaction --databases | gzip -c > ${BACKUP_DIR}/${DATA_FILE}.tmp
 
 log "Preparing a logical backup of the database's users and grants"
-mysql -u${dbuser} -p${dbpass} --socket=/tmp/mariadb.sock -s -N -e "SELECT CONCAT('\"SHOW GRANTS FOR ''',user,'''@''',host,''';\"') FROM mysql.user where (length(user) > 0 and user NOT LIKE 'root')" | xargs -n1 mysql -u${dbuser} -p${dbpass} --socket=/tmp/mariadb.sock -s -N -e | sed 's/$/;/' | gzip -c > ${BACKUP_DIR}/${DB}_backup-grants_${timestamp}.sql.gz.tmp
+mysql -u${dbuser} -p${dbpass} --socket=/tmp/mariadb.sock -s -N -e "SELECT CONCAT('\"SHOW GRANTS FOR ''',user,'''@''',host,''';\"') FROM mysql.user where (length(user) > 0 and user NOT LIKE 'root')" | xargs -n1 mysql -u${dbuser} -p${dbpass} --socket=/tmp/mariadb.sock -s -N -e | sed 's/$/;/' | gzip -c > ${BACKUP_DIR}/${GRANTS_FILE}.tmp
 
 log "Stop the local mariadb server"
 mysqladmin -u${dbuser} -p${dbpass} --socket=/tmp/mariadb.sock shutdown
 
 # Lift the temporary mark for new backup files
-mv -f ${BACKUP_DIR}/${DB}_backup_${timestamp}.sql.gz{.tmp,}
-mv -f ${BACKUP_DIR}/${DB}_backup-grants_${timestamp}.sql.gz{.tmp,}
+mv -f ${BACKUP_DIR}/${DATA_FILE}{.tmp,}
+mv -f ${BACKUP_DIR}/${GRANTS_FILE}{.tmp,}
 log "New backup of Galera cluster ${DB} created successful"
 
 
