@@ -124,3 +124,15 @@ spec:
           oc -n $NAMESPACE wait --for=condition=complete job/backup-1node job/backup-1node-2nd
           ../../common/backup-assert.sh backup-1node
           ../../common/backup-assert.sh backup-1node-2nd
+
+  - name: Trigger a backup with a custom timestamp marker
+    description: make sure that a custom timestamp can be passed to the backup script
+    try:
+    - script:
+        content: |
+          oc -n $NAMESPACE create job --from=cronjob/openstack-backup-openstack custom-timestamp --dry-run=client -o json | jq '.spec.template.spec.containers[0].env += [{ "name": "BACKUP_TIMESTAMP", value:"chainsaw_unit_test" }]' | oc -n $NAMESPACE apply -f -
+    - script:
+        content: |
+          oc -n $NAMESPACE wait --for=condition=complete job/backup-1node
+          ../../common/backup-assert.sh backup-1node
+          oc -n $NAMESPACE get pod -o name -l job-name=custom-timestamp | xargs oc -n $NAMESPACE logs | grep 'Starting backup .* - chainsaw_unit_test'
