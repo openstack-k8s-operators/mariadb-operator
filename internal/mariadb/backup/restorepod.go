@@ -26,10 +26,13 @@ func RestorePod(restoreCR *mariadbv1.GaleraRestore, backupCR *mariadbv1.GaleraBa
 		Value: "COPY_ALWAYS",
 	}}
 
-	// The restore pod uses the same volume mounts and container image
-	// as the configured backup CR, so it automatically has access to
-	// the captured backups, and it can run the same mysql CLI version
+	// The restore pod uses the same container image as the configured backup CR,
+	// so it can run the same mysql CLI version. It uses RestoreVolumes/RestoreVolumeMounts
+	// which exclude the transfer-data volume since restore only reads SQL dumps
+	// from the backup PVC. This avoids scheduling conflicts with local storage
+	// (LVMS/TopoLVM) where the transfer PVC could land on a different node.
 	backupPodSpec := backupCronJob.Spec.JobTemplate.Spec.Template.Spec
+
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      prefixName,
@@ -50,9 +53,9 @@ func RestorePod(restoreCR *mariadbv1.GaleraRestore, backupCR *mariadbv1.GaleraBa
 						"sudo -E /usr/local/bin/kolla_copy_cacerts;" +
 						"sleep infinity"},
 				Env:          environ,
-				VolumeMounts: backupPodSpec.Containers[0].VolumeMounts,
+				VolumeMounts: RestoreVolumeMounts(backupCR, galeraCR),
 			}},
-			Volumes: backupPodSpec.Volumes,
+			Volumes: RestoreVolumes(backupCR, galeraCR),
 		},
 	}
 	return pod
