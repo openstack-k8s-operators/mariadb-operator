@@ -82,6 +82,8 @@ const (
 var (
 	// ErrOpenStackSecretNotFound indicates that the OpenStack secret was not found
 	ErrOpenStackSecretNotFound = errors.New("OpenStack secret not found")
+	// ErrOpenStackSecretMissingField indicates that the OpenStack secret is missing a required field
+	ErrOpenStackSecretMissingField = errors.New("OpenStack secret missing required field")
 )
 
 var allWatchFields = []string{
@@ -609,6 +611,16 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 					condition.SeverityWarning,
 					condition.InputReadyWaitingMessage))
 				return res, fmt.Errorf("%w: %s", ErrOpenStackSecretNotFound, instance.Spec.Secret)
+			}
+			if errors.Is(err, util.ErrFieldNotFound) {
+				// The secret exists but is missing the DbRootPassword field.
+				// We treat this as a warning because it means that the service will not be able to start.
+				instance.Status.Conditions.Set(condition.FalseCondition(
+					condition.InputReadyCondition,
+					condition.ErrorReason,
+					condition.SeverityWarning,
+					condition.InputReadyWaitingMessage))
+				return res, fmt.Errorf("%w: %s", ErrOpenStackSecretMissingField, "DbRootPassword")
 			}
 			return ctrl.Result{}, err
 		}
