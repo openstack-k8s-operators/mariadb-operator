@@ -639,12 +639,22 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		return ctrl.Result{}, err
 	}
 
-	// the current root secret for the MariaDBAccount name is copied out to Status.
-	// this allows us to avoid having to change the Spec.
-	// Also by trying to always use CurrentSecret if available, we try to keep
-	// instance.Status.RootDatabaseSecret as the secret that should work for
-	// root right now, independent of changes in the mariadbaccount name
-	// or its secret that have not been reconciled w/ a new job hash.
+	// copy out the name of the MariaDBAccount in use to Status, so that it can
+	// be located by the user for modification (OSPRH-27668). While the
+	// RootDatabaseAccount is also part of instance.Spec, that field defaults
+	// to blank to indicate a naming convention is to be used; the status field
+	// shows the actual name in use regardless of whether it was manually set
+	// or naming-convention generated.
+	instance.Status.RootDatabaseAccount = mariaDBAccount.Name
+
+	// also copy out the name of the Secret linked to the above MariaDBAccount
+	// to Status, favoring its CurrentSecret field (e.g. the effective secret
+	// right now) above all.  CurrentSecret functions as the canonical source
+	// of the root DB password for the Galera instance as it is currently set.
+	// Updates to the MariaDBAccount->Secret may be made independently, which
+	// will be reflected as an update in this field once the MariaDBAccount has
+	// been reconciled with a new job hash (e.g. the actual DB password is
+	// updated in the galera instance).
 	if mariaDBAccount.Status.CurrentSecret != "" {
 		instance.Status.RootDatabaseSecret = mariaDBAccount.Status.CurrentSecret
 	} else if instance.Status.RootDatabaseSecret == "" {

@@ -3,6 +3,7 @@ kind: Galera
 metadata:
   name: openstack
 status:
+  rootDatabaseAccount: openstack-mariadb-root
   # Verify that rootDatabaseSecret has been updated to the new secret
   rootDatabaseSecret: new-root-secret
   bootstrapped: true

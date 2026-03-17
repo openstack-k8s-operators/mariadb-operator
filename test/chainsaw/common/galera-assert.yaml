@@ -8,6 +8,8 @@ spec:
   storageRequest: 500M
 status:
   bootstrapped: true
+  rootDatabaseAccount: openstack-mariadb-root
+  rootDatabaseSecret: openstack-mariadb-root-db-secret
   conditions:
   - message: Setup complete
     reason: Ready
