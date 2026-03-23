@@ -11,6 +11,7 @@ CACERT=${SERVICEACCOUNT}/ca.crt
 
 # script arguments
 confirm=
+content=all
 target_pod=
 
 
@@ -33,7 +34,15 @@ function err() {
 }
 
 function usage() {
-    echo "Usage: `basename $0` [--database GALERA_CR] backupfile.sql.gz ..."
+    echo "Usage: `basename $0` [--content all|data|grants] backupfile.sql.gz ..."
+    echo ""
+    echo "Options:"
+    echo "  -y, --yes              Skip confirmation prompt"
+    echo "  -d, --database DB      Galera CR name (default: from \$DB env var)"
+    echo "  -c, --content MODE     What to restore: all (default), data, or grants"
+    echo "                           data   - database data only (skip grants)"
+    echo "                           grants - user grants only (skip data)"
+    echo "                           all    - both data and grants"
     exit 1
 }
 
@@ -55,7 +64,7 @@ function finalizer_check_endpoint {
 if [ -z "$*" ]; then
     usage
 fi
-OPTS=$(getopt -o hd:y --long help,database:,yes -- "$@")
+OPTS=$(getopt -o hd:yc: --long help,database:,yes,content: -- "$@")
 eval set -- "$OPTS"
 while true; do
     case "$1" in
@@ -63,12 +72,16 @@ while true; do
             usage
             ;;
         -d | --database)
-            $DB=$2
-            shift
+            DB=$2
+            shift 2
             ;;
         -y | --yes)
             confirm=y
             shift
+            ;;
+        -c | --content)
+            content=$2
+            shift 2
             ;;
         --)
             shift
@@ -80,8 +93,14 @@ while true; do
     esac
 done
 
+# Validate content flag
+case "$content" in
+    all|data|grants) ;;
+    *) err "Invalid --content value: $content (must be: all, data, or grants)" ;;
+esac
+
 if [ -z "${confirm}" ]; then
-    log "You are about to restore contents of Galera cluster ${DB} with the following backup files:"
+    log "You are about to restore ${content} of Galera cluster ${DB} with the following backup files:"
     for backup in $*; do
         log " - ${backup}"
     done
@@ -126,12 +145,30 @@ log "Disable traffic to Galera cluster ${service}"
 trap finalizer_check_endpoint EXIT
 set_endpoint ${service} ""
 
-# restore all backup files passed in argument to this script
+# restore backup files passed in argument, filtered by --content
+log "Restore content: ${content}"
 for backup in $*; do
     if [ ! -f "${backup}" ]; then
         log "WARNING: ${backup} is invalid, skipping restore for it"
         continue
     fi
+
+    # Filter by content type based on grants file naming convention
+    # Grants files contain "-grants" in the filename (e.g., openstack_backup-grants_*.sql.gz)
+    is_grants=false
+    if echo "${backup}" | grep -q -- '-grants'; then
+        is_grants=true
+    fi
+
+    if [ "$content" = "data" ] && [ "$is_grants" = "true" ]; then
+        log "Skipping grants file: ${backup}"
+        continue
+    fi
+    if [ "$content" = "grants" ] && [ "$is_grants" = "false" ]; then
+        log "Skipping data file: ${backup}"
+        continue
+    fi
+
     if echo "${backup}" | grep -q '.gz$'; then
         READ="gunzip -cd"
     else
