@@ -168,7 +168,7 @@ fi
 if ! cat > "${PW_CACHE_FILE}" <<EOF 2>/dev/null
 [client]
 user=root
-password=${PASSWORD}
+password='${PASSWORD}'
 EOF
 then
     # we are called for the first time from detect_gcomm_and_start.sh which is
