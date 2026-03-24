@@ -91,3 +91,42 @@ spec:
             mysql -e "SHOW DATABASES" > /dev/null
             echo "New password persists and works correctly"
           '
+
+  # Tests for special characters in passwords (OSPRH-28209)
+  - name: Test password with invalid characters is rejected
+    description: Verify passwords with quotes are rejected by operator
+    skipDelete: true
+    try:
+    - apply:
+        file: special-char-test1-secret.yaml
+    - apply:
+        file: root-account-test1.yaml
+    - assert:
+        file: root-account-assert-test1.yaml
+
+  - name: Test password with hash symbols is accepted
+    description: Verify passwords with hash symbols work correctly
+    skipDelete: true
+    try:
+    - apply:
+        file: special-char-test2-secret.yaml
+    - apply:
+        file: root-account-test2.yaml
+    - assert:
+        file: root-account-assert-test2.yaml
+    - script:
+        content: |
+          EXPECTED_PASSWORD='p@ssw#rd!%123'
+          for pod in openstack-galera-0 openstack-galera-1 openstack-galera-2; do
+            echo "Testing hash symbol password on $pod..."
+            oc exec -n ${NAMESPACE} -c galera $pod -- /bin/sh -c '
+              rm -f /var/local/mysql_pw_cache.cnf
+              source /var/lib/operator-scripts/mysql_root_auth.sh
+              if [ "$MYSQL_PWD" != "'"$EXPECTED_PASSWORD"'" ]; then
+                echo "ERROR: password mismatch (expected: '"$EXPECTED_PASSWORD"', actual: $MYSQL_PWD)"
+                exit 1
+              fi
+              mysql -e "SELECT 1" > /dev/null
+              echo "PASS: Hash symbol password works on $(hostname)"
+            '
+          done
