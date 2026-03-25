@@ -33,7 +33,7 @@ fi
 # Check if we have cached credentials
 if [ "${MYSQL_ROOT_AUTH_BYPASS_CHECKS}" != "true" ] && [ -f "${PW_CACHE_FILE}" ]; then
     # Read the password from .my.cnf
-    PASSWORD=$(grep '^password=' "${PW_CACHE_FILE}" | cut -d= -f2-)
+    PASSWORD=$(grep '^password=' "${PW_CACHE_FILE}" | cut -d= -f2- | sed 's/^"\(.*\)"$/\1/')
 
     # Validate credentials if MySQL is accessible
     if [ -n "${PASSWORD}" ]; then
@@ -163,10 +163,13 @@ if [ ! -d "${PW_CACHE_DIR}" ]; then
     fi
 fi
 
+# Quote password for my.cnf format to handle hash symbols (#)
+# Hash symbols in unquoted passwords are treated as comments in my.cnf
+# Note: passwords with quotes or backslashes are rejected by the operator (OSPRH-28209)
 if ! cat > "${PW_CACHE_FILE}" <<EOF 2>/dev/null
 [client]
 user=root
-password=${PASSWORD}
+password="${PASSWORD}"
 EOF
 then
     # we are called for the first time from detect_gcomm_and_start.sh which is

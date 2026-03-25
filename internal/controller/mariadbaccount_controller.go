@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -38,6 +39,12 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+)
+
+// Static errors
+var (
+	// ErrInvalidPasswordCharacter indicates that the password contains invalid characters
+	ErrInvalidPasswordCharacter = errors.New("password contains invalid character")
 )
 
 // MariaDBAccountReconciler reconciles a MariaDBAccount object
@@ -744,6 +751,35 @@ func (r *MariaDBAccountReconciler) ensureAccountSecret(
 		_, ok := secretObj.Data[field]
 		if !ok {
 			err := fmt.Errorf("%w: field %s not found in Secret %s", util.ErrFieldNotFound, field, secretName)
+			return ctrl.Result{}, err
+		}
+	}
+
+	// Validate password contains only safe characters (OSPRH-28209)
+	// Use a whitelist approach: only allow alphanumerics and specific safe special characters
+	// to prevent shell metacharacter injection throughout the operator's scripts
+	password := string(secretObj.Data[databasev1beta1.DatabasePasswordSelector])
+	// Allowed special characters: @ # % ^ * - _ = + : , . ! ~
+	allowedSpecialChars := "@#%^*-_=+:,.!~"
+
+	for i, char := range password {
+		isValid := (char >= 'a' && char <= 'z') ||
+			(char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') ||
+			strings.ContainsRune(allowedSpecialChars, char)
+
+		if !isValid {
+			err := fmt.Errorf("%w: '%c' at position %d - passwords can only contain letters, numbers, and these special characters: %s",
+				ErrInvalidPasswordCharacter, char, i, allowedSpecialChars)
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				databasev1beta1.MariaDBAccountReadyCondition,
+				secret.ReasonSecretError,
+				condition.SeverityWarning,
+				condition.InputReadyErrorMessage,
+				err.Error()))
+			log.Info(fmt.Sprintf(
+				"MariaDBAccount '%s' has invalid password character '%c' at position %d in Secret '%s'",
+				instance.Name, char, i, instance.Spec.Secret))
 			return ctrl.Result{}, err
 		}
 	}
