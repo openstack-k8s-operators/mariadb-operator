@@ -1,6 +1,8 @@
 package mariadbbackup
 
 import (
+	"github.com/openstack-k8s-operators/lib-common/modules/common/backup"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	resource "k8s.io/apimachinery/pkg/api/resource"
@@ -24,6 +26,10 @@ func BackupPVCs(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera) (*corev1.Persist
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      backupName,
 			Namespace: b.Namespace,
+			Labels: util.MergeStringMaps(
+				backup.GetBackupLabels(backup.CategoryControlPlane),
+				backup.GetRestoreLabels(backup.RestoreOrder00, backup.CategoryControlPlane),
+			),
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{

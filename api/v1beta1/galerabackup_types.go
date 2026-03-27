@@ -63,6 +63,9 @@ type GaleraBackupStatus struct {
 //+kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[0].status",description="Ready"
 // +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.conditions[0].message",description="Message"
+//+kubebuilder:metadata:labels=backup.openstack.org/restore=true
+//+kubebuilder:metadata:labels=backup.openstack.org/category=controlplane
+//+kubebuilder:metadata:labels=backup.openstack.org/restore-order=40
 
 // GaleraBackup is the Schema for the galerabackups API
 type GaleraBackup struct {
