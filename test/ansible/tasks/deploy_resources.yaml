@@ -1,0 +1,65 @@
+---
+- name: Deploy mariadb-operator with initial image
+  community.general.make:
+    chdir: "{{ install_yamls_dir }}"
+    target: mariadb
+  environment:
+    MARIADB_IMG: "{{ mariadb_operator_image_initial }}"
+    OPERATOR_NAMESPACE: "{{ operator_namespace }}"
+    NAMESPACE: "{{ namespace }}"
+    OUT: "{{ tmp_dir }}"
+    TIMEOUT: "{{ deployment_timeout }}"
+  tags:
+    - operator
+
+- name: Wait for mariadb-operator to be ready
+  ansible.builtin.shell: >
+    oc -n {{ operator_namespace }} wait --for=create --timeout={{ deployment_timeout }}
+    deployment/mariadb-operator-controller-manager &&
+    oc -n {{ operator_namespace }} wait --for=condition=Available --timeout={{ deployment_timeout }}
+    deployment/mariadb-operator-controller-manager
+  changed_when: false
+  tags:
+    - operator
+
+- name: Checkout the mariadb-operator repo to configure a Galera CR
+  community.general.make:
+    chdir: "{{ install_yamls_dir }}"
+    target: mariadb_deploy_prep
+  environment:
+    OUT: "{{ tmp_dir }}"
+  tags:
+    - galera
+
+- name: Prepare a Galera CR to deploy with configured replicas
+  ansible.builtin.shell: |
+    set -o pipefail
+    (cat {{ galera_cr }} | grep -v 'replicas:'; echo "  replicas: {{ replicas }}")> {{ galera_cr_prepared }}
+  changed_when: false
+  tags:
+    - galera
+
+- name: Deploy the prepared Galera CR
+  community.general.make:
+    chdir: "{{ install_yamls_dir }}"
+    target: mariadb_deploy
+  environment:
+    DBSERVICE: "{{ db_service }}"
+    NAMESPACE: "{{ namespace }}"
+    MARIADB_CR: "{{ galera_cr_prepared }}"
+    OUT: "{{ tmp_dir }}"
+    TIMEOUT: "{{ deployment_timeout }}"
+  tags:
+    - galera
+
+- name: Wait for all the Galera pods to be ready
+  ansible.builtin.shell: >
+    oc -n {{ namespace }} wait --for=create --timeout={{ deployment_timeout }}
+    galera/openstack &&
+    oc -n {{ namespace }} wait --for=condition=Ready --timeout={{ deployment_timeout }}
+    galera/openstack &&
+    oc -n {{ namespace }} wait --for=jsonpath='{.status.availableReplicas}={{ replicas }}' --timeout={{ deployment_timeout }}
+    statefulset/openstack-galera
+  changed_when: false
+  tags:
+    - galera

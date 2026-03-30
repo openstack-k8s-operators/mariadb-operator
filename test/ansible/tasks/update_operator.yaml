@@ -1,0 +1,78 @@
+---
+- name: Uninstall the old mariadb-operator
+  community.general.make:
+    chdir: "{{ install_yamls_dir }}"
+    target: mariadb_cleanup
+  environment:
+    OPERATOR_NAMESPACE: "{{ operator_namespace }}"
+    NAMESPACE: "{{ namespace }}"
+    TIMEOUT: "{{ update_timeout }}"
+  tags:
+    - update
+
+- name: Wait for the mariadb-operator to be uninstalled
+  ansible.builtin.shell: >
+    set -o pipefail && echo $(oc -n {{ operator_namespace }} get csv -l operators.coreos.com/mariadb-operator.openstack-operators -o name)
+    catalogsource/mariadb-operator-index
+    subscription/mariadb-operator
+    | xargs oc -n {{ operator_namespace }} wait --for=delete --timeout={{ update_timeout }}
+  changed_when: false
+  tags:
+    - update
+
+- name: Update mariadb-operator to new image
+  community.general.make:
+    chdir: "{{ install_yamls_dir }}"
+    target: mariadb
+  environment:
+    MARIADB_IMG: "{{ mariadb_operator_image_updated }}"
+    OPERATOR_NAMESPACE: "{{ operator_namespace }}"
+    NAMESPACE: "{{ namespace }}"
+    TIMEOUT: "{{ deployment_timeout }}"
+  tags:
+    - update
+
+- name: Wait for the mariadb-operator to be started
+  ansible.builtin.shell: >
+    oc -n {{ operator_namespace }} wait --for=create --timeout={{ update_timeout }} deployment/mariadb-operator-controller-manager
+  changed_when: false
+  tags:
+    - update
+
+- name: Trigger a cluster stop during the galera rolling update
+  when:
+    - replicas == 3
+    - disruption
+  tags:
+    - update
+  block:
+    - name: Wait for the first Galera pod to be updated
+      ansible.builtin.shell: >
+        oc -n {{ namespace }} wait --for='jsonpath={.status.conditions[?(@.type=="Ready")].status}=False' --timeout={{ update_timeout }} pod/openstack-galera-2
+      changed_when: false
+      tags:
+        - update
+
+    - name: Restart the remaining Galera pod before the first one gets fully restarted
+      ansible.builtin.shell: |
+        oc -n {{ namespace }} exec pod/openstack-galera-0 -- killall -s TERM mysqld
+        oc -n {{ namespace }} exec pod/openstack-galera-1 -- killall -s TERM mysqld
+      changed_when: false
+      tags:
+        - update
+
+- name: Wait for all the Galera pods to be updated
+  ansible.builtin.shell: |
+    set -o pipefail
+    UPDATE_REV=$(oc -n {{ namespace }} get -o json statefulset/openstack-galera | jq -r .status.updateRevision)
+    oc -n {{ namespace }} wait --for=jsonpath="{.status.currentRevision}=${UPDATE_REV}" --timeout={{ update_timeout }} statefulset/openstack-galera
+  changed_when: false
+  tags:
+    - update
+
+- name: Wait for all the Galera pods to be ready
+  ansible.builtin.shell: |
+    oc -n {{ namespace }} wait --for=jsonpath="{.status.availableReplicas}={{ replicas }}" --timeout={{ update_timeout }} statefulset/openstack-galera
+  changed_when: false
+  tags:
+    - update

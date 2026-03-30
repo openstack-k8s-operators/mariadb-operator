@@ -1,0 +1,25 @@
+---
+# Default configuration for the update test playbook
+
+install_yamls_dir: "{{ playbook_dir }}/../../../../install_yamls"
+tmp_dir: "{{ lookup('env', 'PWD') }}/out"
+
+# mariadb-operator images
+mariadb_operator_image_initial: "quay.io/openstack-k8s-operators/mariadb-operator-index:latest"
+mariadb_operator_image_updated: "quay.io/openstack-k8s-operators/mariadb-operator-index:latest"
+
+# Disruption tests during update
+disruption: true
+
+# Namespaces
+namespace: "openstack"
+operator_namespace: "openstack-operators"
+
+# Galera cluster configuration
+galera_cr:  "{{ tmp_dir }}/operator/mariadb-operator/config/samples/mariadb_v1beta1_galera.yaml"
+replicas: 3
+db_service: "galera"
+
+# Timeout settings
+deployment_timeout: "120s"
+update_timeout: "480s"
