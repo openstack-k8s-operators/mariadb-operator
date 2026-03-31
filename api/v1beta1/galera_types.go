@@ -33,7 +33,7 @@ const (
 	// GaleraContainerImage is the fall-back container image for Galera
 	GaleraContainerImage = "quay.io/podified-antelope-centos9/openstack-mariadb:current-podified"
 
-	storageRequestProdMin = "5G"
+	storageRequestProdMin = "5Gi"
 
 	// CrMaxLengthCorrection - DNS1123LabelMaxLength (63) - CrMaxLengthCorrection used in validation to
 	// omit issue with statefulset pod label "controller-revision-hash": "<statefulset_name>-<hash>"
