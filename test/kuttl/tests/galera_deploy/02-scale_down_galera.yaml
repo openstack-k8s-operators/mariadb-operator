@@ -1,5 +1,0 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestStep
-commands:
-  - script: |
-      oc patch galera -n $NAMESPACE openstack --type='json' -p='[{"op": "replace", "path": "/spec/replicas", "value":1}]'

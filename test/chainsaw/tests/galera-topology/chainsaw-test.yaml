@@ -1,0 +1,19 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: galera-topology
+spec:
+  description: Test Galera deployment with Topology CR
+  steps:
+  - name: Deploy Galera with Topology
+    description: Deploy a 3-node Galera cluster with topology spread constraints
+    bindings:
+    - name: replicas
+      value: 3
+    try:
+    - apply:
+        file: ./topology.yaml
+    - apply:
+        file: ./galera-topology.yaml
+    - assert:
+        file: ./galera-topology-assert.yaml

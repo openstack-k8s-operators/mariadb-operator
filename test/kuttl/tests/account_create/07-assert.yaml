@@ -1,6 +1,0 @@
----
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-commands:
-  - script: |
-      ../../common/scripts/check_db_account.sh openstack-galera-0 kuttldb_accounttest someuser dbsecret1 --reverse

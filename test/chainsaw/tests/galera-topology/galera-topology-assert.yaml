@@ -1,20 +1,13 @@
-#
-# Check for:
-#
-# - 1 MariaDB CR
-# - 1 Pod for MariaDB CR
-#
-
 apiVersion: mariadb.openstack.org/v1beta1
 kind: Galera
 metadata:
   name: openstack
 spec:
-  replicas: 1
+  replicas: ($replicas)
   secret: osp-secret
   storageRequest: 500M
-  nodeSelector:
-    node-role.kubernetes.io/worker: ""
+  topologyRef:
+    name: galera-topology
 status:
   bootstrapped: true
   conditions:
@@ -58,13 +51,18 @@ status:
     reason: Ready
     status: "True"
     type: TLSInputReady
+  - message: Topology config create completed
+    reason: Ready
+    status: "True"
+    type: TopologyReady
+
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: openstack-galera
 spec:
-  replicas: 1
+  replicas: ($replicas)
   selector:
     matchLabels:
       app: galera
@@ -78,8 +76,13 @@ spec:
         cr: galera-openstack
         galera/name: openstack
     spec:
-      nodeSelector:
-        node-role.kubernetes.io/worker: ""
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: "topology.kubernetes.io/hostname"
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            service: mariadb
       containers:
       - command:
         - /usr/bin/dumb-init
@@ -96,17 +99,24 @@ spec:
       serviceAccount: galera-openstack
       serviceAccountName: galera-openstack
 status:
-  availableReplicas: 1
-  readyReplicas: 1
-  replicas: 1
+  availableReplicas: ($replicas)
+  readyReplicas: ($replicas)
+  replicas: ($replicas)
 ---
 apiVersion: v1
 kind: Pod
 metadata:
   name: openstack-galera-0
-spec:
-  nodeSelector:
-    node-role.kubernetes.io/worker: ""
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: openstack-galera-1
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: openstack-galera-2
 ---
 apiVersion: v1
 kind: Service
@@ -126,8 +136,3 @@ apiVersion: v1
 kind: Endpoints
 metadata:
   name: openstack-galera
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: openstack-config-data

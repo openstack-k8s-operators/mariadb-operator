@@ -1,0 +1,12 @@
+apiVersion: topology.openstack.org/v1beta1
+kind: Topology
+metadata:
+  name: galera-topology
+spec:
+  topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: "topology.kubernetes.io/hostname"
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        service: mariadb
