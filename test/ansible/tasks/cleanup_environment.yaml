@@ -1,0 +1,33 @@
+---
+- name: Remove the Galera CR if it exists
+  community.general.make:
+    chdir: "{{ install_yamls_dir }}"
+    target: mariadb_deploy_cleanup
+  environment:
+    DBSERVICE: "{{ db_service }}"
+    NAMESPACE: "{{ namespace }}"
+    MARIADB_CR: "{{ galera_cr }}"
+    OUT: "{{ tmp_dir }}"
+    TIMEOUT: "{{ deployment_timeout }}"
+  tags:
+    - cleanup
+
+- name: Wait until the Galera CR is deleted
+  ansible.builtin.shell: >
+    oc -n {{ namespace }} wait --for=delete --timeout={{ deployment_timeout }} galera/openstack
+  changed_when: false
+  tags:
+    - cleanup
+
+- name: Uninstall the mariadb-operator
+  community.general.make:
+    chdir: "{{ install_yamls_dir }}"
+    target: mariadb_cleanup
+  environment:
+    MARIADB_IMG: "{{ mariadb_operator_image_initial }}"
+    OPERATOR_NAMESPACE: "{{ operator_namespace }}"
+    NAMESPACE: "{{ namespace }}"
+    OUT: "{{ tmp_dir }}"
+    TIMEOUT: "{{ deployment_timeout }}"
+  tags:
+    - cleanup

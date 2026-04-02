@@ -1,0 +1,60 @@
+---
+# Main playbook for testing update of mariadb-operator image.
+# The tasks run the following actions:
+# - Deploy the mariadb-operator with an input image
+# - Deploy a Galera cluster (3-node by default)
+# - Update the mariadb-operator to a new image
+# - if configured, trigger a disruption during the galera rolling update (default)
+# - Verify that the update finished succesfully
+
+- name: Deploy and Update mariadb-operator with a running Galera CR
+  hosts: localhost
+  gather_facts: true
+
+  vars_files:
+    - ../vars/mariadb-operator-vars.yaml
+
+  vars:
+    galera_cr_prepared: "{{ tmp_dir }}/{{ galera_cr | splitext | first | basename }}_prepared.yaml"
+
+  tasks:
+    - name: Display configuration
+      ansible.builtin.debug:
+        msg:
+          - "Temporary directory: {{ tmp_dir }}"
+          - "install_yamls directory: {{ install_yamls_dir }}"
+          - "Initial MariaDB image: {{ mariadb_operator_image_initial }}"
+          - "Updated MariaDB image: {{ mariadb_operator_image_updated }}"
+          - "Galera CR: {{ galera_cr }}"
+          - "Galera replicas: {{ replicas }}"
+          - "Disruption: {{ disruption }}"
+          - "Namespace: {{ namespace }}"
+      tags:
+        - always
+
+    - name: Verify install_yamls repo is available
+      ansible.builtin.stat:
+        path: "{{ install_yamls_dir }}"
+      register: file_info
+      failed_when: file_info.stat.isdir is not defined or not file_info.stat.isdir
+      tags:
+        - always
+
+    - name: Cleanup existing mariadb-operator and galera CR
+      ansible.builtin.include_tasks:
+        file: ../tasks/cleanup_environment.yaml
+      tags:
+        - never
+        - cleanup
+
+    - name: Include initial deployment tasks
+      ansible.builtin.include_tasks:
+        file: ../tasks/deploy_resources.yaml
+      tags:
+        - deploy
+
+    - name: Include operator update tasks
+      ansible.builtin.include_tasks:
+        file: ../tasks/update_operator.yaml
+      tags:
+        - update
