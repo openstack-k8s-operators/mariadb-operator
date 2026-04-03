@@ -3,9 +3,9 @@ kind: Galera
 metadata:
   name: openstack
 spec:
+  replicas: ($replicas)
   secret: osp-secret
   storageClass: local-storage
   storageRequest: 500M
-  replicas: 1
-  nodeSelector:
-    node-role.kubernetes.io/worker: ""
+  topologyRef:
+    name: galera-topology

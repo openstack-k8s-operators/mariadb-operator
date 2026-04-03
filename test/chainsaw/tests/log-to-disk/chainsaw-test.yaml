@@ -1,0 +1,50 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: log-to-disk
+spec:
+  steps:
+  - name: Deploy 1-node cluster without logging
+    description: Deploy a 1-node cluster and wait for readiness
+    bindings:
+    - name: replicas
+      value: 1
+    try:
+    - apply:
+        file: ../../common/galera.yaml
+    - assert:
+        file: ../../common/galera-assert.yaml
+
+  - name: Enable log to disk
+    description: Ensure that log sidecar container is added when logToDisk is enabled
+    try:
+    - patch:
+        resource:
+          apiVersion: mariadb.openstack.org/v1beta1
+          kind: Galera
+          metadata:
+            name: openstack
+          spec:
+            logToDisk: true
+    - assert:
+        resource:
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: openstack-galera
+          status:
+            availableReplicas: 1
+            readyReplicas: 1
+            replicas: 1
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: openstack-galera-0
+          status:
+            containerStatuses:
+            - name: galera
+              ready: true
+            - name: log
+              ready: true
