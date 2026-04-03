@@ -1,0 +1,148 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: root-pw-fallback
+spec:
+  steps:
+  - name: Deploy 3-node cluster
+    description: Deploy a 3-node galera cluster
+    bindings:
+    - name: replicas
+      value: 3
+    try:
+    - apply:
+        file: ../../common/galera.yaml
+    - assert:
+        file: ../../common/galera-assert.yaml
+
+  - name: Verify initial root account exists
+    description: Verify the root MariaDBAccount exists with initial secret
+    try:
+    - assert:
+        file: root-account-initial-assert.yaml
+
+  - name: Capture original password and delete root at percent
+    description: >
+      Save the current root password, then DROP the root@% user.
+      This keeps root@localhost working (probes stay healthy) but
+      makes remote TCP connections made as root fail from any other host.
+      The DROP replicates across all galera nodes.
+    try:
+    - script:
+        content: |
+          SECRET_NAME=$(oc get galera openstack -n ${NAMESPACE} -o jsonpath='{.status.rootDatabaseSecret}')
+          ORIG_PW=$(oc get secret $SECRET_NAME -n ${NAMESPACE} -o jsonpath='{.data.DatabasePassword}' | base64 -d)
+          if [ -z "${ORIG_PW}" ]; then
+            echo "FAIL: Could not capture original password"
+            exit 1
+          fi
+          echo -n "${ORIG_PW}"
+        outputs:
+        - name: orig_pw
+          value: ($stdout)
+    - script:
+        env:
+        - name: ORIG_PW
+          value: ($orig_pw)
+        content: |
+          oc exec -n ${NAMESPACE} -c galera openstack-galera-0 -- /bin/sh -c "
+            mysql -uroot -p'${ORIG_PW}' -e \"DROP USER 'root'@'%'; FLUSH PRIVILEGES;\"
+          "
+          echo "Dropped root@% user (replicates to all nodes)"
+    - script:
+        env:
+        - name: ORIG_PW
+          value: ($orig_pw)
+        content: |
+          oc exec -n ${NAMESPACE} -c galera openstack-galera-0 -- /bin/sh -c "
+            mysql -uroot -p'${ORIG_PW}' -e 'SELECT 1' > /dev/null
+          "
+          echo "Verified root@localhost still works"
+
+  - name: Test fallback path from a remote host
+    description: >
+      From galera-1, run mysql_root_auth.sh with MYSQL_REMOTE_HOST
+      pointing to galera-0.  Since root@% is gone, the primary
+      password check fails (TCP connection rejected), PASSWORD_VALID
+      stays false and the second "fallback" access of the cluster occurs,
+      which is what we want to exercise here.
+    try:
+    - script:
+        content: |
+          SECRET_NAME=$(oc get galera openstack -n ${NAMESPACE} -o jsonpath='{.status.rootDatabaseSecret}')
+          ORIG_PW=$(oc get secret $SECRET_NAME -n ${NAMESPACE} -o jsonpath='{.data.DatabasePassword}' | base64 -d)
+          echo -n "${ORIG_PW}"
+        outputs:
+        - name: orig_pw
+          value: ($stdout)
+    - script:
+        content: |
+          RESULT=$(oc exec -n ${NAMESPACE} -c galera openstack-galera-1 -- /bin/sh -c '
+            rm -f /var/local/my.cnf/mysql_pw_cache.cnf
+            export MYSQL_REMOTE_HOST=openstack-galera-0.openstack-galera
+            source /var/lib/operator-scripts/mysql_root_auth.sh 2>&1
+            echo "MYSQL_PWD=${MYSQL_PWD}"
+          ')
+          echo "${RESULT}"
+        outputs:
+        - name: result
+          value: ($stdout)
+    - script:
+        env:
+        - name: RESULT
+          value: ($result)
+        content: |
+          # Verify the WARNING message appeared (proves primary path
+          # failed and we entered the fallback block)
+          if ! echo "${RESULT}" | grep -q "primary password retrieved from cluster failed authentication"; then
+            echo "FAIL: Expected WARNING about primary password failure not found"
+            exit 1
+          fi
+          echo "PASS: Primary password failure WARNING present"
+    - script:
+        env:
+        - name: RESULT
+          value: ($result)
+        - name: ORIG_PW
+          value: ($orig_pw)
+        content: |
+          # Verify MYSQL_PWD was set to the original password.
+          if ! echo "${RESULT}" | grep -q "MYSQL_PWD=${ORIG_PW}"; then
+            echo "FAIL: MYSQL_PWD should be '${ORIG_PW}' (from fallback MariaDBAccount)"
+            exit 1
+          fi
+          echo "PASS: Fallback path resolved correct password from MariaDBAccount"
+
+  - name: Restore root at percent user
+    description: Restore the root@% user so the cluster is fully functional again
+    try:
+    - script:
+        content: |
+          SECRET_NAME=$(oc get galera openstack -n ${NAMESPACE} -o jsonpath='{.status.rootDatabaseSecret}')
+          ORIG_PW=$(oc get secret $SECRET_NAME -n ${NAMESPACE} -o jsonpath='{.data.DatabasePassword}' | base64 -d)
+          echo -n "${ORIG_PW}"
+        outputs:
+        - name: orig_pw
+          value: ($stdout)
+    - script:
+        env:
+        - name: ORIG_PW
+          value: ($orig_pw)
+        content: |
+          oc exec -n ${NAMESPACE} -c galera openstack-galera-0 -- /bin/sh -c "
+            mysql -uroot -p'${ORIG_PW}' -e \"
+              CREATE USER 'root'@'%' IDENTIFIED BY '${ORIG_PW}';
+              GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;
+              FLUSH PRIVILEGES;
+            \"
+          "
+          echo "Restored root@% user"
+    - script:
+        env:
+        - name: ORIG_PW
+          value: ($orig_pw)
+        content: |
+          oc exec -n ${NAMESPACE} -c galera openstack-galera-1 -- /bin/sh -c "
+            mysql -h openstack-galera-0.openstack-galera -uroot -p'${ORIG_PW}' -e 'SELECT 1' > /dev/null
+          "
+          echo "Verified remote root access restored"

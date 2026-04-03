@@ -122,7 +122,7 @@ fi
 # spec directly.  assume we are in root pw flight
 if [ "${PASSWORD_VALID}" = "false" ]; then
 
-    MARIADB_ACCOUNT=$(echo "${GALERA_CR}" | python3 -c "import json, sys; print(json.load(sys.stdin)['spec']['rootDatabaseAccount'] or '${GALERA_INSTANCE}-mariadb-root')")
+    MARIADB_ACCOUNT=$(echo "${GALERA_CR}" | python3 -c "import json, sys; print(json.load(sys.stdin)['spec'].get('rootDatabaseAccount', '') or '${GALERA_INSTANCE}-mariadb-root')")
 
     MARIADB_ACCOUNT_CR=$(curl -s \
         --cacert ${CACERT} \

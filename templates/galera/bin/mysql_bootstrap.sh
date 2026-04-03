@@ -86,7 +86,10 @@ function kolla_update_db_root_pw {
     mysql -u root <<EOF
 FLUSH PRIVILEGES;
 ALTER USER 'root'@'localhost' IDENTIFIED BY '$DB_ROOT_PASSWORD';
-ALTER USER 'root'@'%'  IDENTIFIED BY '$DB_ROOT_PASSWORD';
+-- create root@% if missing (e.g. dropped during a failed password rotation)
+CREATE USER IF NOT EXISTS 'root'@'%' IDENTIFIED BY '$DB_ROOT_PASSWORD';
+ALTER USER 'root'@'%' IDENTIFIED BY '$DB_ROOT_PASSWORD';
+GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
 EOF
 
