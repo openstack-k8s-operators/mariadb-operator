@@ -296,40 +296,51 @@ func (r *GaleraBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	pvc := &corev1.PersistentVolumeClaim{}
 	backupPVC, transferPVC := backup.BackupPVCs(instance, galera)
 
-	err = r.Get(ctx, types.NamespacedName{Name: backupPVC.Name, Namespace: backupPVC.Namespace}, backupPVC)
-	if err != nil && k8s_errors.IsNotFound(err) {
-		pvc.ObjectMeta = backupPVC.ObjectMeta
-		op, err := controllerutil.CreateOrPatch(ctx, helper.GetClient(), pvc, func() error {
+	pvc.Name = backupPVC.Name
+	pvc.Namespace = backupPVC.Namespace
+	op, err := controllerutil.CreateOrPatch(ctx, helper.GetClient(), pvc, func() error {
+		// Only set PVC spec on creation. Some fields (StorageClassName,
+		// AccessModes) are immutable after creation and others (like storage
+		// size increase) should be performed manually by the user.
+		if pvc.CreationTimestamp.IsZero() {
 			pvc.Spec = backupPVC.Spec
-			// We explicitely do not own this PVC so that backups are not lost
-			// if the GaleraBackup CR is removed
+		}
+		pvc.Labels = util.MergeStringMaps(pvc.Labels, backupPVC.Labels)
+		pvc.Annotations = util.MergeStringMaps(pvc.Annotations, backupPVC.Annotations)
+		// We explicitely do not own this PVC so that backups are not lost
+		// if the GaleraBackup CR is removed
+		return nil
+	})
+	if err != nil {
+		helper.GetLogger().Error(err, "CreateOrPatch failed", "pvc", pvc)
+		return ctrl.Result{}, err
+	}
+	helper.GetLogger().Info(fmt.Sprintf("Backup PVC %s - %s", pvc.Name, op))
+
+	if instance.Spec.TransferStorage != nil {
+		pvc = &corev1.PersistentVolumeClaim{}
+		pvc.Name = transferPVC.Name
+		pvc.Namespace = transferPVC.Namespace
+		op, err := controllerutil.CreateOrPatch(ctx, helper.GetClient(), pvc, func() error {
+			// Only set PVC spec on creation. Some fields (StorageClassName,
+			// AccessModes) are immutable after creation and others (like storage
+			// size increase) should be performed manually by the user.
+			if pvc.CreationTimestamp.IsZero() {
+				pvc.Spec = transferPVC.Spec
+			}
+			pvc.Labels = util.MergeStringMaps(pvc.Labels, transferPVC.Labels)
+			pvc.Annotations = util.MergeStringMaps(pvc.Annotations, transferPVC.Annotations)
+			err := controllerutil.SetControllerReference(helper.GetBeforeObject(), pvc, helper.GetScheme())
+			if err != nil {
+				return err
+			}
 			return nil
 		})
 		if err != nil {
 			helper.GetLogger().Error(err, "CreateOrPatch failed", "pvc", pvc)
 			return ctrl.Result{}, err
 		}
-		helper.GetLogger().Info(fmt.Sprintf("Backup PVC %s - %s", pvc.Name, op))
-	}
-
-	if instance.Spec.TransferStorage != nil {
-		err = r.Get(ctx, types.NamespacedName{Name: transferPVC.Name, Namespace: transferPVC.Namespace}, transferPVC)
-		if err != nil && k8s_errors.IsNotFound(err) {
-			pvc.ObjectMeta = transferPVC.ObjectMeta
-			op, err := controllerutil.CreateOrPatch(ctx, helper.GetClient(), pvc, func() error {
-				pvc.Spec = transferPVC.Spec
-				err := controllerutil.SetControllerReference(helper.GetBeforeObject(), pvc, helper.GetScheme())
-				if err != nil {
-					return err
-				}
-				return nil
-			})
-			if err != nil {
-				helper.GetLogger().Error(err, "CreateOrPatch failed", "pvc", pvc)
-				return ctrl.Result{}, err
-			}
-			helper.GetLogger().Info(fmt.Sprintf("Backup transfer PVC %s - %s", pvc.Name, op))
-		}
+		helper.GetLogger().Info(fmt.Sprintf("Backup transfer PVC %s - %s", pvc.Name, op))
 	}
 
 	instance.Status.Conditions.MarkTrue(
