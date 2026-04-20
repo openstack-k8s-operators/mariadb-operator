@@ -139,9 +139,11 @@ function kolla_set_all_configs {
 if [ -e /var/lib/mysql/mysql ]; then
     echo -e "Database already exists. Reuse it."
 
-    # ensure at least an empty galera.cnf is present, which may not be
-    # the case in some pod restart scenarios.   kolla_set_configs will want
-    # this file to be present before writing to it.
+    # make sure the generated directory starts clean.
+    # kolla_set_configs requires a galera config file to be present, and
+    # we need to run it here to set up permissions. So create an empty
+    # placeholder file. The real config gets generated later in this script.
+    rm -f /var/lib/config-data/generated/*.cnf
     touch /var/lib/config-data/generated/galera.cnf
 
     kolla_set_all_configs
