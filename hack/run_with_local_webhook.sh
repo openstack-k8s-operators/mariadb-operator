@@ -167,17 +167,13 @@ if [ -n "${CSV_NAME}" ]; then
     oc patch "${CSV_NAME}" -n openstack-operators --type=json -p="[{'op': 'replace', 'path': '/spec/install/spec/deployments/0/spec/replicas', 'value': 0}]"
     oc patch "${CSV_NAME}" -n openstack-operators --type=json -p="[{'op': 'replace', 'path': '/spec/webhookdefinitions', 'value': []}]"
 else
-    # Handle operator deployed by Openstack Initialization resource
-    CSV_NAME="$(oc get csv -n openstack-operators -l operators.coreos.com/openstack-operator.openstack-operators -o name)"
-
-    if [ -n "${CSV_NAME}" ]; then
+    if CR_NAME=$(oc get openstack -n openstack-operators -o name); then
         printf \
-        "\n\tNow patching openstack operator CSV to scale down deployment resource.
+        "\n\tNow patching openstack CR to scale down deployment resource.
         To restore it, use:
-        oc patch "${CSV_NAME}" -n openstack-operators --type=json -p=\"[{'op': 'replace', 'path': '/spec/install/spec/deployments/0/spec/replicas', 'value': 1}]\""
+        oc patch ${CR_NAME} -n openstack-operators --type=merge -p '{\"spec\": {\"operatorOverrides\": [{\"name\": \"mariadb\", \"replicas\": 1}]}}'\n"
 
-        oc patch "${CSV_NAME}" -n openstack-operators --type=json -p="[{'op': 'replace', 'path': '/spec/install/spec/deployments/0/spec/replicas', 'value': 0}]"
-        oc scale --replicas=0 -n openstack-operators deploy/mariadb-operator-controller-manager
+        oc patch ${CR_NAME} -n openstack-operators --type=merge -p '{"spec": {"operatorOverrides": [{"name": "mariadb", "replicas": 0}]}}'
     fi
 fi
 
