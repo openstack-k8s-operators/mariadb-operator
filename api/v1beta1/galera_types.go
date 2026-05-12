@@ -60,7 +60,9 @@ type GaleraSpecCore struct {
 	// RootDatabaseAccount - name of MariaDBAccount which will be used to
 	// generate root account / password.
 	// this account is generated if not exists, and a name is chosen based
-	// on a naming convention if not present
+	// on a naming convention if not present.
+	// See Galera->Status->RootDatabaseAccount for the actual name in use
+	// regardless of whether this field is set
 	// +kubebuilder:validation:Optional
 	RootDatabaseAccount string `json:"rootDatabaseAccount"`
 
@@ -123,6 +125,10 @@ type GaleraAttributes struct {
 type GaleraStatus struct {
 	// A map of database node attributes for each pod
 	Attributes map[string]GaleraAttributes `json:"attributes,omitempty"`
+	// RootDatabaseAccount - name of MariaDBAccount being used to maintain
+	// the RootDatabaseSecret.
+	// +kubebuilder:validation:Optional
+	RootDatabaseAccount string `json:"rootDatabaseAccount"`
 	// name of the Secret that is being used for the root password
 	// +kubebuilder:validation:Optional
 	RootDatabaseSecret string `json:"rootDatabaseSecret"`
