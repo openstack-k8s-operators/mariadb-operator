@@ -6,8 +6,8 @@ require (
 	github.com/go-logr/logr v1.4.3
 	github.com/onsi/ginkgo/v2 v2.28.2
 	github.com/onsi/gomega v1.40.0
-	github.com/openstack-k8s-operators/infra-operator/apis v0.6.1-0.20260429072348-e2e8eaa49a92
-	github.com/openstack-k8s-operators/lib-common/modules/common v0.6.1-0.20260430090237-a4265c18a162
+	github.com/openstack-k8s-operators/infra-operator/apis v0.6.1-0.20260508091801-73f228e6af31
+	github.com/openstack-k8s-operators/lib-common/modules/common v0.6.1-0.20260506154724-30a976ba8ef0
 	k8s.io/api v0.31.14
 	k8s.io/apimachinery v0.31.14
 	k8s.io/utils v0.0.0-20250820121507-0af2bda4dd1d
@@ -51,7 +51,6 @@ require (
 	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/spf13/pflag v1.0.7 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	go.uber.org/zap v1.28.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67 // indirect
