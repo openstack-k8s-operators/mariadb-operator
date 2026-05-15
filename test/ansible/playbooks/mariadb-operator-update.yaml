@@ -28,7 +28,7 @@
           - "Galera CR: {{ galera_cr }}"
           - "Galera replicas: {{ replicas }}"
           - "Disruption: {{ disruption }}"
-          - "Namespace: {{ namespace }}"
+          - "Namespace: {{ cr_namespace }}"
       tags:
         - always
 
