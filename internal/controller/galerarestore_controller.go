@@ -220,7 +220,7 @@ func (r *GaleraRestoreReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// the Pod's properties are taken from the pod template configured
 	// in the backup's cronjob.
 	backupCronJob := &batchv1.CronJob{}
-	backupCronJobName := backup.BackupCronJobName(galeraBackup, galera)
+	backupCronJobName := backup.BackupCronJobName(galeraBackup)
 	err = r.Get(ctx, types.NamespacedName{Name: backupCronJobName, Namespace: galeraBackup.Namespace}, backupCronJob)
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {

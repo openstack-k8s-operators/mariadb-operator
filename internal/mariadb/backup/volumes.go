@@ -70,7 +70,7 @@ func baseVolumes(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera) []corev1.Volume
 		Name: "backup-data",
 		VolumeSource: corev1.VolumeSource{
 			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-				ClaimName: BackupPVCName(b, g),
+				ClaimName: BackupPVCName(b),
 			},
 		},
 	}}
@@ -161,7 +161,7 @@ func BackupVolumes(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera) []corev1.Volu
 			Name: "transfer-data",
 			VolumeSource: corev1.VolumeSource{
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: BackupTransferPVCName(b, g),
+					ClaimName: BackupTransferPVCName(b),
 				},
 			},
 		})

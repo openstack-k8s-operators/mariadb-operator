@@ -16,7 +16,8 @@ func RestorePod(restoreCR *mariadbv1.GaleraRestore, backupCR *mariadbv1.GaleraBa
 		Namespace: backupCR.Namespace,
 	}}
 
-	prefixName := RestorePodName(restoreCR, galeraCR)
+	ls := RestorePodLabels(restoreCR)
+	prefixName := RestorePodName(restoreCR)
 
 	environ := []corev1.EnvVar{{
 		Name:  "DB",
@@ -37,6 +38,7 @@ func RestorePod(restoreCR *mariadbv1.GaleraRestore, backupCR *mariadbv1.GaleraBa
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      prefixName,
 			Namespace: backupCR.Namespace,
+			Labels:    ls,
 		},
 		Spec: corev1.PodSpec{
 			RestartPolicy:      corev1.RestartPolicyOnFailure,
