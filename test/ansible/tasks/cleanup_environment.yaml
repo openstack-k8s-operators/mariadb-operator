@@ -5,7 +5,7 @@
     target: mariadb_deploy_cleanup
   environment:
     DBSERVICE: "{{ db_service }}"
-    NAMESPACE: "{{ namespace }}"
+    NAMESPACE: "{{ cr_namespace }}"
     MARIADB_CR: "{{ galera_cr }}"
     OUT: "{{ tmp_dir }}"
     TIMEOUT: "{{ deployment_timeout }}"
@@ -14,7 +14,7 @@
 
 - name: Wait until the Galera CR is deleted
   ansible.builtin.shell: >
-    oc -n {{ namespace }} wait --for=delete --timeout={{ deployment_timeout }} galera/openstack
+    oc -n {{ cr_namespace }} wait --for=delete --timeout={{ deployment_timeout }} galera/openstack
   changed_when: false
   tags:
     - cleanup
@@ -26,7 +26,7 @@
   environment:
     MARIADB_IMG: "{{ mariadb_operator_image_initial }}"
     OPERATOR_NAMESPACE: "{{ operator_namespace }}"
-    NAMESPACE: "{{ namespace }}"
+    NAMESPACE: "{{ cr_namespace }}"
     OUT: "{{ tmp_dir }}"
     TIMEOUT: "{{ deployment_timeout }}"
   tags:

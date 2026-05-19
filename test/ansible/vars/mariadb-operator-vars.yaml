@@ -12,7 +12,7 @@ mariadb_operator_image_updated: "quay.io/openstack-k8s-operators/mariadb-operato
 disruption: true
 
 # Namespaces
-namespace: "openstack"
+cr_namespace: "openstack"
 operator_namespace: "openstack-operators"
 
 # Galera cluster configuration

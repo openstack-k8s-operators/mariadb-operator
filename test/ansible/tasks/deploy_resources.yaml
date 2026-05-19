@@ -6,7 +6,7 @@
   environment:
     MARIADB_IMG: "{{ mariadb_operator_image_initial }}"
     OPERATOR_NAMESPACE: "{{ operator_namespace }}"
-    NAMESPACE: "{{ namespace }}"
+    NAMESPACE: "{{ cr_namespace }}"
     OUT: "{{ tmp_dir }}"
     TIMEOUT: "{{ deployment_timeout }}"
   tags:
@@ -45,7 +45,7 @@
     target: mariadb_deploy
   environment:
     DBSERVICE: "{{ db_service }}"
-    NAMESPACE: "{{ namespace }}"
+    NAMESPACE: "{{ cr_namespace }}"
     MARIADB_CR: "{{ galera_cr_prepared }}"
     OUT: "{{ tmp_dir }}"
     TIMEOUT: "{{ deployment_timeout }}"
@@ -54,11 +54,11 @@
 
 - name: Wait for all the Galera pods to be ready
   ansible.builtin.shell: >
-    oc -n {{ namespace }} wait --for=create --timeout={{ deployment_timeout }}
+    oc -n {{ cr_namespace }} wait --for=create --timeout={{ deployment_timeout }}
     galera/openstack &&
-    oc -n {{ namespace }} wait --for=condition=Ready --timeout={{ deployment_timeout }}
+    oc -n {{ cr_namespace }} wait --for=condition=Ready --timeout={{ deployment_timeout }}
     galera/openstack &&
-    oc -n {{ namespace }} wait --for=jsonpath='{.status.availableReplicas}={{ replicas }}' --timeout={{ deployment_timeout }}
+    oc -n {{ cr_namespace }} wait --for=jsonpath='{.status.availableReplicas}={{ replicas }}' --timeout={{ deployment_timeout }}
     statefulset/openstack-galera
   changed_when: false
   tags:
