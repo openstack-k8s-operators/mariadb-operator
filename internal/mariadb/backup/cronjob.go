@@ -15,7 +15,7 @@ import (
 // BackupCronJob returns a CronJob object for the galera backup
 func BackupCronJob(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera, configHash string) *batchv1.CronJob {
 	ls := mariadb.StatefulSetLabels(g)
-	name := BackupCronJobName(b, g)
+	name := BackupCronJobName(b)
 	cronJob := &batchv1.CronJob{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -37,7 +37,7 @@ func BackupCronJob(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera, configHash st
 
 func getBackupPodTemplate(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera, configHash string) *corev1.PodTemplateSpec {
 	ls := mariadb.StatefulSetLabels(g)
-	prefixName := BackupCronJobName(b, g)
+	prefixName := BackupCronJobName(b)
 	svcName := g.Name + "-galera" // TODO use service name
 
 	// Option: retention

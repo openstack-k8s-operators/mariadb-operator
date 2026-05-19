@@ -30,7 +30,7 @@ spec:
     cleanup:
     - script:
         content: |
-          oc -n $NAMESPACE delete pvc mysql-backup-openstack-backup-openstack mysql-transfer-openstack-backup-openstack || true
+          oc -n $NAMESPACE delete pvc mysql-backup-openstack mysql-transfer-openstack || true
 
   - name: backup the 1-node Galera cluster
     description: checks that the cluster is correctly backed up
@@ -43,7 +43,7 @@ spec:
         - name: REPLICAS
           value: ($replicas)
         content: |
-          oc -n $NAMESPACE create job --from=cronjob/openstack-backup-openstack backup-${REPLICAS}node
+          oc -n $NAMESPACE create job --from=cronjob/backup-openstack backup-${REPLICAS}node
           oc -n $NAMESPACE wait --for=condition=complete job/backup-${REPLICAS}node
     - script:
         env:

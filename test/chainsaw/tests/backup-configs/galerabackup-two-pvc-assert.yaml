@@ -4,12 +4,12 @@ metadata:
   labels:
     galera/name: openstack
     owner: mariadb-operator
-  name: openstack-backup-openstack
+  name: backup-openstack
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: mysql-backup-openstack-backup-openstack
+  name: mysql-backup-openstack
 spec:
   resources:
     requests:
@@ -19,7 +19,7 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: mysql-transfer-openstack-backup-openstack
+  name: mysql-transfer-openstack
 spec:
   resources:
     requests:
