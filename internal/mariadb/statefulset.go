@@ -6,6 +6,7 @@ import (
 	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	common "github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/affinity"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/probes"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -29,6 +30,10 @@ func StatefulSet(g *mariadbv1.Galera, configHash string, topology *topologyv1.To
 	if err != nil {
 		return nil, err
 	}
+	containers, err := getGaleraContainers(g, configHash)
+	if err != nil {
+		return nil, err
+	}
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -48,7 +53,7 @@ func StatefulSet(g *mariadbv1.Galera, configHash string, topology *topologyv1.To
 				Spec: corev1.PodSpec{
 					ServiceAccountName: g.RbacResourceName(),
 					InitContainers:     getGaleraInitContainers(g),
-					Containers:         getGaleraContainers(g, configHash),
+					Containers:         containers,
 					Volumes:            getGaleraVolumes(g),
 				},
 			},
@@ -110,8 +115,44 @@ func getGaleraInitContainers(g *mariadbv1.Galera) []corev1.Container {
 	}}
 }
 
-func getGaleraContainers(g *mariadbv1.Galera, configHash string) []corev1.Container {
-	timeout := strconv.Itoa(StartupProbeTimeout)
+func getGaleraContainers(g *mariadbv1.Galera, configHash string) ([]corev1.Container, error) {
+	// The startup probe command includes a dynamic timeout derived from the
+	// K8s TimeoutSeconds. Pre-merge overrides to compute the correct script
+	// timeout, then pass the result as defaults to CreateProbeSetV2.
+	// The second merge inside CreateProbeSetV2 is idempotent.
+	startupConf := probes.ProbeConf{
+		Type: probes.ProbeHandlerExec,
+		// extra seconds so that the script is not preempted by k8s
+		TimeoutSeconds: StartupProbeTimeout + 10,
+		// the current probe implementation assumes a single failure threshold
+		FailureThreshold: 1,
+	}
+	if o := g.Spec.Override.Probes.GetStartupProbes(); o != nil {
+		startupConf.Merge(*o)
+	}
+	if len(startupConf.Command) == 0 {
+		scriptTimeout := max(startupConf.TimeoutSeconds-10, 10)
+		startupConf.Command = []string{"/bin/bash", "/var/lib/operator-scripts/mysql_probe.sh", "startup", strconv.Itoa(int(scriptTimeout))}
+	}
+
+	probeSet, err := probes.CreateProbeSetV2(
+		g.Spec.Override.Probes,
+		probes.OverrideSpec{
+			StartupProbes: &startupConf,
+			LivenessProbes: &probes.ProbeConf{
+				Type:    probes.ProbeHandlerExec,
+				Command: []string{"/bin/bash", "/var/lib/operator-scripts/mysql_probe.sh", "liveness"},
+			},
+			ReadinessProbes: &probes.ProbeConf{
+				Type:    probes.ProbeHandlerExec,
+				Command: []string{"/bin/bash", "/var/lib/operator-scripts/mysql_probe.sh", "readiness"},
+			},
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	containers := []corev1.Container{{
 		Image:   g.Spec.ContainerImage,
 		Name:    "galera",
@@ -130,33 +171,11 @@ func getGaleraContainers(g *mariadbv1.Galera, configHash string) []corev1.Contai
 			ContainerPort: 4567,
 			Name:          "galera",
 		}},
-		Resources:    g.Spec.Resources,
-		VolumeMounts: getGaleraVolumeMounts(g),
-		StartupProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{
-					Command: []string{"/bin/bash", "/var/lib/operator-scripts/mysql_probe.sh", "startup", timeout},
-				},
-			},
-			// extra seconds so that the script is not preempted by k8s
-			TimeoutSeconds: StartupProbeTimeout + 10,
-			// the current probe implementation assumes a single failure threshold
-			FailureThreshold: 1,
-		},
-		LivenessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{
-					Command: []string{"/bin/bash", "/var/lib/operator-scripts/mysql_probe.sh", "liveness"},
-				},
-			},
-		},
-		ReadinessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{
-					Command: []string{"/bin/bash", "/var/lib/operator-scripts/mysql_probe.sh", "readiness"},
-				},
-			},
-		},
+		Resources:      g.Spec.Resources,
+		VolumeMounts:   getGaleraVolumeMounts(g),
+		StartupProbe:   probeSet.Startup,
+		LivenessProbe:  probeSet.Liveness,
+		ReadinessProbe: probeSet.Readiness,
 		Lifecycle: &corev1.Lifecycle{
 			PreStop: &corev1.LifecycleHandler{
 				Exec: &corev1.ExecAction{
@@ -176,5 +195,5 @@ func getGaleraContainers(g *mariadbv1.Galera, configHash string) []corev1.Contai
 		containers = append(containers, logSideCar)
 	}
 
-	return containers
+	return containers, nil
 }
