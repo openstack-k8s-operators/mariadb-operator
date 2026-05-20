@@ -15,9 +15,9 @@ metadata:
   labels:
     galera/name: cluster2
     owner: mariadb-operator
-  name: cluster2-backup-openstack2nd
+  name: backup-openstack2nd
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: mysql-backup-cluster2-backup-openstack2nd
+  name: mysql-backup-openstack2nd

@@ -11,7 +11,7 @@ import (
 
 // BackupPVCs returns the PVC objects used by the backup Job to transfer data and create a SQL backup
 func BackupPVCs(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera) (*corev1.PersistentVolumeClaim, *corev1.PersistentVolumeClaim) {
-	backupName := BackupPVCName(b, g)
+	backupName := BackupPVCName(b)
 	backupSize, err := resource.ParseQuantity(b.Spec.StorageRequest)
 	if err != nil {
 		backupSize = resource.MustParse(g.Spec.StorageRequest)
@@ -48,7 +48,7 @@ func BackupPVCs(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera) (*corev1.Persist
 		return backupPVC, nil
 	}
 
-	transferName := BackupTransferPVCName(b, g)
+	transferName := BackupTransferPVCName(b)
 	transferSize, err := resource.ParseQuantity(b.Spec.TransferStorage.StorageRequest)
 	if err != nil {
 		transferSize = resource.MustParse(g.Spec.StorageRequest)

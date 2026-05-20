@@ -348,6 +348,19 @@ func (r *GaleraBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		mariadbv1.PersistentVolumeClaimReadyMessage,
 	)
 
+	// If a cronjob with the old naming convention, delete it here to avoid taking
+	// two backups for the target galera CR
+	oldCronJob := &batchv1.CronJob{}
+	oldName := galera.Name + "-backup-" + instance.Name
+	err = r.Get(ctx, types.NamespacedName{Name: oldName, Namespace: instance.Namespace}, oldCronJob)
+	if err == nil {
+		if err := r.Delete(ctx, oldCronJob); err != nil {
+			helper.GetLogger().Error(err, "Failed to delete old-format CronJob", "cronjob", oldName)
+			return ctrl.Result{}, err
+		}
+		helper.GetLogger().Info(fmt.Sprintf("Deleted old-format CronJob %s", oldName))
+	}
+
 	preparedBackupCronJob := backup.BackupCronJob(instance, galera, hashOfHashes)
 	backupCronJob := &batchv1.CronJob{}
 	backupCronJob.ObjectMeta = preparedBackupCronJob.ObjectMeta
