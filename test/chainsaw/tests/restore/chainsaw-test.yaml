@@ -92,21 +92,21 @@ spec:
         - name: BACKUPTIME2
           value: ($BACKUPTIME2)
         content: |
-          oc -n $NAMESPACE exec openstack-restore-openstackrestore -- find /backup/data -type f -not -newermt "@${BACKUPTIME1}" -delete -print
-          oc -n $NAMESPACE exec cluster2-restore-cluster2restore   -- find /backup/data -type f -not -newermt "@${BACKUPTIME2}" -delete -print
+          oc -n $NAMESPACE exec restore-openstackrestore -- find /backup/data -type f -not -newermt "@${BACKUPTIME1}" -delete -print
+          oc -n $NAMESPACE exec restore-cluster2restore  -- find /backup/data -type f -not -newermt "@${BACKUPTIME2}" -delete -print
 
   - name: trigger restores to the Galera clusters
     description: checks that the cluster is correctly backed up
     try:
     - script:
         content: |
-          oc -n $NAMESPACE exec openstack-restore-openstackrestore -- /var/lib/backup-scripts/restore_galera --yes /backup/data/*.gz
+          oc -n $NAMESPACE exec restore-openstackrestore -- /var/lib/backup-scripts/restore_galera --yes /backup/data/*.gz
           oc -n $NAMESPACE exec -c galera openstack-galera-0 -- mysql -nN -e 'show databases;'
         check:
           (contains($stdout, 'restore_test1')): true
     - script:
         content: |
-          oc -n $NAMESPACE exec cluster2-restore-cluster2restore -- /var/lib/backup-scripts/restore_galera --yes /backup/data/*.gz
+          oc -n $NAMESPACE exec restore-cluster2restore -- /var/lib/backup-scripts/restore_galera --yes /backup/data/*.gz
           oc -n $NAMESPACE exec -c galera cluster2-galera-0 -- mysql -nN -e 'show databases;'
         check:
           (contains($stdout, 'restore_test2')): true
