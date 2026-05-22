@@ -31,3 +31,15 @@
     TIMEOUT: "{{ deployment_timeout }}"
   tags:
     - cleanup
+
+- name: Restore openstack-operator-controller-init config if needed
+  ansible.builtin.shell: |
+    set -o pipefail
+    PREV_REPLICAS=$(oc -n {{ operator_namespace }} get -o json deployment/openstack-operator-controller-init | jq -r '.metadata.labels["test.mariadb-operator/saved-replicas"] | select( . != null )')
+    if [ -n "${PREV_REPLICAS}" ]; then
+        oc -n {{ operator_namespace }} patch deployment/openstack-operator-controller-init --type='json' -p='[{"op":"replace","path":"/spec/replicas","value":'${PREV_REPLICAS}'}]'
+        oc -n {{ operator_namespace }} label deployment/openstack-operator-controller-init test.mariadb-operator/saved-replicas-
+    fi
+  changed_when: false
+  tags:
+    - cleanup
