@@ -71,6 +71,31 @@ spec:
     - assert:
         file: cluster2restore-assert.yaml
 
+  - name: wait for restore pods to be running
+    try:
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: restore-openstackrestore
+          status:
+            phase: Running
+            containerStatuses:
+            - name: restore
+              ready: true
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: restore-cluster2restore
+          status:
+            phase: Running
+            containerStatuses:
+            - name: restore
+              ready: true
+
   - name: clean up previous files on the PV hosting backups
     try:
     - script:
