@@ -15,9 +15,6 @@ metadata:
   labels:
     galera/name: cluster2
     owner: mariadb-operator
-  name: cluster2-backup-cluster2backup
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: mysql-backup-cluster2-backup-cluster2backup
+  name: backup-cluster2backup
+# PVC mysql-backup-cluster2backup is instantiated only after
+# a job has been created for Cronjob backup-cluster2backup

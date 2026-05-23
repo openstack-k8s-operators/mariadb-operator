@@ -16,8 +16,5 @@ metadata:
     galera/name: openstack
     owner: mariadb-operator
   name: backup-openstackbackup
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: mysql-backup-openstackbackup
+# PVC mysql-backup-openstackbackup is instantiated only after
+# a job has been created for Cronjob backup-openstackbacup
