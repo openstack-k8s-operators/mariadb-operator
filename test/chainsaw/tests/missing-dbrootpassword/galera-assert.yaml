@@ -6,7 +6,6 @@ spec:
   replicas: ($replicas)
   secret: test-secret-missing-dbrootpassword
   storageRequest: 500M
-  containerImage: quay.io/podified-antelope-centos9/openstack-mariadb:current-podified
 status:
   conditions:
   - message: Input data resources missing
