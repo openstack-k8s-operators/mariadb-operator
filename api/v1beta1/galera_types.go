@@ -28,7 +28,7 @@ import (
 
 const (
 	// CustomServiceConfigFile name of the additional mariadb config file
-	CustomServiceConfigFile = "galera_custom.cnf.in"
+	CustomServiceConfigFile = "zzz_galera_custom.cnf.in"
 
 	// GaleraContainerImage is the fall-back container image for Galera
 	GaleraContainerImage = "quay.io/podified-antelope-centos9/openstack-mariadb:current-podified"
@@ -83,7 +83,9 @@ type GaleraSpecCore struct {
 	// +kubebuilder:validation:Optional
 	// Customize config using this parameter to change service defaults,
 	// or overwrite rendered information using raw MariaDB config format.
-	// The content gets added to /etc/my.cnf.d/galera_custom.cnf
+	// The content gets added to /etc/my.cnf.d/zzz_galera_custom.cnf. The zzz_
+	// prefix is to ensure that this file is loaded last so that any
+	// customizations occur after all other configuration is applied.
 	CustomServiceConfig string `json:"customServiceConfig,omitempty"`
 	// +kubebuilder:validation:Optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec

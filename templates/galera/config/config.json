@@ -22,8 +22,8 @@
             "optional": true
         },
         {
-            "source": "/var/lib/config-data/generated/galera_custom.cnf",
-            "dest": "/etc/my.cnf.d/galera_custom.cnf",
+            "source": "/var/lib/config-data/generated/zzz_galera_custom.cnf",
+            "dest": "/etc/my.cnf.d/zzz_galera_custom.cnf",
             "owner": "root",
             "perm": "0644",
             "optional": true
