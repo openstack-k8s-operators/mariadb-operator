@@ -167,7 +167,8 @@ if [ -n "${CSV_NAME}" ]; then
     oc patch "${CSV_NAME}" -n openstack-operators --type=json -p="[{'op': 'replace', 'path': '/spec/install/spec/deployments/0/spec/replicas', 'value': 0}]"
     oc patch "${CSV_NAME}" -n openstack-operators --type=json -p="[{'op': 'replace', 'path': '/spec/webhookdefinitions', 'value': []}]"
 else
-    if CR_NAME=$(oc get openstack -n openstack-operators -o name); then
+    CR_NAME="$(oc get openstack -n openstack-operators -o name)"
+    if [ -n "${CR_NAME}" ]; then
         printf \
         "\n\tNow patching openstack CR to scale down deployment resource.
         To restore it, use:
