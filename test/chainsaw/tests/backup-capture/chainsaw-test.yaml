@@ -54,6 +54,7 @@ spec:
         - name: REPLICAS
           value: ($replicas)
         content: |
+          set -e
           oc -n $NAMESPACE create job --from=cronjob/backup-openstack backup-${REPLICAS}node
           oc -n $NAMESPACE wait --for=condition=complete job/backup-${REPLICAS}node
     - script: &backup_check
@@ -117,10 +118,13 @@ spec:
     try:
     - script:
         content: |
+          set -e
+          oc -n $NAMESPACE delete --ignore-not-found=true job/backup-1node
           oc -n $NAMESPACE create job --from=cronjob/backup-openstack backup-1node
           oc -n $NAMESPACE create job --from=cronjob/backup-openstack2nd backup-1node-2nd
     - script:
         content: |
+          set -e
           oc -n $NAMESPACE wait --for=condition=complete job/backup-1node job/backup-1node-2nd
           ../../common/backup-assert.sh backup-1node
           ../../common/backup-assert.sh backup-1node-2nd
@@ -130,9 +134,12 @@ spec:
     try:
     - script:
         content: |
+          set -o pipefail
           oc -n $NAMESPACE create job --from=cronjob/backup-openstack custom-timestamp --dry-run=client -o json | jq '.spec.template.spec.containers[0].env += [{ "name": "BACKUP_TIMESTAMP", value:"chainsaw_unit_test" }]' | oc -n $NAMESPACE apply -f -
     - script:
         content: |
-          oc -n $NAMESPACE wait --for=condition=complete job/backup-1node
-          ../../common/backup-assert.sh backup-1node
+          set -e
+          set -o pipefail
+          oc -n $NAMESPACE wait --for=condition=complete job/custom-timestamp
+          ../../common/backup-assert.sh custom-timestamp
           oc -n $NAMESPACE get pod -o name -l job-name=custom-timestamp | xargs oc -n $NAMESPACE logs | grep 'Starting backup .* - chainsaw_unit_test'
