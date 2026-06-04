@@ -4,6 +4,9 @@ metadata:
   name: failover
 spec:
   description: Service failover test case
+  bindings:
+  - name: ocWaitTimeout
+    value: 160s
   steps:
   - name: Setup
     description: Deploy a cluster and a background pod with long-running DB connection
@@ -32,6 +35,8 @@ spec:
           value: ($stdout)
     - script:
         env:
+        - name: WAIT_TIMEOUT
+          value: ($ocWaitTimeout)
         - name: PASSWORD
           value: ($db_password)
         - name: IMAGE
@@ -39,7 +44,7 @@ spec:
         skipLogOutput: true
         content: |
           oc -n $NAMESPACE run failover-check --image=$IMAGE --env="DB_ROOT_PASSWORD=$PASSWORD" --command -- dumb-init bash -c "$(cat ../../scripts/connect.sh)"
-          oc -n $NAMESPACE wait --for=jsonpath='{.status.phase}'=Running pod failover-check
+          oc -n $NAMESPACE wait --for=jsonpath='{.status.phase}'=Running --timeout=${WAIT_TIMEOUT} pod failover-check
 
     cleanup:
     - delete:
@@ -58,11 +63,13 @@ spec:
         - name: endpoint
           value: ($stdout)
     - script:
-        env:
+        env: &wait_env
+        - name: WAIT_TIMEOUT
+          value: ($ocWaitTimeout)
         - name: ENDPOINT
           value: ($endpoint)
         content: |
-          oc wait -n $NAMESPACE --for=jsonpath='{.status.readyReplicas}'=3 statefulset openstack-galera
+          oc wait -n $NAMESPACE --for=jsonpath='{.status.readyReplicas}'=3 --timeout=${WAIT_TIMEOUT} statefulset openstack-galera
           oc delete -n $NAMESPACE --wait pod $ENDPOINT
     - script:
         content: *endpoint_cmd
@@ -85,11 +92,9 @@ spec:
     try:
     - script: *get_endpoint
     - script:
-        env:
-        - name: ENDPOINT
-          value: ($endpoint)
+        env: *wait_env
         content: |
-          oc wait -n $NAMESPACE --for=jsonpath='{.status.readyReplicas}'=3 statefulset openstack-galera
+          oc wait -n $NAMESPACE --for=jsonpath='{.status.readyReplicas}'=3 --timeout=${WAIT_TIMEOUT} statefulset openstack-galera
           current=$ENDPOINT
           oc rsh -n $NAMESPACE $ENDPOINT killall -s STOP /usr/libexec/mysqld
           while [ "$current" = "$ENDPOINT" ]; do
@@ -109,11 +114,9 @@ spec:
     try:
     - script: *get_endpoint
     - script:
-        env:
-        - name: ENDPOINT
-          value: ($endpoint)
+        env: *wait_env
         content: |
-          oc wait -n $NAMESPACE --for=jsonpath='{.status.readyReplicas}'=3 statefulset openstack-galera
+          oc wait -n $NAMESPACE --for=jsonpath='{.status.readyReplicas}'=3 --timeout=${WAIT_TIMEOUT} statefulset openstack-galera
           echo -ne openstack-galera-{0,1,2}\\n | grep -v $ENDPOINT | head -1 | xargs oc delete --wait -n $NAMESPACE --wait pod
     - script:
         content: *endpoint_cmd

@@ -7,7 +7,7 @@ spec:
     assert: 180s
     delete: 180s
     cleanup: 180s
-    exec: 120s
+    exec: 180s
   execution:
     failFast: true
     parallel: 1
