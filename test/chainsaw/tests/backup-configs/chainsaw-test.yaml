@@ -3,6 +3,9 @@ kind: Test
 metadata:
   name: backup-configs
 spec:
+  bindings:
+  - name: ocWaitTimeout
+    value: 160s
   steps:
   - name: setup a 1-node cluster and a backup CR with dedicated transfer PVC
     description: prechecks that backup CR is correctly set up
@@ -40,11 +43,13 @@ spec:
     try:
     - script:
         env:
+        - name: WAIT_TIMEOUT
+          value: ($ocWaitTimeout)
         - name: REPLICAS
           value: ($replicas)
         content: |
           oc -n $NAMESPACE create job --from=cronjob/backup-openstack backup-${REPLICAS}node
-          oc -n $NAMESPACE wait --for=condition=complete job/backup-${REPLICAS}node
+          oc -n $NAMESPACE wait --for=condition=complete --timeout=${WAIT_TIMEOUT} job/backup-${REPLICAS}node
     - script:
         env:
         - name: REPLICAS
