@@ -1,44 +1,8 @@
 ---
-- name: Uninstall the old mariadb-operator
-  community.general.make:
-    chdir: "{{ install_yamls_dir }}"
-    target: mariadb_cleanup
-  environment:
-    OPERATOR_NAMESPACE: "{{ operator_namespace }}"
-    NAMESPACE: "{{ cr_namespace }}"
-    TIMEOUT: "{{ update_timeout }}"
-  tags:
-    - update
-
-- name: Wait for the mariadb-operator to be uninstalled
-  ansible.builtin.shell: >
-    set -o pipefail && echo $(oc -n {{ operator_namespace }} get csv -l operators.coreos.com/mariadb-operator.openstack-operators -o name)
-    catalogsource/mariadb-operator-index
-    subscription/mariadb-operator
-    | xargs oc -n {{ operator_namespace }} wait --for=delete --timeout={{ update_timeout }}
-  changed_when: false
-  tags:
-    - update
-
-- name: Disable openstack-operator-controller-init to allow custom mariadb-operator image
-  ansible.builtin.shell: |
-    set -o pipefail
-    PREV_REPLICAS=$(oc -n {{ operator_namespace }} get -o json deployment/openstack-operator-controller-init | jq -r .spec.replicas)
-    oc -n {{ operator_namespace }} label deployment/openstack-operator-controller-init test.mariadb-operator/saved-replicas="$PREV_REPLICAS"
-    oc -n {{ operator_namespace }} patch deployment/openstack-operator-controller-init --type='json' -p='[{"op":"replace","path":"/spec/replicas","value":0}]'
-  changed_when: false
-  tags:
-    - update
-
-- name: Update mariadb-operator to new image
-  community.general.make:
-    chdir: "{{ install_yamls_dir }}"
-    target: mariadb
-  environment:
-    MARIADB_IMG: "{{ mariadb_operator_image_updated }}"
-    OPERATOR_NAMESPACE: "{{ operator_namespace }}"
-    NAMESPACE: "{{ cr_namespace }}"
-    TIMEOUT: "{{ deployment_timeout }}"
+- name: Install the updated mariadb-operator
+  ansible.builtin.include_tasks: install_operator.yaml
+  vars:
+    mariadb_operator_index: "{{ mariadb_operator_image_updated }}"
   tags:
     - update
 
