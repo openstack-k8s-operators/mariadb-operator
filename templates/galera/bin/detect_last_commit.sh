@@ -5,7 +5,12 @@ set -eu
 # OSPRH-27031: Conditional sourcing for backwards compatibility with old pods
 # where script is updated but mysql_root_auth.sh is not yet available
 if [ -f /var/lib/operator-scripts/mysql_root_auth.sh ]; then
-    source /var/lib/operator-scripts/mysql_root_auth.sh
+    # Make sure we are using up-to-date DB credentials for inspecting
+    # the state of the local mysql:
+    #   - disable password check, as when this script runs,
+    #     the mysql server has not started yet.
+    #   - discard warning logged while fetching new credentials
+    MYSQL_ROOT_AUTH_BYPASS_CHECKS=true source /var/lib/operator-scripts/mysql_root_auth.sh 2>/dev/null
 else
     export MYSQL_PWD="${DB_ROOT_PASSWORD}"
 fi
@@ -37,6 +42,11 @@ function json_summary {
 }
 
 trap json_summary EXIT
+
+if pgrep mysqld >/dev/null; then
+    echo "Cannot run this script while mysqld is running! Aborting" >&2
+    exit 2
+fi
 
 # codership/galera#354
 # Some ungraceful shutdowns can leave an empty gvwstate.dat on

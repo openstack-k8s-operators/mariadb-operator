@@ -11,7 +11,6 @@ require (
 	github.com/openstack-k8s-operators/lib-common/modules/common v0.6.1-0.20260515134210-2e2a0d06648c
 	github.com/openstack-k8s-operators/mariadb-operator/api v0.0.0-00010101000000-000000000000
 	go.uber.org/zap v1.28.0
-	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67
 	k8s.io/api v0.31.14
 	k8s.io/apimachinery v0.31.14
 	k8s.io/client-go v0.31.14
@@ -82,6 +81,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
+	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67 // indirect
 	golang.org/x/mod v0.32.0 // indirect
 	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
