@@ -19,6 +19,7 @@ package v1beta1
 import (
 	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/probes"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/tls"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	corev1 "k8s.io/api/core/v1"
@@ -103,6 +104,16 @@ type GaleraSpecCore struct {
 	// +kubebuilder:validation:Optional
 	// Resources QoS configuration for pods
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// Override, provides the ability to override the generated manifest of several child resources.
+	Override GaleraOverrideSpec `json:"override,omitempty"`
+}
+
+// GaleraOverrideSpec to override the generated manifest of several child resources
+type GaleraOverrideSpec struct {
+	// Override probes and other common fields in the StatefulSet
+	Probes probes.OverrideSpec `json:"probes,omitempty"`
 }
 
 // GaleraAttributes holds startup information for a Galera host

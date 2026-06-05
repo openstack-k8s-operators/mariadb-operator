@@ -116,6 +116,9 @@ func (spec *GaleraSpecCore) ValidateCreate(basePath *field.Path, namespace strin
 	allErrs = append(allErrs, topologyv1.ValidateTopologyRef(
 		spec.TopologyRef, *basePath.Child("topologyRef"), namespace)...)
 
+	// Validate probe configurations
+	allErrs = append(allErrs, spec.ValidateProbes(basePath)...)
+
 	return allWarn, allErrs
 }
 
@@ -162,6 +165,10 @@ func (r *GaleraSpecCore) ValidateUpdate(old GaleraSpecCore, basePath *field.Path
 		}
 	}
 	allErrs = append(allErrs, r.ValidateTopology(basePath, namespace)...)
+
+	// Validate probe configurations
+	allErrs = append(allErrs, r.ValidateProbes(basePath)...)
+
 	return allErrs
 }
 
@@ -189,4 +196,9 @@ func (spec *GaleraSpecCore) ValidateGaleraReplicas(basePath *field.Path) admissi
 	} else {
 		return nil
 	}
+}
+
+// ValidateProbes validates the probe configuration fields
+func (spec *GaleraSpecCore) ValidateProbes(basePath *field.Path) field.ErrorList {
+	return spec.Override.Probes.ValidateProbes(basePath.Child("override").Child("probes"))
 }
