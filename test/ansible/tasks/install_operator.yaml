@@ -1,0 +1,66 @@
+---
+- name: Clean up existing mariadb-operator
+  community.general.make:
+    chdir: "{{ install_yamls_dir }}"
+    target: mariadb_cleanup
+  environment:
+    MARIADB_IMG: "{{ mariadb_operator_index }}"
+    OPERATOR_NAMESPACE: "{{ operator_namespace }}"
+    NAMESPACE: "{{ cr_namespace }}"
+    OUT: "{{ tmp_dir }}"
+    TIMEOUT: "{{ deployment_timeout }}"
+  tags:
+    - operator
+
+- name: Wait until the catalogsource associated with the old mariadb-operator is deleted
+  ansible.builtin.shell: >
+    oc -n {{ operator_namespace }} wait --for=delete --timeout={{ deployment_timeout }}
+    catalogsource/mariadb-operator-index
+  changed_when: false
+  tags:
+    - operator
+
+- name: Remove the leftover install plans associated with the old mariadb-operator
+  ansible.builtin.shell: |
+    set -o pipefail
+    oc -n {{ operator_namespace }} get installplans -o name | xargs -r oc -n {{ operator_namespace }} delete
+  changed_when: false
+  tags:
+    - operator
+
+- name: Prepare the resource required to install a new mariadb-operator
+  community.general.make:
+    chdir: "{{ install_yamls_dir }}"
+    target: mariadb_prep
+  environment:
+    MARIADB_IMG: "{{ mariadb_operator_index }}"
+    OPERATOR_NAMESPACE: "{{ operator_namespace }}"
+    NAMESPACE: "{{ cr_namespace }}"
+    OUT: "{{ tmp_dir }}"
+    TIMEOUT: "{{ deployment_timeout }}"
+  tags:
+    - operator
+
+- name: Install the catalogsource for the new mariadb-operator
+  # Apply CatalogSource first and wait for OLM to have fetch the bundle information, otherwise
+  # the old bundle info might be reused when creating the subscription CR
+  # Note: several mariadb-operator-index pods are created, but only one gets ready, so wait accordingly
+  ansible.builtin.shell: |
+    set -e -o pipefail
+    oc -n {{ operator_namespace }} apply -f {{ tmp_dir }}/openstack-operators/mariadb/op/catalogsource.yaml
+    until oc -n {{ operator_namespace }} get pods -l olm.catalogSource=mariadb-operator-index -o jsonpath='{range .items[*]}{.metadata.name} {.status.containerStatuses[*].ready}{end}' | grep -w -m1 true; do sleep 2; done
+    index_pod=$(oc -n {{ operator_namespace }} get pod -l olm.catalogSource=mariadb-operator-index -o name)
+    test -n "${index_pod}"
+    timeout {{ deployment_timeout | community.general.to_seconds | int }} bash -c "oc -n {{ operator_namespace }} logs '${index_pod}' -f | grep -m1 'grpc.code=OK.*GetBundleForChannel'"
+  changed_when: false
+  tags:
+    - operator
+
+- name: Apply subscriptions and operatorgroup to deploy the new mariadb-operator
+  ansible.builtin.shell: |
+    set -e
+    oc -n {{ operator_namespace }} apply -f {{ tmp_dir }}/openstack-operators/mariadb/op/operatorgroup.yaml
+    oc -n {{ operator_namespace }} apply -f {{ tmp_dir }}/openstack-operators/mariadb/op/subscription.yaml
+  changed_when: false
+  tags:
+    - operator
