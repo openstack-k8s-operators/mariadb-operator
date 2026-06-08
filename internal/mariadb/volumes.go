@@ -97,6 +97,10 @@ func getGaleraVolumes(g *mariadbv1.Galera) []corev1.Volume {
 							Path: "detect_last_commit.sh",
 						},
 						{
+							Key:  "report_local_galera_state.py",
+							Path: "report_local_galera_state.py",
+						},
+						{
 							Key:  "detect_gcomm_and_start.sh",
 							Path: "detect_gcomm_and_start.sh",
 						},

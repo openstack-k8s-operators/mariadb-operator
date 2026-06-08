@@ -62,4 +62,90 @@ var _ = Describe("Galera webhook", func() {
 			Expect(err).To(HaveOccurred())
 		})
 	})
+
+	When("Invalid probe configuration is provided", func() {
+		It("Should reject negative timeout values", func() {
+			spec := GetDefaultGaleraSpec()
+			spec["override"] = map[string]interface{}{
+				"probes": map[string]interface{}{
+					"livenessProbes": map[string]interface{}{
+						"timeoutSeconds": -5,
+					},
+				},
+			}
+
+			raw := map[string]any{
+				"apiVersion": "mariadb.openstack.org/v1beta1",
+				"kind":       "Galera",
+				"metadata": map[string]any{
+					"name":      "test-invalid-probe",
+					"namespace": namespace,
+				},
+				"spec": spec,
+			}
+
+			unstructuredObj := &unstructured.Unstructured{Object: raw}
+			_, err := controllerutil.CreateOrPatch(
+				th.Ctx, th.K8sClient, unstructuredObj, func() error { return nil })
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("should be greater than or equal to 1"))
+		})
+
+		It("Should reject invalid path format", func() {
+			spec := GetDefaultGaleraSpec()
+			spec["override"] = map[string]interface{}{
+				"probes": map[string]interface{}{
+					"livenessProbes": map[string]interface{}{
+						"path": "invalid-path",
+					},
+				},
+			}
+
+			raw := map[string]any{
+				"apiVersion": "mariadb.openstack.org/v1beta1",
+				"kind":       "Galera",
+				"metadata": map[string]any{
+					"name":      "test-invalid-path",
+					"namespace": namespace,
+				},
+				"spec": spec,
+			}
+
+			unstructuredObj := &unstructured.Unstructured{Object: raw}
+			_, err := controllerutil.CreateOrPatch(
+				th.Ctx, th.K8sClient, unstructuredObj, func() error { return nil })
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("should match '^(/.*)?$'"))
+		})
+	})
+
+	When("Valid probe configuration is provided", func() {
+		BeforeEach(func() {
+			spec := GetDefaultGaleraSpec()
+			spec["override"] = map[string]interface{}{
+				"probes": map[string]interface{}{
+					"livenessProbes": map[string]interface{}{
+						"timeoutSeconds":      20,
+						"periodSeconds":       15,
+						"failureThreshold":    5,
+						"initialDelaySeconds": 30,
+					},
+				},
+			}
+
+			galera := CreateGaleraConfig(namespace, spec)
+			galeraName = types.NamespacedName{
+				Name:      galera.GetName(),
+				Namespace: galera.GetNamespace(),
+			}
+			DeferCleanup(th.DeleteInstance, galera)
+		})
+
+		It("Should accept custom probe timing values", func() {
+			// Verify creation succeeded by checking the resource exists
+			Eventually(func(_ Gomega) {
+				GetGalera(galeraName)
+			}, timeout, interval).Should(Succeed())
+		})
+	})
 })

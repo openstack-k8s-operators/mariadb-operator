@@ -3,6 +3,9 @@ kind: Test
 metadata:
   name: restore
 spec:
+  bindings:
+  - name: ocWaitTimeout
+    value: 160s
   steps:
   - name: setup two different 1-node Galera clusters (TLS and non-TLS)
     bindings:
@@ -47,11 +50,14 @@ spec:
     description: checks that the cluster is correctly backed up
     try:
     - script:
+        env:
+        - name: WAIT_TIMEOUT
+          value: ($ocWaitTimeout)
         content: |
           oc -n $NAMESPACE create job --from=cronjob/backup-openstackbackup backupjob1
           oc -n $NAMESPACE create job --from=cronjob/backup-cluster2backup backupjob2
-          oc -n $NAMESPACE wait --for=condition=complete job/backupjob1
-          oc -n $NAMESPACE wait --for=condition=complete job/backupjob2
+          oc -n $NAMESPACE wait --for=condition=complete --timeout=${WAIT_TIMEOUT} job/backupjob1
+          oc -n $NAMESPACE wait --for=condition=complete --timeout=${WAIT_TIMEOUT} job/backupjob2
 
   - name: remove data in the running Galera clusters
     try:

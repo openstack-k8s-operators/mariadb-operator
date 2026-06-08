@@ -1,0 +1,82 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: probe-config
+spec:
+  steps:
+  - name: Deploy 1-node cluster with default probes
+    description: Deploy a 1-node cluster and verify default probe configuration
+    bindings:
+    - name: replicas
+      value: 1
+    try:
+    - apply:
+        file: ../../common/galera.yaml
+    - assert:
+        file: ../../common/galera-assert.yaml
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: openstack-galera-0
+          spec:
+            containers:
+            - name: galera
+              # Verify default probe timing
+              startupProbe:
+                timeoutSeconds: 250
+                failureThreshold: 1
+              # livenessProbe and readinessProbe use Kubernetes defaults when not configured
+
+  - name: Update with custom probe config
+    description: Patch Galera with custom probe timing for all probes at once
+    try:
+    - patch:
+        resource:
+          apiVersion: mariadb.openstack.org/v1beta1
+          kind: Galera
+          metadata:
+            name: openstack
+          spec:
+            override:
+              probes:
+                livenessProbes:
+                  timeoutSeconds: 20
+                  periodSeconds: 15
+                  failureThreshold: 5
+                  initialDelaySeconds: 45
+                startupProbes:
+                  timeoutSeconds: 300
+                  failureThreshold: 10
+                  initialDelaySeconds: 60
+                readinessProbes:
+                  timeoutSeconds: 10
+                  periodSeconds: 5
+                  failureThreshold: 2
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: openstack-galera-0
+          spec:
+            containers:
+            - name: galera
+              livenessProbe:
+                timeoutSeconds: 20
+                periodSeconds: 15
+                failureThreshold: 5
+                initialDelaySeconds: 45
+              startupProbe:
+                timeoutSeconds: 300
+                failureThreshold: 10
+                initialDelaySeconds: 60
+              readinessProbe:
+                timeoutSeconds: 10
+                periodSeconds: 5
+                failureThreshold: 2
+          status:
+            containerStatuses:
+            - name: galera
+              ready: true

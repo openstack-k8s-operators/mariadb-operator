@@ -3,8 +3,8 @@
 set -ue
 
 function finally {
-    if [ -n "${debugpod}" -a -n "$(oc get --ignore-not-found -o name ${debugpod})" ]; then
-        oc -n $NAMESPACE delete ${debugpod} --force
+    if [ -n "${jobpod:-}" ] && [ -n "$(oc get --ignore-not-found -o name "${jobpod}-debug")" ]; then
+        oc -n $NAMESPACE delete "${jobpod}-debug" --force
     fi
     rm -rf backup-assert
 }
