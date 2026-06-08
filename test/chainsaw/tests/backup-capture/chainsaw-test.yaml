@@ -27,7 +27,9 @@ spec:
     cleanup:
     - script:
         content: |
-          oc -n $NAMESPACE delete pvc mysql-backup-openstack || true
+          if ! oc -n $NAMESPACE get galerabackup/openstack; then
+            oc -n $NAMESPACE delete pvc mysql-backup-openstack || true
+          fi
 
   - name: setup a backup for a 1-node Galera cluster
     description: checks that backup CR is correctly set up
@@ -70,6 +72,16 @@ spec:
           value: ($replicas)
         content: |
           ../../common/backup-assert.sh backup-${REPLICAS}node
+    cleanup:
+    - script: &backup_cleanup
+        env:
+        - name: REPLICAS
+          value: ($replicas)
+        content: |
+          if oc -n $NAMESPACE get pods -l batch.kubernetes.io/job-name=backup-${REPLICAS}node --no-headers | grep -v -q Completed; then
+            echo ERROR during backup job
+            ../../common/dump-resources.sh `oc -n $NAMESPACE get pods -l batch.kubernetes.io/job-name=backup-${REPLICAS}node -o name`
+          fi
 
   - name: Scale Galera cluster to 3-node
     bindings:
@@ -90,6 +102,8 @@ spec:
     try:
     - script: *backup
     - script: *backup_check
+    cleanup:
+    - script: *backup_cleanup
 
   - name: Scale Galera cluster to 1-node
     bindings:
@@ -117,8 +131,9 @@ spec:
     cleanup:
     - script:
         content: |
-          oc -n $NAMESPACE delete pvc mysql-backup-openstack2nd || true
-
+          if ! oc -n $NAMESPACE get galerabackup/openstack2nd; then
+            oc -n $NAMESPACE delete pvc mysql-backup-openstack2nd || true
+          fi
 
   - name: backup the two running clusters
     description: checks that the two clusters can be backed up concurrently
@@ -126,7 +141,7 @@ spec:
     - script:
         content: |
           set -e
-          oc -n $NAMESPACE delete --ignore-not-found=true job/backup-1node
+          oc -n $NAMESPACE delete --ignore-not-found=true job/backup-1node --wait
           oc -n $NAMESPACE create job --from=cronjob/backup-openstack backup-1node
           oc -n $NAMESPACE create job --from=cronjob/backup-openstack2nd backup-1node-2nd
     - script:
@@ -137,6 +152,13 @@ spec:
           oc -n $NAMESPACE wait --timeout=${WAIT_TIMEOUT} --for=condition=complete job/backup-1node job/backup-1node-2nd
           ../../common/backup-assert.sh backup-1node
           ../../common/backup-assert.sh backup-1node-2nd
+    cleanup:
+    - script:
+        content: |
+          if [ "$(oc -n $NAMESPACE get pods | grep '^backup-1node' | grep -c Completed)" -ne 2 ]; then
+            echo ERROR during backup job
+            ../../common/dump-resources.sh `oc -n $NAMESPACE get pods | sed -ne 's%^\(backup-1node[^ ]*\).*%pod/\1%p' | xargs echo`
+          fi
 
   - name: Trigger a backup with a custom timestamp marker
     description: make sure that a custom timestamp can be passed to the backup script
@@ -154,3 +176,10 @@ spec:
           oc -n $NAMESPACE wait --timeout=${WAIT_TIMEOUT} --for=condition=complete job/custom-timestamp
           ../../common/backup-assert.sh custom-timestamp
           oc -n $NAMESPACE get pod -o name -l job-name=custom-timestamp | xargs oc -n $NAMESPACE logs | grep 'Starting backup .* - chainsaw_unit_test'
+    cleanup:
+    - script:
+        content: |
+          if oc -n $NAMESPACE get pods -l batch.kubernetes.io/job-name=custom-timestamp --no-headers | grep -v -q Completed; then
+            echo ERROR during backup job
+            ../../common/dump-resources.sh `oc -n $NAMESPACE get pods -l batch.kubernetes.io/job-name=custom-timestamp -o name`
+          fi
