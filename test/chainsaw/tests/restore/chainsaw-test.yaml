@@ -68,7 +68,7 @@ spec:
         content: |
           if [ "$(oc -n $NAMESPACE get pods | grep -e '^openstackbackup' -e 'cluster2backup' | grep -c Completed)" -ne 2 ]; then
             echo ERROR during backup job
-            ../../common/dump-resources.sh `oc -n $NAMESPACE get pods | sed -ne 's%^\(\(openstackbackup|cluster2backup\)[^ ]*\).*%pod/\1%p' | xargs echo`
+            ../../common/dump-resources.sh `oc -n $NAMESPACE get pods | sed -ne 's%^\(\(backupjob1\|backupjob2\)[^ ]*\).*%pod/\1%p' | xargs echo`
           fi
 
   - name: remove data in the running Galera clusters
