@@ -33,13 +33,13 @@ ansible-playbook -v playbooks/mariadb-operator-update.yaml --tags deploy,operato
 ### Only update operator with pod disruption -> verify galera is restarted correctly
 
 ```bash
-ansible-playbook -v playbooks/mariadb-operator-update.yaml --tags update
+ansible-playbook -v playbooks/mariadb-operator-update.yaml --tags update,operator
 ```
 
 ### Only update part without pod disruption
 
 ```bash
-ansible-playbook -v playbooks/mariadb-operator-update.yaml --tags update -e disruption=false
+ansible-playbook -v playbooks/mariadb-operator-update.yaml --tags update,operator -e disruption=false
 ```
 
 ### Full end-to-end run with 1-node Galera
