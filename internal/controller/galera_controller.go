@@ -184,10 +184,16 @@ func getPodFromName(pods []corev1.Pod, name string) *corev1.Pod {
 	return nil
 }
 
+// isPodRunning checks whether the pod is already running and not yet deleted
+func isPodRunning(pod *corev1.Pod) bool {
+	return pod.Status.Phase == corev1.PodRunning &&
+		pod.DeletionTimestamp == nil
+}
+
 // getReadyPods returns all the pods in Running phase, filtered by Ready state
 func getReadyPods(pods []corev1.Pod) (ret []corev1.Pod) {
 	for _, pod := range pods {
-		if pod.Status.Phase == corev1.PodRunning && podutils.IsPodReady(&pod) {
+		if isPodRunning(&pod) && podutils.IsPodReady(&pod) {
 			ret = append(ret, pod)
 		}
 	}
@@ -219,7 +225,7 @@ func getPodsNotUsingNewReportScript(pods []corev1.Pod) (ret []corev1.Pod) {
 // (i.e. it is not running mysqld)
 func getWaitingPodsMissingAttributes(ctx context.Context, pods []corev1.Pod, instance *mariadbv1.Galera, h *helper.Helper, config *rest.Config) (ret []corev1.Pod) {
 	for _, pod := range pods {
-		if pod.Status.Phase == corev1.PodRunning && !podutils.IsPodReady(&pod) {
+		if isPodRunning(&pod) && !podutils.IsPodReady(&pod) {
 			_, attrFound := instance.Status.Attributes[pod.Name]
 			if attrFound {
 				cidFound, cid := getGaleraContainerID(&pod)
@@ -261,7 +267,7 @@ func retrieveAttributesForPods(ctx context.Context, pods []corev1.Pod, instance 
 // (i.e. it is not running mysqld)
 func getPodsWaitingForGcomm(ctx context.Context, pods []corev1.Pod, instance *mariadbv1.Galera, h *helper.Helper, config *rest.Config) (ret []corev1.Pod) {
 	for _, pod := range pods {
-		if pod.Status.Phase == corev1.PodRunning && !podutils.IsPodReady(&pod) &&
+		if isPodRunning(&pod) && !podutils.IsPodReady(&pod) &&
 			isGaleraContainerStartedAndWaiting(ctx, &pod, instance, h, config) {
 			if _, attrFound := instance.Status.Attributes[pod.Name]; attrFound {
 				if instance.Status.Attributes[pod.Name].Gcomm == "" {
