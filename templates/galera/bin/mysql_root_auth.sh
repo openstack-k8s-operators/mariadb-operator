@@ -1,6 +1,10 @@
 #!/bin/bash
 set +eu
 
+if [ "$(id -u)" != "$(id -u mysql)" ]; then
+    echo "WARNING: mysql_root_auth.sh running as $(id -un) but expects to run as mysql" >&2
+fi
+
 POD_NAME=$(hostname)
 
 # API server config
@@ -182,12 +186,20 @@ else
     echo "Wrote new credentials to ${PW_CACHE_FILE}" >&2
 fi
 
-# Set restrictive permissions on .my.cnf (only if file was successfully written)
+# Set ownership and permissions on cache dir and file so that scripts
+# called by mysqld (e.g. wsrep_notify) can read the cached credentials,
+# even if this script was invoked as root (which is not expected)
+if [ -d "${PW_CACHE_DIR}" ]; then
+    if ! chown mysql:mysql "${PW_CACHE_DIR}" 2>/dev/null; then
+        echo "Did not yet set ownership on ${PW_CACHE_DIR}; will try again later" >&2
+    fi
+fi
 if [ -f "${PW_CACHE_FILE}" ]; then
+    if ! chown mysql:mysql "${PW_CACHE_FILE}" 2>/dev/null; then
+        echo "Did not yet set ownership on ${PW_CACHE_FILE}; will try again later" >&2
+    fi
     if ! chmod 600 "${PW_CACHE_FILE}" 2>/dev/null; then
         echo "Did not yet set permissions on ${PW_CACHE_FILE}; will try again later" >&2
-    else
-        echo "Set chmod 600 on ${PW_CACHE_FILE}" >&2
     fi
 fi
 
