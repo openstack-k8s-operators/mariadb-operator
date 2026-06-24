@@ -1,0 +1,40 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: upgrade-version-probe
+spec:
+  description: |
+    test that status.clusterProperties.TargetVersion is populated with the
+    actual version of mariadb running in the pods, by default.
+  steps:
+  - name: Deploy a healthy 1-node cluster
+    bindings:
+    - name: replicas
+      value: 1
+    try:
+    - apply:
+        file: ../../common/galera.yaml
+    - assert:
+        file: ../../common/galera-assert.yaml
+
+  - name: Verify status TargetVersion matches the running pod version
+    description: |
+      Probe mysqld --version on a pod, normalize to major.minor, and compare to
+      Galera status.clusterProperties.TargetVersion.
+    try:
+    - script:
+        content: |
+          set -eu
+          CR_VERSION=""
+          for i in $(seq 1 60); do
+            CR_VERSION=$(oc get -n "${NAMESPACE}" galera openstack -o jsonpath='{.status.clusterProperties.TargetVersion}' 2>/dev/null || true)
+            [ -n "${CR_VERSION}" ] && break
+            sleep 2
+          done
+          [ -n "${CR_VERSION}" ] || { echo "FAIL: status.clusterProperties.TargetVersion never populated"; exit 1; }
+          RAW=$(oc exec -n "${NAMESPACE}" -c galera openstack-galera-0 -- /bin/sh -c 'mysqld --version')
+          POD_VERSION=$(printf '%s\n' "${RAW}" | grep -oE '[0-9]+\.[0-9]+' | head -n1)
+          echo "pod=${POD_VERSION} cr=${CR_VERSION}"
+          [ -n "${POD_VERSION}" ] || { echo "FAIL: could not parse pod version from: ${RAW}"; exit 1; }
+          [ "${POD_VERSION}" = "${CR_VERSION}" ] || { echo "FAIL: pod version ${POD_VERSION} != cr version ${CR_VERSION}"; exit 1; }
+          echo "PASS: status.clusterProperties.TargetVersion (${CR_VERSION}) matches running pod version (${POD_VERSION})"

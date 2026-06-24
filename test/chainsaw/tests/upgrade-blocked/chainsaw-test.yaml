@@ -1,0 +1,63 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: upgrade-blocked
+spec:
+  description: |
+    Test that a mariadb upgrade is blocked if all cluster nodes are not
+    available.
+  steps:
+  - name: Deploy a healthy 3-node cluster
+    description: Establish a known-good baseline before taking a node offline.
+    bindings:
+    - name: replicas
+      value: 3
+    try:
+    - apply:
+        file: ../../common/galera.yaml
+    - assert:
+        file: ../../common/galera-assert.yaml
+
+  - name: Force one node's readiness probe to fail
+    description: |
+      Set wsrep_desync=ON on openstack-galera-2. This changes the node's
+      wsrep_local_state_comment from Synced to Donor/Desynced, which fails the
+      readiness probe while the liveness probe (wsrep_cluster_status=Primary)
+      continues to pass. The pod stays Running but becomes NotReady, dropping
+      availableReplicas from 3 to 2.
+    try:
+    - script:
+        content: |
+          set -e
+          oc exec -n "${NAMESPACE}" -c galera openstack-galera-2 -- /bin/sh -c 'source /var/lib/operator-scripts/mysql_root_auth.sh; mysql -uroot -e "SET GLOBAL wsrep_desync=ON"'
+          # Wait until the kubelet sees the failed readiness probe and removes
+          # the pod from the available count.
+          oc wait -n "${NAMESPACE}" --for=jsonpath='{.status.availableReplicas}'=2 --timeout=120s statefulset openstack-galera
+
+  - name: Request an upgrade while a node is unready
+    description: Bump spec.targetVersion to 19.999 with the cluster at 2/3 availability.
+    try:
+    - script:
+        content: |
+          oc patch -n "${NAMESPACE}" galera openstack --type=merge -p='{"spec":{"targetVersion":"19.999"}}'
+
+  - name: Assert the upgrade is blocked
+    description: |
+      The operator must report MariaDBServerUpgradeReady=False with reason
+      UpgradeBlocked. The node is still unready (desynced, not deleted), so the
+      blocked state is stable.
+    try:
+    - assert:
+        file: upgrade-blocked-assert.yaml
+
+  - name: Restore the node and clear the upgrade request
+    description: |
+      Disable wsrep_desync and clear targetVersion so the cluster can recover
+      to 3/3 before cleanup.
+    try:
+    - script:
+        content: |
+          set -e
+          oc patch -n "${NAMESPACE}" galera openstack --type=merge -p='{"spec":{"targetVersion":null}}'
+          oc exec -n "${NAMESPACE}" -c galera openstack-galera-2 -- /bin/sh -c 'source /var/lib/operator-scripts/mysql_root_auth.sh; mysql -uroot -e "SET GLOBAL wsrep_desync=OFF"'
+          oc wait -n "${NAMESPACE}" --for=jsonpath='{.status.availableReplicas}'=3 --timeout=300s statefulset openstack-galera || true

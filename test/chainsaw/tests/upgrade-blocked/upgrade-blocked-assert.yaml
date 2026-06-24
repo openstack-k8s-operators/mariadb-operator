@@ -1,0 +1,43 @@
+apiVersion: mariadb.openstack.org/v1beta1
+kind: Galera
+metadata:
+  name: openstack
+status:
+  conditions:
+  - reason: UpgradeBlocked
+    status: "False"
+    type: Ready
+  - reason: Ready
+    status: "True"
+    type: CreateServiceReady
+  - reason: Ready
+    status: "True"
+    type: DeploymentReady
+  - reason: Ready
+    status: "True"
+    type: InputReady
+  - reason: Ready
+    status: "True"
+    type: MariaDBAccountReady
+  - reason: UpgradeBlocked
+    status: "False"
+    type: MariaDBServerUpgradeReady
+  - message: PodDisruptionBudget completed
+    reason: Ready
+    status: "True"
+    type: PDBReady
+  - reason: Ready
+    status: "True"
+    type: RoleBindingReady
+  - reason: Ready
+    status: "True"
+    type: RoleReady
+  - reason: Ready
+    status: "True"
+    type: ServiceAccountReady
+  - reason: Ready
+    status: "True"
+    type: ServiceConfigReady
+  - reason: Ready
+    status: "True"
+    type: TLSInputReady

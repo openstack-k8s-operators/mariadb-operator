@@ -33,6 +33,10 @@ status:
     reason: Ready
     status: "True"
     type: MariaDBAccountReady
+  - message: MariaDB server version up to date
+    reason: Ready
+    status: "True"
+    type: MariaDBServerUpgradeReady
   - message: PodDisruptionBudget completed
     reason: Ready
     status: "True"

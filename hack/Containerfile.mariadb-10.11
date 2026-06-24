@@ -1,0 +1,53 @@
+# Test image: MariaDB 10.11 on CentOS Stream 9 kolla base
+#
+# Derives from the standard 10.5 kolla image to preserve all kolla scripts,
+# uid/gid setup, and filesystem layout. Swaps the MariaDB packages to 10.11
+# from mariadb.org community repos.
+#
+# This is a temporary test image for developing/validating the 10.5->10.11
+# upgrade path (OSPRH-31231). The real target image will be RHEL 10 based
+# and built via the production pipeline.
+#
+# Build:
+#   podman build -t quay.io/<user>/openstack-mariadb:10.11-test \
+#     -f hack/Containerfile.mariadb-10.11 .
+#
+# Verify:
+#   podman run --rm quay.io/<user>/openstack-mariadb:10.11-test mysqld --version
+#   podman run --rm quay.io/<user>/openstack-mariadb:10.11-test which mariadb-upgrade
+
+FROM quay.io/podified-antelope-centos9/openstack-mariadb:current-podified
+
+USER root
+
+# Remove the CentOS 9 MariaDB 10.5 RPMs. The community MariaDB-server package
+# conflicts on /usr/sbin/mysqld so these must be removed first.
+RUN rpm -e --nodeps \
+        mariadb-server-galera \
+        mariadb-server \
+        mariadb-server-utils \
+        mariadb-backup \
+        mariadb \
+        mariadb-errmsg \
+        mariadb-common \
+        galera
+
+# Add the MariaDB.org 10.11 repo and install the community packages.
+# MariaDB-server, MariaDB-client, MariaDB-backup use uppercase names so there
+# is no RPM naming conflict with the packages removed above.
+RUN curl -LsS https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | \
+        bash -s -- --mariadb-server-version=mariadb-10.11 --skip-check-installed && \
+    dnf install -y \
+        MariaDB-server \
+        MariaDB-client \
+        MariaDB-backup \
+        galera-4 && \
+    dnf clean all && \
+    # RHEL packages differ from MariaDB.org community packages in two paths
+    # that the operator scripts and config reference. Add symlinks so this test
+    # image works without touching operator code. The production RHEL 10 image
+    # won't need these.
+    mkdir -p /usr/libexec && ln -s /usr/sbin/mysqld /usr/libexec/mysqld && \
+    mkdir -p /usr/lib64/galera && ln -s /usr/lib64/galera-4/libgalera_smm.so /usr/lib64/galera/libgalera_smm.so
+
+USER mysql

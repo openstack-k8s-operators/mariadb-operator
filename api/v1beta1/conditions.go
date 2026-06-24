@@ -34,6 +34,14 @@ const (
 	// MariaDBServerReadyCondition Status=True condition which indicates that the MariaDB and/or
 	// Galera server is ready for database / account create/drop operations to proceed
 	MariaDBServerReadyCondition condition.Type = "MariaDBServerReady"
+
+	// MariaDBServerUpgradeReadyCondition tracks the state of a MariaDB major
+	// version upgrade driven by Spec.TargetVersion. Status=True means no
+	// upgrade is pending (the deployed version matches the spec). Status=False
+	// with SeverityInfo means an upgrade is in progress; Status=False with
+	// SeverityError means an upgrade was requested but cannot start because the
+	// cluster is not fully available.
+	MariaDBServerUpgradeReadyCondition condition.Type = "MariaDBServerUpgradeReady"
 )
 
 // MariaDB Reasons used by API objects.
@@ -59,6 +67,17 @@ const (
 
 	// ReasonDBSync - Database sync in progress
 	ReasonDBSync condition.Reason = "DBSync"
+
+	// MariaDBServerUpgradeInProgressReason - a major version upgrade is running
+	MariaDBServerUpgradeInProgressReason condition.Reason = "UpgradeInProgress"
+	// MariaDBServerUpgradeBlockedReason - a major version upgrade was requested
+	// but cannot start because the cluster is not fully available
+	MariaDBServerUpgradeBlockedReason condition.Reason = "UpgradeBlocked"
+	// MariaDBServerUpgradeVersionMismatchReason - the cluster came back up after
+	// an upgrade but the running MariaDB server version does not match
+	// spec.targetVersion (e.g. containerImage was not bumped, or targetVersion is
+	// wrong)
+	MariaDBServerUpgradeVersionMismatchReason condition.Reason = "UpgradeVersionMismatch"
 )
 
 // MariaDB Messages used by API objects.
@@ -114,6 +133,24 @@ const (
 	MariaDBAccountFinalizersRemainMessage = "Waiting for finalizers %s to be removed before dropping username"
 
 	MariaDBAccountReadyForDeleteMessage = "MariaDBAccount ready for delete"
+
+	// MariaDBServerUpgradeReadyInitMessage - upgrade tracking not yet started
+	MariaDBServerUpgradeReadyInitMessage = "MariaDB server version upgrade state not yet determined"
+
+	// MariaDBServerUpgradeReadyMessage - no version upgrade pending
+	MariaDBServerUpgradeReadyMessage = "MariaDB server version up to date"
+
+	// MariaDBServerUpgradeInProgressMessage - upgrade underway (expects target version)
+	MariaDBServerUpgradeInProgressMessage = "MariaDB server version upgrade to %s in progress"
+
+	// MariaDBServerUpgradeBlockedMessage - upgrade requested but cluster not
+	// fully available (expects target version, ready node count, total node count)
+	MariaDBServerUpgradeBlockedMessage = "MariaDB server version upgrade to %s blocked: cluster not fully available (%d/%d nodes ready); resolve the offline node before upgrading"
+
+	// MariaDBServerUpgradeVersionMismatchMessage - the cluster is running a
+	// different MariaDB version than spec.targetVersion (expects detected
+	// running version, then requested target version)
+	MariaDBServerUpgradeVersionMismatchMessage = "MariaDB server version mismatch: cluster is running %s but spec.targetVersion is %s"
 )
 
 // GaleraBackup Condition Types used by API objects.
