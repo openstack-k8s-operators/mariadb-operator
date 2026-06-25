@@ -1,11 +1,13 @@
 # mariadb-operator update playbook
 
 This ansible playbooks automates the testing of mariadb-operator updates,
-including tests which disrupt the rolling update of Galera clusters:
+including updating galera CR images during the update, and disrupting
+the rolling update of Galera clusters:
 
   - Deploy the mariadb-operator from a container image
   - Deploy a Galera cluster (3-node by default)
   - Update the mariadb-operator to a new container image
+  - If configured, update the container image used by the Galera cluster
   - If configured, trigger a disruption during the galera rolling update (default)
   - Verify that the update finished succesfully
 
@@ -56,6 +58,16 @@ ansible-playbook -v playbooks/mariadb-operator-update.yaml \
                  -e mariadb_operator_image_updated=quay.io/openstack-k8s-operators/mariadb-operator-index:18.0-fr5-latest
 ```
 
+### Full end-to-end run with custom operator images, and custom container images for galera pods
+
+```bash
+ansible-playbook -v playbooks/mariadb-operator-update.yaml \
+                 -e mariadb_operator_image_initial=quay.io/openstack-k8s-operators/mariadb-operator-index:18.0-fr4-latest \
+                 -e mariadb_operator_image_updated=quay.io/openstack-k8s-operators/mariadb-operator-index:18.0-fr5-latest \
+                 -e galera_image_initial=quay.io/podified-antelope-centos9/openstack-mariadb:current-podified \
+                 -e galera_image_updated=quay.io/podified-master-centos9/openstack-mariadb:current-podified
+```
+
 ### Clean up OCP environment after a run
 
 ```bash
@@ -67,11 +79,13 @@ ansible-playbook -v playbooks/mariadb-operator-update.yaml --tags cleanup
 Important variables from `./ansible/vars/mariadb-galera-vars.yaml`
 
 | Variable | Default | Description |
-|----------|---------|------------|-
+|----------|---------|------------|
 | `tmp_dir` | `$PWD/out` | Location of temporary files |
 | `install_yamls_dir` | `{{ playbook_dir }}/../../../install_yamls` | Location of the `install_yamls` repo |
 | `mariadb_operator_image_initial` | `quay.io/.../mariadb-operator-index:latest` | Initial operator image |
 | `mariadb_operator_image_updated` | `quay.io/.../mariadb-operator-index:latest` | Target operator image for update |
+| `galera_image_initial` | _undefined_ | container image for the initial galera CR |
+| `galera_image_updated` | _undefined_ | container image for the updated galera CR |
 | `galera_cr` | `{{ tmp_dir }}/.../mariadb_v1beta1_galera.yaml` | YAML resource to instantiate the Galera CR |
 | `replicas` | `3` | Number of Galera nodes |
 | `namespace` | `openstack` | OpenStack namespace |
