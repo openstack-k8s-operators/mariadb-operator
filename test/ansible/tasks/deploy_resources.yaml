@@ -33,6 +33,17 @@
   tags:
     - galera
 
+- name: Configure the container image for the Galera CR to deploy
+  ansible.builtin.shell: |
+    set -e
+    cr=$(grep -v containerImage {{ galera_cr_prepared }})
+    echo -e "$cr\n  containerImage: {{ galera_image_initial }}" > {{ galera_cr_prepared }}
+  changed_when: false
+  when:
+    - galera_image_initial is defined
+  tags:
+    - galera
+
 - name: Deploy the prepared Galera CR
   community.general.make:
     chdir: "{{ install_yamls_dir }}"
