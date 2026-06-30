@@ -813,6 +813,9 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	// build state of the restart hash. this is used to decide whether the
 	// statefulset must stop all its pods before applying a config update
 	clusterPropertiesEnv["GCommTLS"] = env.SetValue(strconv.FormatBool(instance.Spec.TLS.Enabled() && instance.Spec.TLS.CaBundleSecretName != ""))
+	if instance.Spec.TargetVersion != "" {
+		clusterPropertiesEnv["TargetVersion"] = env.SetValue(instance.Spec.TargetVersion)
+	}
 	clusterPropertiesHash, err := util.HashOfInputHashes(clusterPropertiesEnv)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -830,12 +833,19 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 
 	// Update ClusterProperties here, as from this point we are sure we can update
 	// both `ClusterProperties` and `StopRequired` in this reconcile loop.
+	//
+	// TargetVersion tracks the version the data files have actually been upgraded
+	// to, not the desired version from spec. Save it before wiping the map and
+	// restore it after; it is only advanced to Spec.TargetVersion once the
+	// cluster is running after the upgrade.
+	deployedTargetVersion := instance.Status.ClusterProperties["TargetVersion"]
 	instance.Status.ClusterProperties = make(map[string]string)
 	for k, s := range clusterPropertiesEnv {
 		var envVar corev1.EnvVar
 		s(&envVar)
 		instance.Status.ClusterProperties[k] = envVar.Value
 	}
+	instance.Status.ClusterProperties["TargetVersion"] = deployedTargetVersion
 
 	// check whether we need to stop the cluster after a cluster-wide change
 	if oldPropertiesHash, exists := instance.Status.Hash["ClusterProperties"]; exists {
@@ -952,6 +962,14 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	//     probe returns true (i.e. galera is running in the pod and clustered)
 	//   . Cluster is bootstrapped as soon as one pod is available
 	instance.Status.Bootstrapped = statefulset.Status.AvailableReplicas > 0
+
+	if instance.Status.Bootstrapped &&
+		!instance.Status.StopRequired &&
+		instance.Spec.TargetVersion != "" &&
+		instance.Status.ClusterProperties["TargetVersion"] != instance.Spec.TargetVersion {
+		util.LogForObject(helper, fmt.Sprintf("Version upgrade to %s complete, clearing upgrade init container", instance.Spec.TargetVersion), instance)
+		instance.Status.ClusterProperties["TargetVersion"] = instance.Spec.TargetVersion
+	}
 
 	if instance.Status.Bootstrapped {
 		// Sync Ready condition

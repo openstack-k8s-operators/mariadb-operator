@@ -12,11 +12,9 @@ bind-address = { PODNAME }
 binlog_format = ROW
 datadir = /var/lib/mysql
 default-storage-engine = innodb
-expire_logs_days = 10
 innodb_autoinc_lock_mode = 2
 innodb_file_per_table = ON
 innodb_flush_log_at_trx_commit = 1
-innodb_locks_unsafe_for_binlog = 1
 innodb_strict_mode = OFF
 key_buffer_size = 16M
 {{if .logToDisk}}
@@ -28,8 +26,6 @@ max_connections = 4096
 open_files_limit = 65536
 pid-file = /var/lib/mysql/mariadb.pid
 port = 3306
-query_cache_limit = 1M
-query_cache_size = 16M
 skip-external-locking
 skip-name-resolve = 1
 socket = /var/lib/mysql/mysql.sock
@@ -39,19 +35,25 @@ tmpdir = /tmp
 user = mysql
 wsrep_notify_cmd = /usr/local/bin/mysql_wsrep_notify.sh
 wsrep_auto_increment_control = 1
-wsrep_causal_reads = 0
-wsrep_certify_nonPK = 1
 # wsrep_cluster_address = gcomm://database-0.internalapi.redhat.local,database-1.internalapi.redhat.local,database-2.internalapi.redhat.local
 wsrep_cluster_name = galera_cluster
 wsrep_convert_LOCK_to_trx = 0
 wsrep_debug = 0
-wsrep_drupal_282555_workaround = 0
 wsrep_on = ON
 wsrep_provider = /usr/lib64/galera/libgalera_smm.so
 wsrep_provider_options = pc.wait_prim=FALSE;gcache.recover=no;gmcast.listen_addr=tcp://{ PODIP }:4567
 wsrep_retry_autocommit = 1
 wsrep_slave_threads = 1
 wsrep_sst_method = rsync
+
+# fields removed in 10.11 — tolerated as no-ops in 10.11, remove when 10.5 support is dropped
+expire_logs_days = 10
+innodb_locks_unsafe_for_binlog = 1
+query_cache_limit = 1M
+query_cache_size = 16M
+wsrep_causal_reads = 0
+wsrep_certify_nonPK = 1
+wsrep_drupal_282555_workaround = 0
 
 [mysqld_safe]
 {{if .logToDisk}}

@@ -108,6 +108,14 @@ type GaleraSpecCore struct {
 	// +kubebuilder:validation:Optional
 	// Override, provides the ability to override the generated manifest of several child resources.
 	Override GaleraOverrideSpec `json:"override,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// TargetVersion is the MariaDB major.minor version that the cluster should
+	// run after an upgrade (e.g. "10.11"). When set and different from the
+	// version recorded in the existing data files, the operator performs a full
+	// cluster stop and runs mariadb-upgrade on each node before restarting.
+	// Leave empty when no version upgrade is in progress.
+	TargetVersion string `json:"targetVersion,omitempty"`
 }
 
 // GaleraOverrideSpec to override the generated manifest of several child resources
