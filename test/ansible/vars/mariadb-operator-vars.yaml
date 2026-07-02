@@ -8,6 +8,12 @@ tmp_dir: "{{ lookup('env', 'PWD') }}/out"
 mariadb_operator_image_initial: "quay.io/openstack-k8s-operators/mariadb-operator-index:latest"
 mariadb_operator_image_updated: "quay.io/openstack-k8s-operators/mariadb-operator-index:latest"
 
+# galera images
+# define those variables to force a specific galera image
+# during initial deployment and update
+# galera_image_initial: "quay.io/podified-antelope-centos9/openstack-mariadb:current-podified"
+# galera_image_updated: "quay.io/podified-antelope-centos9/openstack-mariadb:current-podified"
+
 # Disruption tests during update
 disruption: true
 
