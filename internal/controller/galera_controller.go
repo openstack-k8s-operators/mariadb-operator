@@ -27,6 +27,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/openstack-k8s-operators/lib-common/modules/common"
@@ -91,12 +92,27 @@ var allWatchFields = []string{
 	topologyField,
 }
 
+// bootstrapPodInfo tracks which pod is currently bootstrapping a galera
+// cluster, along with the containerID at injection time so the entry
+// can be invalidated when the container restarts.
+type bootstrapPodInfo struct {
+	podName     string
+	containerID string
+}
+
 // GaleraReconciler reconciles a Galera object
 type GaleraReconciler struct {
 	client.Client
 	Kclient kubernetes.Interface
 	config  *rest.Config
 	Scheme  *runtime.Scheme
+	// bootstrapping tracks the pod currently bootstrapping each Galera
+	// cluster. Keyed by types.NamespacedName. Entries are set when
+	// gcomm:// is injected and cleared when the cluster bootstraps,
+	// the pod restarts (new CID), or the CR is deleted.
+	// Joiner injection is not tracked here — the filesystem check in
+	// isGaleraContainerStartedAndWaiting handles that.
+	bootstrapping sync.Map // types.NamespacedName -> bootstrapPodInfo
 }
 
 // GetLog returns a logger object with a prefix of "controller.name" and additional controller context fields
@@ -108,25 +124,46 @@ func GetLog(ctx context.Context, controller string) logr.Logger {
 // General Galera helper functions
 //
 
-// findBestCandidate returns the node with the lowest seqno
+// findBestCandidate selects the best node to bootstrap a galera cluster.
+// It requires all replicas to have reported their state (seqno) before
+// making a decision. Prefers a node marked SafeToBootstrap; otherwise
+// picks the node with the highest seqno.
+//
+// ContainerID freshness is NOT checked here. During bootstrap recovery
+// (Bootstrapped==false), no pod has started mysqld -- pods are blocked
+// waiting for gcomm_uri -- so the seqno on disk (and thus in the
+// pushed attributes) cannot change between container restarts. Checking
+// CIDs against the live pod list would create a race: pods restart
+// faster than the reconcile cycle, causing permanent mismatches.
 func findBestCandidate(g *mariadbv1.Galera, pods []corev1.Pod, log logr.Logger) (node string, found bool) {
 	log.Info("Known attributes for bootstrapping the cluster", "attributes", g.Status.Attributes)
-	var sortedNodes []string
+
+	// Log CID mismatches for observability (not used for decisions)
 	for _, pod := range pods {
-		if cidFound, cid := getGaleraContainerID(&pod); cidFound {
-			attr, attrFound := g.Status.Attributes[pod.Name]
-			if attrFound && attr.ContainerID == cid {
-				sortedNodes = append(sortedNodes, pod.Name)
+		if _, cid := getGaleraContainerID(&pod); cid != "" {
+			if attr, ok := g.Status.Attributes[pod.Name]; ok && attr.ContainerID != cid {
+				log.Info("ContainerID differs between attribute and running pod (informational)",
+					"pod", pod.Name,
+					"podCID", cid,
+					"attrCID", attr.ContainerID)
 			}
 		}
 	}
-	sort.Strings(sortedNodes)
+
+	// Collect all pods that have pushed attributes (regardless of CID)
+	var knownNodes []string
+	for _, pod := range pods {
+		if _, ok := g.Status.Attributes[pod.Name]; ok {
+			knownNodes = append(knownNodes, pod.Name)
+		}
+	}
+	sort.Strings(knownNodes)
+
 	bestnode := ""
 	bestseqno := -1
-	for _, node := range sortedNodes {
-		// On clean shutdown, galera sets the last
-		// stopped node as 'safe to bootstrap', so use
-		// this hint when we can
+	for _, node := range knownNodes {
+		// On clean shutdown, galera sets the last stopped node as
+		// 'safe to bootstrap', so use this hint when we can.
 		if g.Status.Attributes[node].SafeToBootstrap {
 			return node, true
 		}
@@ -137,12 +174,10 @@ func findBestCandidate(g *mariadbv1.Galera, pods []corev1.Pod, log logr.Logger) 
 			bestseqno = intseqno
 		}
 	}
-	// if we pass here, a candidate is only valid if we
-	// inspected all the expected replicas (e.g. typically 3)
-	if len(sortedNodes) != int(*g.Spec.Replicas) {
+	if len(knownNodes) != int(*g.Spec.Replicas) {
 		return "", false
 	}
-	return bestnode, true //"galera-0"
+	return bestnode, true
 }
 
 // buildGcommURI builds a gcomm URI for a galera instance
@@ -160,14 +195,62 @@ func buildGcommURI(instance *mariadbv1.Galera) string {
 	return uri
 }
 
-// isBootstrapInProgress checks whether a node is currently starting a galera cluster
-func isBootstrapInProgress(instance *mariadbv1.Galera) bool {
-	for _, attr := range instance.Status.Attributes {
-		if attr.Gcomm == "gcomm://" {
-			return true
+// isBootstrapInProgress checks whether a node is currently starting a galera cluster.
+// Returns true only if the container that initiated the bootstrap is still present.
+// If the pod restarted (new CID) or no longer exists, the entry is cleared so the
+// operator can reprobe.
+func (r *GaleraReconciler) isBootstrapInProgress(instance *mariadbv1.Galera, pods []corev1.Pod) bool {
+	key := types.NamespacedName{Namespace: instance.Namespace, Name: instance.Name}
+	val, ok := r.bootstrapping.Load(key)
+	if !ok {
+		return false
+	}
+	info := val.(bootstrapPodInfo)
+	for _, pod := range pods {
+		if pod.Name == info.podName {
+			if _, cid := getGaleraContainerID(&pod); cid == info.containerID {
+				return true
+			}
+			r.clearBootstrapState(instance)
+			return false
 		}
 	}
+	r.clearBootstrapState(instance)
 	return false
+}
+
+func (r *GaleraReconciler) setBootstrapInProgress(instance *mariadbv1.Galera, podName, containerID string) {
+	key := types.NamespacedName{Namespace: instance.Namespace, Name: instance.Name}
+	r.bootstrapping.Store(key, bootstrapPodInfo{podName: podName, containerID: containerID})
+}
+
+func (r *GaleraReconciler) clearBootstrapState(instance *mariadbv1.Galera) {
+	key := types.NamespacedName{Namespace: instance.Namespace, Name: instance.Name}
+	r.bootstrapping.Delete(key)
+}
+
+// reconstructBootstrapState detects a bootstrap already in progress by
+// probing pods for a running mysqld process. This covers the case where
+// the operator restarted and lost its in-memory state. Only probes when
+// the sync.Map has no entry for this instance.
+func (r *GaleraReconciler) reconstructBootstrapState(ctx context.Context, instance *mariadbv1.Galera, pods []corev1.Pod, h *helper.Helper, config *rest.Config) {
+	key := types.NamespacedName{Namespace: instance.Namespace, Name: instance.Name}
+	if _, ok := r.bootstrapping.Load(key); ok {
+		return
+	}
+
+	log := GetLog(ctx, "galera")
+	for _, pod := range pods {
+		if pod.Status.Phase != corev1.PodRunning || podutils.IsPodReady(&pod) {
+			continue
+		}
+		if isGaleraContainerRunningMysqld(ctx, &pod, instance, h, config) {
+			_, cid := getGaleraContainerID(&pod)
+			log.Info("Detected bootstrap already in progress", "pod", pod.Name)
+			r.setBootstrapInProgress(instance, pod.Name, cid)
+			return
+		}
+	}
 }
 
 ///
@@ -263,13 +346,7 @@ func getPodsWaitingForGcomm(ctx context.Context, pods []corev1.Pod, instance *ma
 	for _, pod := range pods {
 		if pod.Status.Phase == corev1.PodRunning && !podutils.IsPodReady(&pod) &&
 			isGaleraContainerStartedAndWaiting(ctx, &pod, instance, h, config) {
-			if _, attrFound := instance.Status.Attributes[pod.Name]; attrFound {
-				if instance.Status.Attributes[pod.Name].Gcomm == "" {
-					ret = append(ret, pod)
-				}
-			} else {
-				ret = append(ret, pod)
-			}
+			ret = append(ret, pod)
 		}
 	}
 	return
@@ -283,6 +360,21 @@ func getGaleraContainerID(pod *corev1.Pod) (found bool, CID string) {
 		}
 	}
 	return false, ""
+}
+
+// isGaleraContainerRunningMysqld checks whether mysqld is running as a
+// child of PID 1 (the init process, e.g. dumb-init). This means the
+// detect script has consumed gcomm_uri and exec'd into mysqld. Used to
+// reconstruct bootstrap state after an operator restart.
+func isGaleraContainerRunningMysqld(ctx context.Context, pod *corev1.Pod, instance *mariadbv1.Galera, h *helper.Helper, config *rest.Config) bool {
+	running := false
+	err := mariadb.ExecInPod(ctx, h, config, instance.Namespace, pod.Name, "galera",
+		[]string{"/bin/bash", "-c", "pgrep -aP1 | grep -wo mysqld"},
+		func(stdout *bytes.Buffer, _ *bytes.Buffer) error {
+			running = strings.TrimSpace(stdout.String()) == "mysqld"
+			return nil
+		})
+	return err == nil && running
 }
 
 // isGaleraContainerStartedAndWaiting checks whether the galera container is waiting for a gcomm_uri file
@@ -303,26 +395,24 @@ func isGaleraContainerStartedAndWaiting(ctx context.Context, pod *corev1.Pod, in
 // These functions have side effect and modify the galera CR's status
 //
 
-// injectGcommURI configures a pod to start galera with a given URI
+// injectGcommURI configures a pod to start galera with a given URI.
+// The URI is written directly into the pod's filesystem, which is the
+// sole consumer — the operator does not record it in Status.Attributes
+// to avoid a concurrency race with the deferred status merge patch.
+// For bootstrap URIs (gcomm://), the caller is responsible for recording
+// the bootstrap state via setBootstrapInProgress after a successful call.
+//
+// If the exec fails (e.g. transient connection error), the error is
+// returned so the reconcile event gets reprocessed, giving us a chance
+// to re-inject the URI. If the error was due to a pod restart, the next
+// reconcile will detect the new ContainerID and wait for the pod to
+// publish fresh attributes before injecting.
 func injectGcommURI(ctx context.Context, h *helper.Helper, config *rest.Config, instance *mariadbv1.Galera, pod *corev1.Pod, uri string) error {
-	err := mariadb.ExecInPod(ctx, h, config, instance.Namespace, pod.Name, "galera",
+	return mariadb.ExecInPod(ctx, h, config, instance.Namespace, pod.Name, "galera",
 		[]string{"/bin/bash", "-c", "echo '" + uri + "' > /var/lib/mysql/gcomm_uri"},
 		func(_ *bytes.Buffer, _ *bytes.Buffer) error {
-			attr := instance.Status.Attributes[pod.Name]
-			attr.Gcomm = uri
-			instance.Status.Attributes[pod.Name] = attr
 			return nil
 		})
-	// If we could not push the file in the pod, this might be due
-	// to a transient connection error. Return an error, so that
-	// this reconcile event gets reprocessed, to give us a chance
-	// to re-inject the URI into the pod.
-	//
-	// NOTE: if the error was due to a pod being restarted, the next
-	// processing of this reconcile event will automatically clean up
-	// the outdated attributes and wait for the newly restarted pod
-	// to publish up-to-date state before injecting any URI.
-	return err
 }
 
 // retrieveSequenceNumber probes a pod's galera instance for sequence number
@@ -953,13 +1043,19 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	//   . Cluster is bootstrapped as soon as one pod is available
 	instance.Status.Bootstrapped = statefulset.Status.AvailableReplicas > 0
 
+	// Clear transient in-memory bootstrap tracker now that a pod is available
+	if instance.Status.Bootstrapped {
+		r.clearBootstrapState(instance)
+	}
+
 	if instance.Status.Bootstrapped {
 		// Sync Ready condition
 		instance.Status.Conditions.MarkTrue(condition.DeploymentReadyCondition, condition.DeploymentReadyMessage)
 
 		// All pods that are 'Ready' have their local galera running and connected.
 		// We can clear their attributes from our status as these are now outdated.
-		for _, pod := range getReadyPods(podList.Items) {
+		readyPods := getReadyPods(podList.Items)
+		for _, pod := range readyPods {
 			name := pod.Name
 			if _, found := instance.Status.Attributes[name]; found {
 				log.Info("Galera started", "pod", name)
@@ -970,12 +1066,22 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		// The remaining pods will become joiner nodes. Wait until they have
 		// reported their status to the operator, and then configure them
 		// as joiners.
+		// Only push joiner gcomm if there are actually Ready pods to
+		// join. If AvailableReplicas is stale (which persists for a long
+		// time due to the startup probe timeout, 240s by default) and no
+		// pods are truly Ready, pushing a joiner gcomm would cause the
+		// pod to start mysqld against dead peers, wasting a restart cycle.
+		if len(readyPods) == 0 {
+			log.Info("Bootstrapped flag is set but no pods are Ready, skipping joiner push")
+		}
 		runningPods := getPodsWaitingForGcomm(ctx, podList.Items, instance, helper, r.config)
 		for _, pod := range runningPods {
+			if len(readyPods) == 0 {
+				break
+			}
 			name := pod.Name
 			joinerURI := buildGcommURI(instance)
 			log.Info("Pushing gcomm URI to joiner", "pod", name)
-			// Setting the gcomm attribute marks this pod as 'currently joining the cluster'
 			err := injectGcommURI(ctx, helper, r.config, instance, &pod, joinerURI)
 			if err != nil {
 				log.Error(err, "Failed to push gcomm URI", "pod", name)
@@ -991,7 +1097,11 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	// Note:
 	//   . a pod whose phase is Running but who is not Ready hasn't started
 	//     galera, it is waiting for the operator's instructions.
-	if !instance.Status.Bootstrapped && !isBootstrapInProgress(instance) {
+	if !instance.Status.Bootstrapped {
+		r.reconstructBootstrapState(ctx, instance, podList.Items, helper, r.config)
+	}
+
+	if !instance.Status.Bootstrapped && !r.isBootstrapInProgress(instance, podList.Items) {
 		var node string
 		found := false
 
@@ -1010,7 +1120,6 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		if found {
 			pod := getPodFromName(podList.Items, node)
 			log.Info("Pushing gcomm URI to bootstrap", "pod", node)
-			// Setting the gcomm attribute marks this pod as 'currently bootstrapping the cluster'
 			err := injectGcommURI(ctx, helper, r.config, instance, pod, "gcomm://")
 			if err != nil {
 				log.Error(err, "Failed to push gcomm URI", "pod", node)
@@ -1018,6 +1127,8 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 				// another injection (see details in injectGcommURI())
 				return ctrl.Result{}, err
 			}
+			_, cid := getGaleraContainerID(pod)
+			r.setBootstrapInProgress(instance, pod.Name, cid)
 		}
 	}
 
@@ -1031,6 +1142,14 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		if len(oldPods) > 0 {
 			log.Info("Requeuing until all replicas are available")
 			return ctrl.Result{RequeueAfter: time.Duration(3) * time.Second}, nil
+		}
+		// Requeue periodically during bootstrap recovery. After a
+		// joiner gcomm is pushed to a pod that starts and fails
+		// mysqld, the pod restart may not generate an event that
+		// triggers a new reconcile. Without requeue the operator
+		// would stop retrying.
+		if !instance.Status.Bootstrapped {
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
 		return ctrl.Result{}, nil
 	}
@@ -1274,6 +1393,8 @@ func (r *GaleraReconciler) getRootMariadbAccountName(instance *mariadbv1.Galera)
 
 func (r *GaleraReconciler) reconcileDelete(ctx context.Context, instance *mariadbv1.Galera, helper *helper.Helper) (ctrl.Result, error) {
 	helper.GetLogger().Info("Reconciling Service delete")
+
+	r.clearBootstrapState(instance)
 
 	// Remove our finalizer from the db svc
 	svc, err := service.GetServiceWithName(ctx, helper, instance.Name, instance.Namespace)
