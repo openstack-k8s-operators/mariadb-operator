@@ -122,6 +122,10 @@ function kolla_set_all_configs {
         # mysql_root_auth.sh, so that we definitely use the root password defined in
         # the cluster, not whatever possibly stale PW is in local files.
         MYSQL_ROOT_AUTH_BYPASS_CHECKS=true source /var/lib/operator-scripts/mysql_root_auth.sh
+        if [ $? -ne 0 ]; then
+            echo -e "Could not retrieve root password from K8s API, aborting bootstrap"
+            exit 1
+        fi
     else
         echo -e "Could not access /var/lib/operator-scripts/mysql_root_auth.sh script; "
         echo -e "using environment DB_ROOT_PASSWORD and creating pw cache directory manually"

@@ -83,8 +83,18 @@ GALERA_CR=$(curl -s \
     --header "Authorization: Bearer ${TOKEN}" \
     "${APISERVER}/${MARIADB_API}/namespaces/${NAMESPACE}/galeras/${GALERA_INSTANCE}")
 
+if ! echo "${GALERA_CR}" | python3 -c "import json, sys; json.load(sys.stdin)" 2>/dev/null; then
+    echo "ERROR: failed to retrieve Galera CR from K8s API, cannot determine root password" >&2
+    return 1
+fi
+
 # note jq is not installed in the galera image, macgyvering w/ python instead
 SECRET_NAME=$(echo "${GALERA_CR}" | python3 -c "import json, sys; print(json.load(sys.stdin)['status']['rootDatabaseSecret'])")
+
+if [ -z "${SECRET_NAME}" ]; then
+    echo "ERROR: Galera CR does not contain status.rootDatabaseSecret, cannot determine root password" >&2
+    return 1
+fi
 
 # get password from secret
 PASSWORD=$(curl -s \
@@ -94,6 +104,11 @@ PASSWORD=$(curl -s \
     "${APISERVER}/${K8S_API}/namespaces/${NAMESPACE}/secrets/${SECRET_NAME}" \
     | python3 -c "import json, sys; print(json.load(sys.stdin)['data']['DatabasePassword'])" \
     | base64 -d)
+
+if [ -z "${PASSWORD}" ]; then
+    echo "ERROR: failed to retrieve root password from secret '${SECRET_NAME}', cannot determine root password" >&2
+    return 1
+fi
 
 # Special step for the unlikely case that root PW is being changed but the
 # account.sh script failed to complete.  Test this password (which came from
