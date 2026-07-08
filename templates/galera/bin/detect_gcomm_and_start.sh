@@ -53,5 +53,15 @@ else
     echo "this POD will now join cluster $URI"
 fi
 
+# OSPRH-32408: if a galera node tries to join a cluster which happens
+# to be gone, it will try to connect to any node in the gcomm:// URI
+# for at most pc.wait_prim_timeout seconds.
+# however if /var/lib/mysql/gvwstate.dat is present, the joiner will
+# try to connect indefinitely, leaving the joiner stuck if the cluster
+# isn't bootstrapped.
+# remove this file prior to start, as it is only useful to recover
+# from a previous crash when no bootstrap orchestration is available.
+rm -f /var/lib/mysql/gvwstate.dat
+
 rm -f $URI_FILE
 exec /usr/libexec/mysqld --wsrep-cluster-address="$URI"
