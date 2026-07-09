@@ -118,7 +118,11 @@ type GaleraOverrideSpec struct {
 	Probes probes.OverrideSpec `json:"probes,omitempty"`
 }
 
-// GaleraAttributes holds startup information for a Galera host
+// GaleraAttributes holds startup information for a Galera host.
+// This struct is read-only from the operator's perspective — all fields
+// are pushed by the galera pods via the report_local_galera_state script.
+// The operator must not write to these fields to avoid a concurrency
+// race with the deferred status merge patch.
 type GaleraAttributes struct {
 	// UUID of the partition that is seen by the galera node
 	UUID string `json:"uuid,omitempty"`

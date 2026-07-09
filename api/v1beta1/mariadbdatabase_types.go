@@ -35,11 +35,17 @@ type MariaDBDatabaseSpec struct {
 	// Name of secret which contains DatabasePassword (deprecated)
 	Secret *string `json:"secret,omitempty"`
 	// Name of the database in MariaDB
+	// +kubebuilder:validation:MaxLength=64
+	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9_]+$`
 	Name string `json:"name,omitempty"`
 	// +kubebuilder:default=utf8
+	// +kubebuilder:validation:MaxLength=64
+	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9_]+$`
 	// Default character set for this database
 	DefaultCharacterSet string `json:"defaultCharacterSet,omitempty"`
 	// +kubebuilder:default=utf8_general_ci
+	// +kubebuilder:validation:MaxLength=64
+	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9_]+$`
 	// Default collation for this database
 	DefaultCollation string `json:"defaultCollation,omitempty"`
 }

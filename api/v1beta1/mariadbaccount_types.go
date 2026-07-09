@@ -36,6 +36,8 @@ const (
 type MariaDBAccountSpec struct {
 	// UserName for new account
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MaxLength=64
+	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9_]+$`
 	UserName string `json:"userName"`
 
 	// Name of secret which contains DatabasePassword

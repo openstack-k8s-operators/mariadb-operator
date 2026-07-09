@@ -33,7 +33,9 @@ spec:
     cleanup:
     - script:
         content: |
-          oc -n $NAMESPACE delete pvc mysql-backup-openstack mysql-transfer-openstack || true
+          if ! oc -n $NAMESPACE get galerabackup/openstack; then
+            oc -n $NAMESPACE delete pvc mysql-backup-openstack mysql-transfer-openstack || true
+          fi
 
   - name: backup the 1-node Galera cluster
     description: checks that the cluster is correctly backed up
@@ -56,3 +58,10 @@ spec:
           value: ($replicas)
         content: |
           ../../common/backup-assert.sh backup-${REPLICAS}node
+    cleanup:
+    - script:
+        content: |
+          if oc -n $NAMESPACE get pods -l batch.kubernetes.io/job-name=backup-1node --no-headers | grep -v -q Completed; then
+            echo ERROR during backup job
+            ../../common/dump-resources.sh `oc -n $NAMESPACE get pods -l batch.kubernetes.io/job-name=backup-1node -o name`
+          fi

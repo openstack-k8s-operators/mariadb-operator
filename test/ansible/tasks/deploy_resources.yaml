@@ -1,14 +1,8 @@
 ---
-- name: Deploy mariadb-operator with initial image
-  community.general.make:
-    chdir: "{{ install_yamls_dir }}"
-    target: mariadb
-  environment:
-    MARIADB_IMG: "{{ mariadb_operator_image_initial }}"
-    OPERATOR_NAMESPACE: "{{ operator_namespace }}"
-    NAMESPACE: "{{ cr_namespace }}"
-    OUT: "{{ tmp_dir }}"
-    TIMEOUT: "{{ deployment_timeout }}"
+- name: Install a default mariadb-operator
+  ansible.builtin.include_tasks: install_operator.yaml
+  vars:
+    mariadb_operator_index: "{{ mariadb_operator_image_initial }}"
   tags:
     - operator
 
@@ -36,6 +30,17 @@
     set -o pipefail
     (cat {{ galera_cr }} | grep -v 'replicas:'; echo "  replicas: {{ replicas }}")> {{ galera_cr_prepared }}
   changed_when: false
+  tags:
+    - galera
+
+- name: Configure the container image for the Galera CR to deploy
+  ansible.builtin.shell: |
+    set -e
+    cr=$(grep -v containerImage {{ galera_cr_prepared }})
+    echo -e "$cr\n  containerImage: {{ galera_image_initial }}" > {{ galera_cr_prepared }}
+  changed_when: false
+  when:
+    - galera_image_initial is defined
   tags:
     - galera
 

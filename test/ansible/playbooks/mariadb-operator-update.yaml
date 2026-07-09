@@ -40,6 +40,12 @@
       tags:
         - always
 
+    - name: Prepare environment
+      ansible.builtin.include_tasks:
+        file: ../tasks/prepare_environment.yaml
+      tags:
+        - deploy
+
     - name: Cleanup existing mariadb-operator and galera CR
       ansible.builtin.include_tasks:
         file: ../tasks/cleanup_environment.yaml

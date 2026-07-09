@@ -1,0 +1,13 @@
+---
+- name: Disable openstack-operator-controller-init to allow custom mariadb-operator image
+  ansible.builtin.shell: |
+    set -o pipefail
+    if ! oc -n {{ operator_namespace }} get deployment/openstack-operator-controller-init &>/dev/null; then exit 0; fi
+    SAVED_REPLICAS=$(oc -n {{ operator_namespace }} get -o json deployment/openstack-operator-controller-init | jq -r '.metadata.labels["test.mariadb-operator/saved-replicas"]')
+    if [ -n "$SAVED_REPLICAS" ] && [ "$SAVED_REPLICAS" != "null" ]; then exit 0; fi
+    CURRENT_REPLICAS=$(oc -n {{ operator_namespace }} get -o json deployment/openstack-operator-controller-init | jq -r .spec.replicas)
+    oc -n {{ operator_namespace }} label deployment/openstack-operator-controller-init test.mariadb-operator/saved-replicas="$CURRENT_REPLICAS"
+    oc -n {{ operator_namespace }} patch deployment/openstack-operator-controller-init --type='json' -p='[{"op":"replace","path":"/spec/replicas","value":0}]'
+  changed_when: false
+  tags:
+    - always

@@ -1,0 +1,5 @@
+# This file contains ignores rule violations for ansible-lint
+tasks/cleanup_environment.yaml yaml[line-length] skip
+tasks/install_operator.yaml yaml[line-length] skip
+tasks/prepare_environment.yaml yaml[line-length] skip
+tasks/update_operator.yaml yaml[line-length] skip
