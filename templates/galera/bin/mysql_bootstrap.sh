@@ -138,6 +138,11 @@ function kolla_set_all_configs {
         echo -e "Created ${PW_CACHE_DIR} pw cache directory and set ownership"
     fi
 
+    if [ -z "${DB_ROOT_PASSWORD}" ]; then
+        echo -e "DB_ROOT_PASSWORD is blank, aborting bootstrap"
+        exit 1
+    fi
+
 }
 
 if [ -e /var/lib/mysql/mysql ]; then
