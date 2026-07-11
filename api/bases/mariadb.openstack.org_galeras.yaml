@@ -56,7 +56,9 @@ spec:
                 description: |-
                   Customize config using this parameter to change service defaults,
                   or overwrite rendered information using raw MariaDB config format.
-                  The content gets added to /etc/my.cnf.d/galera_custom.cnf
+                  The content gets added to /etc/my.cnf.d/zzz_galera_custom.cnf. The zzz_
+                  prefix is to ensure that this file is loaded last so that any
+                  customizations occur after all other configuration is applied.
                 type: string
               disableNonTLSListeners:
                 description: When TLS is configured, only allow connections to the
