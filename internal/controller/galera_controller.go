@@ -484,9 +484,8 @@ func clearOldPodsAttributesOnScaleDown(ctx context.Context, instance *mariadbv1.
 // RBAC for secrets
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete;
 
-// RBAC for services and endpoints
+// RBAC for services
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete;
-// +kubebuilder:rbac:groups=core,resources=endpoints,verbs=get;list;watch;create;update;patch;delete;
 
 // RBAC for configmaps
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete;
@@ -1274,7 +1273,6 @@ func (r *GaleraReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&mariadbv1.Galera{}).
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
-		Owns(&corev1.Endpoints{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&rbacv1.Role{}).

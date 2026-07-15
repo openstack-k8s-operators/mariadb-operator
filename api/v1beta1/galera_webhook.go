@@ -39,7 +39,7 @@ type GaleraDefaults struct {
 
 var galeraDefaults GaleraDefaults
 
-// Default implements webhook.Defaulter so a webhook will be registered for the type
+// Default sets default values for the Galera resource
 func (r *Galera) Default() {
 	galeralog.Info("default", "name", r.Name)
 
@@ -60,7 +60,7 @@ func (spec *GaleraSpecCore) Default() {
 	// nothing here yet
 }
 
-// ValidateCreate implements webhook.Validator so a webhook will be registered for the type
+// ValidateCreate validates the Galera resource on creation
 func (r *Galera) ValidateCreate() (admission.Warnings, error) {
 	galeralog.Info("validate create", "name", r.Name)
 
