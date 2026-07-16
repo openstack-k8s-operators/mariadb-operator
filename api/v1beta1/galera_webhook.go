@@ -24,7 +24,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	common_webhook "github.com/openstack-k8s-operators/lib-common/modules/common/webhook"
@@ -39,8 +38,6 @@ type GaleraDefaults struct {
 }
 
 var galeraDefaults GaleraDefaults
-
-var _ webhook.Defaulter = &Galera{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
 func (r *Galera) Default() {
@@ -62,8 +59,6 @@ func (spec *GaleraSpec) Default() {
 func (spec *GaleraSpecCore) Default() {
 	// nothing here yet
 }
-
-var _ webhook.Validator = &Galera{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *Galera) ValidateCreate() (admission.Warnings, error) {
