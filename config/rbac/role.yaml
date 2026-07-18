@@ -9,7 +9,6 @@ rules:
   resources:
   - configmaps
   - cronjobs
-  - endpoints
   - persistentvolumeclaims
   - pods
   - secrets
