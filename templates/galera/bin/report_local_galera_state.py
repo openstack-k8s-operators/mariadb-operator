@@ -112,7 +112,7 @@ def push_state(api, namespace, galera_name, pod_name, detected):
 
 def report_state(push: bool):
     pod_name = socket.gethostname()
-    galera_name = re.sub(r'-galera-[0-9]*', '', pod_name)
+    galera_name = re.sub(r'-galera-[0-9]+$', '', pod_name)
 
     svc_account = "/var/run/secrets/kubernetes.io/serviceaccount"
     with open(os.path.join(svc_account, "namespace")) as f:
