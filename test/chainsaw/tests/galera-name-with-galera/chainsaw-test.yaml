@@ -1,0 +1,25 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: galera-name-with-galera
+spec:
+  description: >
+    Verify that a Galera CR whose name contains '-galera-' can bootstrap
+    successfully. Regression test for a bug where report_local_galera_state.py
+    stripped all occurrences of '-galera-' from the pod hostname instead of
+    just the trailing StatefulSet ordinal suffix.
+  steps:
+  - name: Deploy Galera with embedded -galera- in CR name
+    description: >
+      Deploy a 1-node Galera cluster named 'test-galera-cluster' and verify
+      it reaches Ready. The pod hostname will be
+      'test-galera-cluster-galera-0', which triggers the bug if the regex
+      is unanchored.
+    bindings:
+    - name: replicas
+      value: 1
+    try:
+    - apply:
+        file: ./galera.yaml
+    - assert:
+        file: ./galera-assert.yaml
