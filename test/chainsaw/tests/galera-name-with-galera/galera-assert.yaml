@@ -29,6 +29,10 @@ status:
     reason: Ready
     status: "True"
     type: MariaDBAccountReady
+  - message: PodDisruptionBudget completed
+    reason: Ready
+    status: "True"
+    type: PDBReady
   - message: RoleBinding created
     reason: Ready
     status: "True"
