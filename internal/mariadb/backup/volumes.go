@@ -14,22 +14,12 @@ const (
 )
 
 // baseVolumes returns the volumes shared by both backup and restore pods:
-// kolla-config, operator-scripts, backup-scripts, and backup-data PVC.
+// var-local, operator-scripts, backup-scripts, and backup-data PVC.
 func baseVolumes(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera) []corev1.Volume {
 	return []corev1.Volume{{
-		Name: "kolla-config",
+		Name: "var-local",
 		VolumeSource: corev1.VolumeSource{
-			ConfigMap: &corev1.ConfigMapVolumeSource{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: b.Name + "-backup-config",
-				},
-				Items: []corev1.KeyToPath{
-					{
-						Key:  "backup-config.json",
-						Path: "config.json",
-					},
-				},
-			},
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 	}, {
 		Name: "operator-scripts",
@@ -82,8 +72,8 @@ func tlsVolumes(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera) []corev1.Volume 
 	if g.Spec.TLS.Enabled() {
 		svc := tls.Service{
 			SecretName: *g.Spec.TLS.SecretName,
-			CertMount:  nil,
-			KeyMount:   nil,
+			CertMount:  ptr.To("/etc/pki/tls/certs/galera.crt"),
+			KeyMount:   ptr.To("/etc/pki/tls/private/galera.key"),
 			CaMount:    nil,
 		}
 		volumes = append(volumes, svc.CreateVolume(GaleraCertPrefix))
@@ -112,13 +102,9 @@ func tlsVolumes(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera) []corev1.Volume 
 }
 
 // baseVolumeMounts returns the volume mounts shared by both backup and restore pods:
-// kolla-config, operator-scripts, and backup-scripts.
+// operator-scripts, backup-scripts, and var-local.
 func baseVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{{
-		MountPath: "/var/lib/kolla/config_files",
-		ReadOnly:  true,
-		Name:      "kolla-config",
-	}, {
 		MountPath: "/var/lib/operator-scripts",
 		ReadOnly:  true,
 		Name:      "operator-scripts",
@@ -126,6 +112,9 @@ func baseVolumeMounts() []corev1.VolumeMount {
 		MountPath: "/var/lib/backup-scripts",
 		ReadOnly:  true,
 		Name:      "backup-scripts",
+	}, {
+		MountPath: "/var/local",
+		Name:      "var-local",
 	}}
 }
 
@@ -135,8 +124,8 @@ func tlsVolumeMounts(g *mariadbv1.Galera) []corev1.VolumeMount {
 	if g.Spec.TLS.Enabled() {
 		svc := tls.Service{
 			SecretName: *g.Spec.TLS.SecretName,
-			CertMount:  nil,
-			KeyMount:   nil,
+			CertMount:  ptr.To("/etc/pki/tls/certs/galera.crt"),
+			KeyMount:   ptr.To("/etc/pki/tls/private/galera.key"),
 			CaMount:    nil,
 		}
 		mounts = append(mounts, svc.CreateVolumeMounts(GaleraCertPrefix)...)
