@@ -111,7 +111,10 @@ function check_mysql_startup {
     #   . only at this point, InnoDB is initialized, mysql pidfile and
     #     mysql socket are created on disk
 
-    if pgrep -f detect_gcomm_and_start.sh >/dev/null ; then
+    # detect_gcomm_and_start is running only until a gcomm URI is
+    # created on disk, but its name shows in dumb_init (pid 1), so
+    # remove this match in the pgrep below
+    if pgrep -f detect_gcomm_and_start.sh | grep -v 1 >/dev/null ; then
         log_state "waiting for gcomm URI"
         return 1
     fi

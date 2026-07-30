@@ -9,7 +9,6 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 )
 
 // BackupCronJob returns a CronJob object for the galera backup
@@ -55,9 +54,6 @@ func getBackupPodTemplate(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera, config
 		Name:  "DB",
 		Value: g.Name,
 	}, {
-		Name:  "KOLLA_CONFIG_STRATEGY",
-		Value: "COPY_ALWAYS",
-	}, {
 		Name:  "RETENTION",
 		Value: retentionTime,
 	}}
@@ -79,15 +75,13 @@ func getBackupPodTemplate(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera, config
 			Subdomain:          svcName,
 			RestartPolicy:      corev1.RestartPolicyOnFailure,
 			ServiceAccountName: b.RbacResourceName(),
-			SecurityContext: &corev1.PodSecurityContext{
-				FSGroup: ptr.To[int64](42434),
-			},
-			InitContainers: []corev1.Container{},
+			SecurityContext:    mariadb.PodSecurityContext(),
 			Containers: []corev1.Container{{
-				Image:   g.Spec.ContainerImage,
-				Name:    "backup",
-				Command: []string{"/usr/bin/dumb-init", "--", "/usr/local/bin/kolla_start"},
-				Env:     environ,
+				Image:           g.Spec.ContainerImage,
+				Name:            "backup",
+				Command:         []string{"/usr/bin/dumb-init", "--", "/var/lib/backup-scripts/backup_galera"},
+				Env:             environ,
+				SecurityContext: mariadb.GaleraSecurityContext(),
 				Ports: []corev1.ContainerPort{{
 					ContainerPort: 4567,
 					Name:          "galera",
