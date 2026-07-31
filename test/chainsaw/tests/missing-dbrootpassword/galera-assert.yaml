@@ -26,6 +26,10 @@ status:
     severity: Warning
     status: "False"
     type: InputReady
+  - message: PodDisruptionBudget completed
+    reason: Ready
+    status: "True"
+    type: PDBReady
   - message: RoleBinding created
     reason: Ready
     status: "True"

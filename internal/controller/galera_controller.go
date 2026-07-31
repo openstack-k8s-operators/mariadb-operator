@@ -36,6 +36,7 @@ import (
 	env "github.com/openstack-k8s-operators/lib-common/modules/common/env"
 	helper "github.com/openstack-k8s-operators/lib-common/modules/common/helper"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/labels"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/pdb"
 	common_rbac "github.com/openstack-k8s-operators/lib-common/modules/common/rbac"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/secret"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
@@ -44,11 +45,13 @@ import (
 	util "github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/kubectl/pkg/util/podutils"
@@ -501,6 +504,9 @@ func clearOldPodsAttributesOnScaleDown(ctx context.Context, instance *mariadbv1.
 
 // +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;delete;patch
 
+// RBAC required to manage PodDisruptionBudgets for multi-replica deployments
+// +kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
+
 // RBAC required to manipulate Topology resources
 // +kubebuilder:rbac:groups=topology.openstack.org,resources=topologies,verbs=get;list;watch;update
 
@@ -588,6 +594,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		condition.UnknownCondition(condition.ServiceAccountReadyCondition, condition.InitReason, condition.ServiceAccountReadyInitMessage),
 		condition.UnknownCondition(condition.RoleReadyCondition, condition.InitReason, condition.RoleReadyInitMessage),
 		condition.UnknownCondition(condition.RoleBindingReadyCondition, condition.InitReason, condition.RoleBindingReadyInitMessage),
+		condition.UnknownCondition(condition.PDBReadyCondition, condition.InitReason, condition.PDBReadyInitMessage),
 	)
 
 	instance.Status.Conditions.Init(&cl)
@@ -712,6 +719,38 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	}
 
 	instance.Status.Conditions.MarkTrue(condition.CreateServiceReadyCondition, condition.CreateServiceReadyMessage)
+
+	//
+	// PodDisruptionBudget
+	//
+	if instance.Spec.Replicas != nil && *instance.Spec.Replicas > 1 {
+		pdbSpec := pdb.MaxUnavailablePodDisruptionBudget(
+			instance.Name,
+			instance.Namespace,
+			intstr.FromInt(1),
+			mariadb.LabelSelectors(instance, "galera"),
+		)
+		pdbInstance := pdb.NewPDB(pdbSpec, 5*time.Second)
+
+		ctrlResult, err := pdbInstance.CreateOrPatch(ctx, helper)
+		if err != nil {
+			log.Error(err, "Could not apply PDB")
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.PDBReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityWarning,
+				condition.PDBReadyErrorMessage, err.Error()))
+			return ctrl.Result{}, err
+		} else if (ctrlResult != ctrl.Result{}) {
+			return ctrlResult, nil
+		}
+	} else {
+		err := pdb.DeletePDBWithName(ctx, helper, instance.Name, instance.Namespace)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to delete PDB: %w", err)
+		}
+	}
+	instance.Status.Conditions.MarkTrue(condition.PDBReadyCondition, condition.PDBReadyMessage)
 
 	// Map of all resources that may cause a rolling service restart
 	inputHashEnv := make(map[string]env.Setter)
@@ -1274,6 +1313,7 @@ func (r *GaleraReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ConfigMap{}).
+		Owns(&policyv1.PodDisruptionBudget{}).
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&rbacv1.Role{}).
 		Owns(&rbacv1.RoleBinding{}).
