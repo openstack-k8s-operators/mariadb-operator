@@ -1,5 +1,7 @@
 github.com/Masterminds/semver/v3 v3.4.0 h1:Zog+i5UMtVoCU8oKka5P7i9q9HgrJeGzI9SA1Xbatp0=
 github.com/Masterminds/semver/v3 v3.4.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
+github.com/antonioromito/infra-operator/apis v0.0.0-20261002144514-e0cd4521beff h1:SnLcj6iW+H7UgrLe1rodezI1jOGvyTb/kZMmxjBitoU=
+github.com/antonioromito/infra-operator/apis v0.0.0-20261002144514-e0cd4521beff/go.mod h1:nTwi/OMD7Jeh2n29o+hQ6+VzgPk1alqPF632+uKifSg=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
 github.com/blang/semver/v4 v4.0.0 h1:1PFHFE6yCCTv8C1TeyNNarDzntLi7wMI5i/pzqYIsAM=
@@ -94,8 +96,6 @@ github.com/onsi/gomega v1.44.0 h1:eAiGl3Pw5jz5GQdDff0BcxYpAX1JxW8xD7mFUuwNfZQ=
 github.com/onsi/gomega v1.44.0/go.mod h1:e/C2HwaZ1DhvjzXXuFhcR7hY7Sh9pl7MmoWKEjzwcdA=
 github.com/openshift/api v0.0.0-20260710141509-36dec0bfafe4 h1:YVY7Mb0AdJBbNgC/Zz9R/ZwhixOmZNA8P+6ZPaDW/0M=
 github.com/openshift/api v0.0.0-20260710141509-36dec0bfafe4/go.mod h1:SPLf21TYPipzCO67BURkCfK6dcIIxx0oNRVWaOyRcXM=
-github.com/openstack-k8s-operators/infra-operator/apis v0.6.1-0.20261008072659-d6ede618a4d5 h1:FhbMYBKxYJIiBZ8+XqC3AKj9R1ewXDlKG7IU+p+1WWQ=
-github.com/openstack-k8s-operators/infra-operator/apis v0.6.1-0.20261008072659-d6ede618a4d5/go.mod h1:ZLRJKGP8cOKqfYKQqlcRYBEuxEEFMWdp/e0ddBjCAYw=
 github.com/openstack-k8s-operators/lib-common/modules/common v0.6.1-0.20261009105430-6790c2298bb5 h1:/9x3vBbeM2bVSvYJcwHBCZqIE8OET/zxMcgjOSuIYfM=
 github.com/openstack-k8s-operators/lib-common/modules/common v0.6.1-0.20261009105430-6790c2298bb5/go.mod h1:CrdpBw7/8I4LmM87SIi//isOxi0DQG81MD6TY+NKdt8=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
