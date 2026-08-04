@@ -80,6 +80,15 @@ const (
 	// caSecretNameField specifies the field path for CA bundle secret name
 	caSecretNameField = ".spec.tls.ca.caBundleSecretName" // #nosec G101 -- This is a field path, not a credential
 	topologyField     = ".spec.topologyRef.Name"
+
+	// PVCStuckOnNodeAnnotation is set by PodRemediator on a PVC when the
+	// PVC is stuck on an unhealthy node. The galera controller watches for
+	// this and responds with SafeToDeleteAnnotation.
+	PVCStuckOnNodeAnnotation = "remediation.openstack.org/pvc-stuck-on-node"
+
+	// SafeToDeleteAnnotation is set by the galera controller on a PVC to
+	// authorize PodRemediator to delete it.
+	SafeToDeleteAnnotation = "remediation.openstack.org/safe-to-delete"
 )
 
 // Static errors
@@ -1066,6 +1075,10 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		return ctrl.Result{}, err
 	}
 
+	if err := r.CheckForStuckPVCRequiringRemediation(ctx, instance, helper); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	// Update ClusterProperties here, as from this point we are sure we can update
 	// both `ClusterProperties` and `StopRequired` in this reconcile loop.
 	//
@@ -1683,4 +1696,47 @@ func (r *GaleraReconciler) reconcileDelete(ctx context.Context, instance *mariad
 	helper.GetLogger().Info("Reconciled Service delete successfully")
 
 	return ctrl.Result{}, nil
+}
+
+// CheckForStuckPVCRequiringRemediation iterates over PVCs belonging to the
+// Galera StatefulSet and, for each PVC that PodRemediator has annotated as
+// stuck on an unhealthy node, sets the safe-to-delete annotation to authorize
+// PodRemediator to delete it.
+func (r *GaleraReconciler) CheckForStuckPVCRequiringRemediation(ctx context.Context, instance *mariadbv1.Galera, helper *helper.Helper) error {
+	Log := helper.GetLogger()
+
+	pvcList := &corev1.PersistentVolumeClaimList{}
+	listOpts := []client.ListOption{
+		client.InNamespace(instance.Namespace),
+		client.MatchingLabels(mariadb.StatefulSetLabels(instance)),
+	}
+	if err := r.List(ctx, pvcList, listOpts...); err != nil {
+		Log.Error(err, "Failed to list PVCs for Galera StatefulSet")
+		return err
+	}
+
+	for i := range pvcList.Items {
+		pvc := &pvcList.Items[i]
+		if pvc.Annotations == nil {
+			continue
+		}
+		if pvc.Annotations[PVCStuckOnNodeAnnotation] == "" {
+			continue
+		}
+		if pvc.Annotations[SafeToDeleteAnnotation] == "true" {
+			continue
+		}
+
+		oldPVC := pvc.DeepCopy()
+		pvc.Annotations[SafeToDeleteAnnotation] = "true"
+		if err := r.Patch(ctx, pvc, client.MergeFrom(oldPVC)); err != nil {
+			Log.Error(err, "Failed to set safe-to-delete annotation on stuck PVC",
+				"pvc", pvc.Name, "node", pvc.Annotations[PVCStuckOnNodeAnnotation])
+			return err
+		}
+		Log.Info("PVC stuck on unhealthy node; marked safe-to-delete for PodRemediator",
+			"pvc", pvc.Name, "node", pvc.Annotations[PVCStuckOnNodeAnnotation])
+	}
+
+	return nil
 }
