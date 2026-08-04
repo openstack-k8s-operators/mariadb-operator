@@ -23,6 +23,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"reflect"
 	"regexp"
 	"slices"
 	"sort"
@@ -80,6 +82,10 @@ const (
 	// caSecretNameField specifies the field path for CA bundle secret name
 	caSecretNameField = ".spec.tls.ca.caBundleSecretName" // #nosec G101 -- This is a field path, not a credential
 	topologyField     = ".spec.topologyRef.Name"
+
+	// Annotation constants for the PodRemediator consent handshake are imported
+	// from github.com/openstack-k8s-operators/infra-operator/apis/remediation/v1beta1.
+	// TODO: remove the replace directive in go.mod once infra-operator PR #677 merges.
 )
 
 // Static errors
@@ -111,9 +117,10 @@ type bootstrapPodInfo struct {
 // GaleraReconciler reconciles a Galera object
 type GaleraReconciler struct {
 	client.Client
-	Kclient kubernetes.Interface
-	config  *rest.Config
-	Scheme  *runtime.Scheme
+	APIReader client.Reader
+	Kclient   kubernetes.Interface
+	config    *rest.Config
+	Scheme    *runtime.Scheme
 	// bootstrapping tracks the pod currently bootstrapping each Galera
 	// cluster. Keyed by types.NamespacedName. Entries are set when
 	// gcomm:// is injected and cleared when the cluster bootstraps,
@@ -121,6 +128,10 @@ type GaleraReconciler struct {
 	// Joiner injection is not tracked here — the filesystem check in
 	// isGaleraContainerStartedAndWaiting handles that.
 	bootstrapping sync.Map // types.NamespacedName -> bootstrapPodInfo
+	// instanceUncachedRead is true when a previous reconcile determined
+	// that the next reconcile requires an up-to-date view of the
+	// galera CR's status, rather than one coming from the informer cache
+	instanceUncachedRead bool
 }
 
 // GetLog returns a logger object with a prefix of "controller.name" and additional controller context fields
@@ -159,6 +170,9 @@ func findBestCandidate(g *mariadbv1.Galera, pods []corev1.Pod, log logr.Logger) 
 	}
 
 	// Collect all pods that have pushed attributes (regardless of CID)
+	// NOTE(dciabrin) for the time being, we assume that unreachable
+	// pods (due to stuck PVC) do not have associated attributes, so
+	// any attributes parsed below always come from reachable pods
 	var knownNodes []string
 	for _, pod := range pods {
 		if _, ok := g.Status.Attributes[pod.Name]; ok {
@@ -569,7 +583,13 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 
 	// Fetch the Galera instance
 	instance := &mariadbv1.Galera{}
-	err := r.Get(ctx, req.NamespacedName, instance)
+	var err error
+	if r.instanceUncachedRead {
+		r.instanceUncachedRead = false
+		err = r.APIReader.Get(ctx, req.NamespacedName, instance)
+	} else {
+		err = r.Get(ctx, req.NamespacedName, instance)
+	}
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -1178,6 +1198,28 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		statefulset = commonsts.GetStatefulSet()
 	}
 
+	// Recovery check: if some pods are bound to an unresponsive k8s worker node via a
+	// local PV, we have to orchestrate a recovery from the operator, because the SNR
+	// doesn't delete PVs tied to a node that needs remediation.
+	// We detect this condition by looking for annotation set by the PodRemediator,
+	// and process with recovery if needed.
+	// TODO(dciabrin) check only when some replicas are not started/ready?
+	preRemediationCheck := maps.Clone(instance.Status.UnavailablePods)
+	if err := r.EnsurePVCAvailability(ctx, instance, helper); err != nil {
+		log.Error(err, "PVC availability check failed; skipping this cycle")
+	}
+	if !reflect.DeepEqual(preRemediationCheck, instance.Status.UnavailablePods) {
+		// PVC availability has changed, and we want to guarantee that the
+		// next reconcile will pick a fresh view of it and not and old one
+		// from the informal cache, in order to not trigger concurrent
+		// remediations.
+		// Configure the next reconcile accordingly and bail out now, the
+		// next reconcile will clear that flag a go back to cached read.
+		r.instanceUncachedRead = true
+		return ctrl.Result{}, nil
+
+	}
+
 	// If a full cluster restart was requested,
 	// check whether it is still in progress
 	if instance.Status.StopRequired && statefulset.Status.Replicas == 0 {
@@ -1402,6 +1444,13 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		if !instance.Status.Bootstrapped {
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
+
+		// If a pod remediation is in progress, requeue to make sure
+		// that any progress will be processed by the mariadb-operator.
+		if _, remediation := instance.Status.RemediationInProgress(); remediation {
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+
 		return ctrl.Result{}, nil
 	}
 
@@ -1475,6 +1524,7 @@ func (r *GaleraReconciler) generateConfigMaps(
 // SetupWithManager sets up the controller with the Manager.
 func (r *GaleraReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.config = mgr.GetConfig()
+	r.APIReader = mgr.GetAPIReader()
 
 	// Various CR fields need to be indexed to filter watch events
 	// for the secret changes we want to be notified of
@@ -1536,6 +1586,14 @@ func (r *GaleraReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&mariadbv1.MariaDBAccount{},
 			handler.EnqueueRequestsFromMapFunc(r.findGaleraForMariaDBAccount),
 			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+		).
+		Watches(
+			&corev1.PersistentVolumeClaim{},
+			handler.EnqueueRequestsFromMapFunc(r.FindGaleraForPVC),
+			builder.WithPredicates(predicate.And(
+				predicate.AnnotationChangedPredicate{},
+				predicate.NewPredicateFuncs(IsGaleraPVC),
+			)),
 		).
 		Complete(r)
 }
@@ -1634,6 +1692,35 @@ func (r *GaleraReconciler) findGaleraForMariaDBAccount(ctx context.Context, acco
 	return requests
 }
 
+// IsGaleraPVC returns true when the object is a PVC belonging to a Galera
+// StatefulSet, identified by the service label following the "<name>-galera"
+// convention. Used as a pre-screen predicate so only Galera PVC annotation
+// events reach FindGaleraForPVC.
+func IsGaleraPVC(obj client.Object) bool {
+	svcLabel, ok := obj.GetLabels()[common.AppSelector]
+	return ok && strings.HasSuffix(svcLabel, "-galera")
+}
+
+// FindGaleraForPVC maps a PVC annotation-change event to the owning Galera CR.
+// StatefulSet PVCs carry the label service=<galera-name>-galera so the Galera
+// name can be derived without listing all Galera CRs.
+func (r *GaleraReconciler) FindGaleraForPVC(_ context.Context, pvc client.Object) []reconcile.Request {
+	svcLabel, ok := pvc.GetLabels()[common.AppSelector]
+	if !ok {
+		return nil
+	}
+	galeraName := strings.TrimSuffix(svcLabel, "-galera")
+	if galeraName == svcLabel {
+		return nil
+	}
+	return []reconcile.Request{{
+		NamespacedName: types.NamespacedName{
+			Name:      galeraName,
+			Namespace: pvc.GetNamespace(),
+		},
+	}}
+}
+
 func (r *GaleraReconciler) getRootMariadbAccountName(instance *mariadbv1.Galera) string {
 	databaseAccountName := instance.Spec.RootDatabaseAccount
 	if databaseAccountName == "" {
@@ -1684,3 +1771,8 @@ func (r *GaleraReconciler) reconcileDelete(ctx context.Context, instance *mariad
 
 	return ctrl.Result{}, nil
 }
+
+// CheckForStuckPVCRequiringRemediation iterates over PVCs belonging to the
+// Galera StatefulSet and, for each PVC that PodRemediator has annotated as
+// stuck on an unhealthy node, sets the safe-to-delete annotation to authorize
+// PodRemediator to delete it.
