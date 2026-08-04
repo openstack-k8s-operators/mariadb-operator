@@ -240,6 +240,80 @@ func TestClearBootstrapState(t *testing.T) {
 	}
 }
 
+func TestFindBestCandidate_OneUnavailablePod_BootstrapsFromTwo(t *testing.T) {
+	// When one pod is stuck due to a local PVC on an unreachable node and is
+	// recorded in UnavailablePods, findBestCandidate reduces expected_nodes from
+	// 3 to 2 and selects the best candidate from the two reachable pods.
+	g := makeGalera(3, map[string]mariadbv1.GaleraAttributes{
+		"galera-0": {Seqno: "100", ContainerID: "cid-0"},
+		"galera-1": {Seqno: "200", ContainerID: "cid-1"},
+	})
+	g.Status.UnavailablePods = map[string]mariadbv1.UnavailablePodStatus{
+		"galera-2": {Reason: mariadbv1.PodUnavailabilityReasonPVCStuck},
+	}
+	pods := []corev1.Pod{
+		makePod("galera-0", "cid-0"),
+		makePod("galera-1", "cid-1"),
+		makePod("galera-2", ""), // pod still visible but its PVC is stuck
+	}
+	node, found := findBestCandidate(g, pods, ctrl.Log)
+	if !found {
+		t.Fatal("expected a candidate once all reachable pods have reported")
+	}
+	if node != "galera-1" {
+		t.Errorf("expected galera-1 (highest seqno=200), got %s", node)
+	}
+}
+
+func TestFindBestCandidate_OneUnavailablePod_WaitsForRemainingToReport(t *testing.T) {
+	// With one unavailable pod, expected_nodes drops to 2. If only one of the
+	// two reachable pods has reported seqno, no candidate should be returned --
+	// the operator must wait for all reachable pods to check in first.
+	g := makeGalera(3, map[string]mariadbv1.GaleraAttributes{
+		"galera-0": {Seqno: "100", ContainerID: "cid-0"},
+		// galera-1 has not pushed its attributes yet
+	})
+	g.Status.UnavailablePods = map[string]mariadbv1.UnavailablePodStatus{
+		"galera-2": {Reason: mariadbv1.PodUnavailabilityReasonPVCStuck},
+	}
+	pods := []corev1.Pod{
+		makePod("galera-0", "cid-0"),
+		makePod("galera-1", "cid-1"),
+		makePod("galera-2", ""),
+	}
+	_, found := findBestCandidate(g, pods, ctrl.Log)
+	if found {
+		t.Error("should not select a candidate until all reachable pods have reported")
+	}
+}
+
+func TestFindBestCandidate_UnavailablePodAttributesIgnored(t *testing.T) {
+	// An unavailable pod that pushed attributes (e.g. SafeToBootstrap=true with
+	// a high seqno) must not influence bootstrap candidate selection. Only
+	// reachable pods are eligible, even if an unavailable pod looks like the
+	// best option based on its stale seqno.
+	g := makeGalera(3, map[string]mariadbv1.GaleraAttributes{
+		"galera-0": {Seqno: "100", ContainerID: "cid-0"},
+		"galera-1": {Seqno: "100", ContainerID: "cid-1"},
+		"galera-2": {Seqno: "500", SafeToBootstrap: true, ContainerID: "cid-2"},
+	})
+	g.Status.UnavailablePods = map[string]mariadbv1.UnavailablePodStatus{
+		"galera-2": {Reason: mariadbv1.PodUnavailabilityReasonPVCStuck},
+	}
+	pods := []corev1.Pod{
+		makePod("galera-0", "cid-0"),
+		makePod("galera-1", "cid-1"),
+		makePod("galera-2", "cid-2"),
+	}
+	node, found := findBestCandidate(g, pods, ctrl.Log)
+	if !found {
+		t.Fatal("expected to find a candidate from the reachable pods")
+	}
+	if node == "galera-2" {
+		t.Error("galera-2 is in UnavailablePods and must not be selected as bootstrap candidate")
+	}
+}
+
 func TestBootstrapState_MultipleInstances(t *testing.T) {
 	r := &GaleraReconciler{}
 	g1 := makeGaleraNamed("ns", "cell1-galera", 3, nil)

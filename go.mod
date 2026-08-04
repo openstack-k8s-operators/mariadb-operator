@@ -7,7 +7,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/onsi/ginkgo/v2 v2.33.1
 	github.com/onsi/gomega v1.44.0
-	github.com/openstack-k8s-operators/infra-operator/apis v0.6.1-0.20261029162903-5860bf3fd6a5
+	github.com/openstack-k8s-operators/infra-operator/apis v0.6.1-0.20261103144031-385d97c7bf10
 	github.com/openstack-k8s-operators/lib-common/modules/common v0.6.1-0.20261029132259-9d025389145b
 	github.com/openstack-k8s-operators/lib-common/modules/users v0.0.0-20261029132259-9d025389145b
 	github.com/openstack-k8s-operators/mariadb-operator/api v0.0.0-00010101000000-000000000000
