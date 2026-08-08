@@ -26,6 +26,10 @@ status:
     severity: Warning
     status: "False"
     type: InputReady
+  - message: MariaDB server version upgrade state not yet determined
+    reason: Init
+    status: Unknown
+    type: MariaDBServerUpgradeReady
   - message: PodDisruptionBudget completed
     reason: Ready
     status: "True"

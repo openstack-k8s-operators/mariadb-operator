@@ -99,7 +99,19 @@ func StatefulSet(g *mariadbv1.Galera, configHash string, topology *topologyv1.To
 }
 
 func getGaleraInitContainers(g *mariadbv1.Galera) []corev1.Container {
-	return []corev1.Container{{
+	var initContainers []corev1.Container
+
+	if g.Spec.TargetVersion != "" && g.Spec.TargetVersion != g.Status.ClusterProperties["TargetVersion"] {
+		initContainers = append(initContainers, corev1.Container{
+			Image:        g.Spec.ContainerImage,
+			Name:         "mysql-upgrade",
+			Command:      []string{"bash", "/var/lib/operator-scripts/mysql_version_upgrade.sh"},
+			Resources:    g.Spec.Resources,
+			VolumeMounts: getGaleraInitVolumeMounts(g),
+		})
+	}
+
+	initContainers = append(initContainers, corev1.Container{
 		Image:   g.Spec.ContainerImage,
 		Name:    "mysql-bootstrap",
 		Command: []string{"bash", "/var/lib/operator-scripts/mysql_bootstrap.sh"},
@@ -112,7 +124,9 @@ func getGaleraInitContainers(g *mariadbv1.Galera) []corev1.Container {
 		}},
 		Resources:    g.Spec.Resources,
 		VolumeMounts: getGaleraInitVolumeMounts(g),
-	}}
+	})
+
+	return initContainers
 }
 
 func getGaleraContainers(g *mariadbv1.Galera, configHash string) ([]corev1.Container, error) {
