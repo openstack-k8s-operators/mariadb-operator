@@ -82,7 +82,6 @@ fi
 
 if [ -z "$seqno" ] || [ "$seqno" = "-1" ]; then
     tmp=$(mktemp)
-    chown mysql:mysql $tmp
 
     # if we pass here because grastate.dat doesn't exist, report it
     if [ ! -f /var/lib/mysql/grastate.dat ]; then

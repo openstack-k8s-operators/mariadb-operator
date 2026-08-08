@@ -52,6 +52,7 @@ func StatefulSet(g *mariadbv1.Galera, configHash string, topology *topologyv1.To
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: g.RbacResourceName(),
+					SecurityContext:    PodSecurityContext(),
 					InitContainers:     getGaleraInitContainers(g),
 					Containers:         containers,
 					Volumes:            getGaleraVolumes(g),
@@ -100,18 +101,12 @@ func StatefulSet(g *mariadbv1.Galera, configHash string, topology *topologyv1.To
 
 func getGaleraInitContainers(g *mariadbv1.Galera) []corev1.Container {
 	return []corev1.Container{{
-		Image:   g.Spec.ContainerImage,
-		Name:    "mysql-bootstrap",
-		Command: []string{"bash", "/var/lib/operator-scripts/mysql_bootstrap.sh"},
-		Env: []corev1.EnvVar{{
-			Name:  "KOLLA_BOOTSTRAP",
-			Value: "True",
-		}, {
-			Name:  "KOLLA_CONFIG_STRATEGY",
-			Value: "COPY_ALWAYS",
-		}},
-		Resources:    g.Spec.Resources,
-		VolumeMounts: getGaleraInitVolumeMounts(g),
+		Image:           g.Spec.ContainerImage,
+		Name:            "mysql-bootstrap",
+		Command:         []string{"bash", "/var/lib/operator-scripts/mysql_bootstrap.sh"},
+		Resources:       g.Spec.Resources,
+		VolumeMounts:    getGaleraInitVolumeMounts(g),
+		SecurityContext: GaleraSecurityContext(),
 	}}
 }
 
@@ -141,11 +136,11 @@ func getGaleraContainers(g *mariadbv1.Galera, configHash string) ([]corev1.Conta
 			StartupProbes: &startupConf,
 			LivenessProbes: &probes.ProbeConf{
 				Type:    probes.ProbeHandlerExec,
-				Command: []string{"/bin/bash", "/var/lib/operator-scripts/mysql_probe.sh", "liveness"},
+				Command: []string{"/var/lib/operator-scripts/mysql_probe.sh", "liveness"},
 			},
 			ReadinessProbes: &probes.ProbeConf{
 				Type:    probes.ProbeHandlerExec,
-				Command: []string{"/bin/bash", "/var/lib/operator-scripts/mysql_probe.sh", "readiness"},
+				Command: []string{"/var/lib/operator-scripts/mysql_probe.sh", "readiness"},
 			},
 		},
 	)
@@ -156,13 +151,10 @@ func getGaleraContainers(g *mariadbv1.Galera, configHash string) ([]corev1.Conta
 	containers := []corev1.Container{{
 		Image:   g.Spec.ContainerImage,
 		Name:    "galera",
-		Command: []string{"/usr/bin/dumb-init", "--", "/usr/local/bin/kolla_start"},
+		Command: []string{"/usr/bin/dumb-init", "--", "/var/lib/operator-scripts/detect_gcomm_and_start.sh"},
 		Env: []corev1.EnvVar{{
 			Name:  "CR_CONFIG_HASH",
 			Value: configHash,
-		}, {
-			Name:  "KOLLA_CONFIG_STRATEGY",
-			Value: "COPY_ALWAYS",
 		}},
 		Ports: []corev1.ContainerPort{{
 			ContainerPort: 3306,
@@ -171,24 +163,26 @@ func getGaleraContainers(g *mariadbv1.Galera, configHash string) ([]corev1.Conta
 			ContainerPort: 4567,
 			Name:          "galera",
 		}},
-		Resources:      g.Spec.Resources,
-		VolumeMounts:   getGaleraVolumeMounts(g),
-		StartupProbe:   probeSet.Startup,
-		LivenessProbe:  probeSet.Liveness,
-		ReadinessProbe: probeSet.Readiness,
+		Resources:       g.Spec.Resources,
+		VolumeMounts:    getGaleraVolumeMounts(g),
+		StartupProbe:    probeSet.Startup,
+		LivenessProbe:   probeSet.Liveness,
+		ReadinessProbe:  probeSet.Readiness,
+		SecurityContext: GaleraSecurityContext(),
 		Lifecycle: &corev1.Lifecycle{
 			PreStop: &corev1.LifecycleHandler{
 				Exec: &corev1.ExecAction{
-					Command: []string{"/bin/bash", "/var/lib/operator-scripts/mysql_shutdown.sh"},
+					Command: []string{"/var/lib/operator-scripts/mysql_shutdown.sh"},
 				},
 			},
 		},
 	}}
 	logSideCar := corev1.Container{
-		Image:        g.Spec.ContainerImage,
-		Name:         "log",
-		Command:      []string{"/usr/bin/dumb-init", "--", "/bin/sh", "-c", "tail -n+1 -F /var/log/mariadb/mariadb.log"},
-		VolumeMounts: getGaleraVolumeMounts(g),
+		Image:           g.Spec.ContainerImage,
+		Name:            "log",
+		Command:         []string{"/usr/bin/dumb-init", "--", "/bin/sh", "-c", "tail -n+1 -F /var/log/mariadb/mariadb.log"},
+		VolumeMounts:    getGaleraVolumeMounts(g),
+		SecurityContext: GaleraSecurityContext(),
 	}
 
 	if g.Spec.LogToDisk {

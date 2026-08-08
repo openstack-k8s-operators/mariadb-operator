@@ -189,9 +189,8 @@ user=root
 password="${PASSWORD}"
 EOF
 then
-    # we are called for the first time from detect_gcomm_and_start.sh which is
-    # called **before** kolla can set directory permissions; so when writing
-    # the file, proceed even if we can't write the file yet
+    # /var/local is an EmptyDir which may not exist yet on the very first call;
+    # proceed even if we can't write the file yet
     echo "Did not yet write to ${PW_CACHE_FILE} due to permissions; will try again later" >&2
 else
     echo "Wrote new credentials to ${PW_CACHE_FILE}" >&2

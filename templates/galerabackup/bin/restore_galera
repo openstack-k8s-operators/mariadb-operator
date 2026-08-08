@@ -114,8 +114,8 @@ if [ "${confirm}" != "y" ]; then
     exit 0
 fi
 
-if [ -f /etc/mysql_backup_tls.cnf ]; then
-MYSQL_OPTS="--defaults-extra-file=/etc/mysql_backup_tls.cnf"
+if [ -f /var/lib/config-data/default/mysql_backup_tls.cnf ]; then
+MYSQL_OPTS="--defaults-extra-file=/var/lib/config-data/default/mysql_backup_tls.cnf"
 else
 MYSQL_OPTS=
 fi
