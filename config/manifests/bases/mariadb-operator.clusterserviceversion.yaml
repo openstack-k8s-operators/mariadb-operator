@@ -23,6 +23,11 @@ spec:
       kind: GaleraBackup
       name: galerabackups.mariadb.openstack.org
       version: v1beta1
+    - description: GaleraRestore is the Schema for the galerabackups API
+      displayName: Galera Restore
+      kind: GaleraRestore
+      name: galerarestores.mariadb.openstack.org
+      version: v1beta1
     - description: Galera is the Schema for the galeras API
       displayName: Galera
       kind: Galera

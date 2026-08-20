@@ -6,7 +6,9 @@ import (
 	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	common "github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/affinity"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/pod"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/probes"
+	"github.com/openstack-k8s-operators/lib-common/modules/users"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -52,7 +54,7 @@ func StatefulSet(g *mariadbv1.Galera, configHash string, topology *topologyv1.To
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: g.RbacResourceName(),
-					SecurityContext:    PodSecurityContext(),
+					SecurityContext:    pod.RestrictivePodSecurityContext(users.MysqlUID, users.MysqlGID),
 					InitContainers:     getGaleraInitContainers(g),
 					Containers:         containers,
 					Volumes:            getGaleraVolumes(g),
@@ -106,7 +108,7 @@ func getGaleraInitContainers(g *mariadbv1.Galera) []corev1.Container {
 		Command:         []string{"bash", "/var/lib/operator-scripts/mysql_bootstrap.sh"},
 		Resources:       g.Spec.Resources,
 		VolumeMounts:    getGaleraInitVolumeMounts(g),
-		SecurityContext: GaleraSecurityContext(),
+		SecurityContext: pod.RestrictiveSecurityContext(users.MysqlUID, users.MysqlGID),
 	}}
 }
 
@@ -168,7 +170,7 @@ func getGaleraContainers(g *mariadbv1.Galera, configHash string) ([]corev1.Conta
 		StartupProbe:    probeSet.Startup,
 		LivenessProbe:   probeSet.Liveness,
 		ReadinessProbe:  probeSet.Readiness,
-		SecurityContext: GaleraSecurityContext(),
+		SecurityContext: pod.RestrictiveSecurityContext(users.MysqlUID, users.MysqlGID),
 		Lifecycle: &corev1.Lifecycle{
 			PreStop: &corev1.LifecycleHandler{
 				Exec: &corev1.ExecAction{
@@ -182,7 +184,7 @@ func getGaleraContainers(g *mariadbv1.Galera, configHash string) ([]corev1.Conta
 		Name:            "log",
 		Command:         []string{"/usr/bin/dumb-init", "--", "/bin/sh", "-c", "tail -n+1 -F /var/log/mariadb/mariadb.log"},
 		VolumeMounts:    getGaleraVolumeMounts(g),
-		SecurityContext: GaleraSecurityContext(),
+		SecurityContext: pod.RestrictiveSecurityContext(users.MysqlUID, users.MysqlGID),
 	}
 
 	if g.Spec.LogToDisk {

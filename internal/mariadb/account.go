@@ -4,7 +4,9 @@ package mariadb
 import (
 	"strings"
 
+	"github.com/openstack-k8s-operators/lib-common/modules/common/pod"
 	util "github.com/openstack-k8s-operators/lib-common/modules/common/util"
+	"github.com/openstack-k8s-operators/lib-common/modules/users"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -75,7 +77,7 @@ func CreateOrUpdateDbAccountJob(galera *mariadbv1.Galera, account *mariadbv1.Mar
 								},
 							},
 							VolumeMounts:    getGaleraRootOnlyVolumeMounts(),
-							SecurityContext: GaleraSecurityContext(),
+							SecurityContext: pod.RestrictiveSecurityContext(users.MysqlUID, users.MysqlGID),
 						},
 					},
 					Volumes: getGaleraRootOnlyVolumes(galera),
@@ -120,7 +122,7 @@ func DeleteDbAccountJob(galera *mariadbv1.Galera, account *mariadbv1.MariaDBAcco
 							Image:           containerImage,
 							Command:         []string{"/bin/sh", "-c", delCmd},
 							VolumeMounts:    getGaleraRootOnlyVolumeMounts(),
-							SecurityContext: GaleraSecurityContext(),
+							SecurityContext: pod.RestrictiveSecurityContext(users.MysqlUID, users.MysqlGID),
 						},
 					},
 					Volumes: getGaleraRootOnlyVolumes(galera),

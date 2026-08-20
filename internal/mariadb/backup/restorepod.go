@@ -2,8 +2,9 @@
 package mariadbbackup
 
 import (
+	"github.com/openstack-k8s-operators/lib-common/modules/common/pod"
+	"github.com/openstack-k8s-operators/lib-common/modules/users"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
-	mariadb "github.com/openstack-k8s-operators/mariadb-operator/internal/mariadb"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -40,13 +41,13 @@ func RestorePod(restoreCR *mariadbv1.GaleraRestore, backupCR *mariadbv1.GaleraBa
 		Spec: corev1.PodSpec{
 			RestartPolicy:      corev1.RestartPolicyOnFailure,
 			ServiceAccountName: restoreCR.RbacResourceName(),
-			SecurityContext:    mariadb.PodSecurityContext(),
+			SecurityContext:    pod.RestrictivePodSecurityContext(users.MysqlUID, users.MysqlGID),
 			Containers: []corev1.Container{{
 				Image:           backupPodSpec.Containers[0].Image,
 				Name:            "restore",
 				Command:         []string{"/usr/bin/dumb-init", "--", "sleep", "infinity"},
 				Env:             environ,
-				SecurityContext: mariadb.GaleraSecurityContext(),
+				SecurityContext: pod.RestrictiveSecurityContext(users.MysqlUID, users.MysqlGID),
 				VolumeMounts:    RestoreVolumeMounts(backupCR, galeraCR),
 			}},
 			Volumes: RestoreVolumes(backupCR, galeraCR),
