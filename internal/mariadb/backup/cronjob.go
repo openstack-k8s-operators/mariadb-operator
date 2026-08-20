@@ -4,12 +4,13 @@ package mariadbbackup
 import (
 	"strconv"
 
+	"github.com/openstack-k8s-operators/lib-common/modules/common/pod"
+	"github.com/openstack-k8s-operators/lib-common/modules/users"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	mariadb "github.com/openstack-k8s-operators/mariadb-operator/internal/mariadb"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 )
 
 // BackupCronJob returns a CronJob object for the galera backup
@@ -55,9 +56,6 @@ func getBackupPodTemplate(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera, config
 		Name:  "DB",
 		Value: g.Name,
 	}, {
-		Name:  "KOLLA_CONFIG_STRATEGY",
-		Value: "COPY_ALWAYS",
-	}, {
 		Name:  "RETENTION",
 		Value: retentionTime,
 	}}
@@ -79,15 +77,13 @@ func getBackupPodTemplate(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera, config
 			Subdomain:          svcName,
 			RestartPolicy:      corev1.RestartPolicyOnFailure,
 			ServiceAccountName: b.RbacResourceName(),
-			SecurityContext: &corev1.PodSecurityContext{
-				FSGroup: ptr.To[int64](42434),
-			},
-			InitContainers: []corev1.Container{},
+			SecurityContext:    pod.RestrictivePodSecurityContext(users.MysqlUID, users.MysqlGID),
 			Containers: []corev1.Container{{
-				Image:   g.Spec.ContainerImage,
-				Name:    "backup",
-				Command: []string{"/usr/bin/dumb-init", "--", "/usr/local/bin/kolla_start"},
-				Env:     environ,
+				Image:           g.Spec.ContainerImage,
+				Name:            "backup",
+				Command:         []string{"/usr/bin/dumb-init", "--", "/var/lib/backup-scripts/backup_galera"},
+				Env:             environ,
+				SecurityContext: pod.RestrictiveSecurityContext(users.MysqlUID, users.MysqlGID),
 				Ports: []corev1.ContainerPort{{
 					ContainerPort: 4567,
 					Name:          "galera",

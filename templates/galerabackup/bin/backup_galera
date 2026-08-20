@@ -135,15 +135,15 @@ trap finally EXIT
 #  - prepare local storage prior to backup
 #
 if [ "${TLS:-}" = "true" ]; then
-    MYSQL_OPTS="--defaults-extra-file=/etc/mysql_backup_tls.cnf"
-    WSREP_SST_CFG=/etc/mysql_backup_tls.cnf
+    MYSQL_OPTS="--defaults-extra-file=/var/lib/config-data/default/mysql_backup_tls.cnf"
+    WSREP_SST_CFG=/var/lib/config-data/default/mysql_backup_tls.cnf
     if [ "$(sysctl -n crypto.fips_enabled)" == "1" ]; then
         echo FIPS enabled
         GARBD_CIPHER='ECDHE-RSA-AES256-GCM-SHA384'
     else
         GARBD_CIPHER='AES128-SHA256'
     fi
-    . /etc/garbd_backup_tls.cnf
+    . /var/lib/config-data/default/garbd_backup_tls.cnf
     GARBD_OPTS=";${GARBD_TLS_OPTS}"
 else
     MYSQL_OPTS=

@@ -4,6 +4,7 @@ import (
 	tls "github.com/openstack-k8s-operators/lib-common/modules/common/tls"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/utils/ptr"
 )
 
 const (
@@ -40,23 +41,13 @@ func getGaleraVolumes(g *mariadbv1.Galera) []corev1.Volume {
 
 	volumes := []corev1.Volume{
 		{
-			Name: "kolla-config",
+			Name: "config-data-generated",
 			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: g.Name + "-config-data",
-					},
-					Items: []corev1.KeyToPath{
-						{
-							Key:  "config.json",
-							Path: "config.json",
-						},
-					},
-				},
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		},
 		{
-			Name: "config-data-generated",
+			Name: "var-local",
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
@@ -79,6 +70,7 @@ func getGaleraVolumes(g *mariadbv1.Galera) []corev1.Volume {
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: g.Name + "-scripts",
 					},
+					DefaultMode: ptr.To[int32](0755),
 					Items: []corev1.KeyToPath{
 						{
 							Key:  "mysql_bootstrap.sh",
@@ -121,8 +113,8 @@ func getGaleraVolumes(g *mariadbv1.Galera) []corev1.Volume {
 	if g.Spec.TLS.Enabled() {
 		svc := tls.Service{
 			SecretName: *g.Spec.TLS.SecretName,
-			CertMount:  nil,
-			KeyMount:   nil,
+			CertMount:  ptr.To("/etc/pki/tls/certs/galera.crt"),
+			KeyMount:   ptr.To("/etc/pki/tls/private/galera.key"),
 			CaMount:    nil,
 		}
 		serviceVolume := svc.CreateVolume(GaleraCertPrefix)
@@ -145,6 +137,7 @@ func getGaleraRootOnlyVolumes(g *mariadbv1.Galera) []corev1.Volume {
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: g.Name + "-scripts",
 					},
+					DefaultMode: ptr.To[int32](0755),
 					Items: []corev1.KeyToPath{
 						{
 							Key:  "mysql_root_auth.sh",
@@ -152,6 +145,12 @@ func getGaleraRootOnlyVolumes(g *mariadbv1.Galera) []corev1.Volume {
 						},
 					},
 				},
+			},
+		},
+		{
+			Name: "var-local",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		},
 	}
@@ -173,13 +172,15 @@ func getGaleraVolumeMounts(g *mariadbv1.Galera) []corev1.VolumeMount {
 			MountPath: "/var/lib/config-data/generated",
 			Name:      "config-data-generated",
 		}, {
+			MountPath: "/etc/my.cnf.d",
+			Name:      "config-data-generated",
+		}, {
 			MountPath: "/var/lib/operator-scripts",
 			ReadOnly:  true,
 			Name:      "operator-scripts",
 		}, {
-			MountPath: "/var/lib/kolla/config_files",
-			ReadOnly:  true,
-			Name:      "kolla-config",
+			MountPath: "/var/local",
+			Name:      "var-local",
 		},
 	}
 
@@ -190,8 +191,8 @@ func getGaleraVolumeMounts(g *mariadbv1.Galera) []corev1.VolumeMount {
 	if g.Spec.TLS.Enabled() {
 		svc := tls.Service{
 			SecretName: *g.Spec.TLS.SecretName,
-			CertMount:  nil,
-			KeyMount:   nil,
+			CertMount:  ptr.To("/etc/pki/tls/certs/galera.crt"),
+			KeyMount:   ptr.To("/etc/pki/tls/private/galera.key"),
 			CaMount:    nil,
 		}
 		serviceVolumeMounts := svc.CreateVolumeMounts(GaleraCertPrefix)
@@ -212,6 +213,10 @@ func getGaleraRootOnlyVolumeMounts() []corev1.VolumeMount {
 			ReadOnly:  true,
 			Name:      "operator-scripts",
 		},
+		{
+			MountPath: "/var/local",
+			Name:      "var-local",
+		},
 	}
 
 	return volumeMounts
@@ -231,13 +236,15 @@ func getGaleraInitVolumeMounts(g *mariadbv1.Galera) []corev1.VolumeMount {
 			MountPath: "/var/lib/config-data/generated",
 			Name:      "config-data-generated",
 		}, {
+			MountPath: "/etc/my.cnf.d",
+			Name:      "config-data-generated",
+		}, {
 			MountPath: "/var/lib/operator-scripts",
 			ReadOnly:  true,
 			Name:      "operator-scripts",
 		}, {
-			MountPath: "/var/lib/kolla/config_files",
-			ReadOnly:  true,
-			Name:      "kolla-config",
+			MountPath: "/var/local",
+			Name:      "var-local",
 		},
 	}
 
