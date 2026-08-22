@@ -2,10 +2,31 @@
 set +eux
 
 
+function wait_for_mysqld_readiness {
+    # Wait for the mariadb server to be "Ready" before running commands
+    # Querying the cluster status has to be executed after the existence of mysql.sock and mariadb.pid.
+    local mysql_pid_file=$1
+    local mysql_log_file=$2
 
-function kolla_update_db_root_pw {
+    ORIG_TIMEOUT=${DB_MAX_TIMEOUT:-60}
+    TIMEOUT=${ORIG_TIMEOUT}
+    while [[ ! -S /var/lib/mysql/mysql.sock ]] || \
+            [[ ! -f "${mysql_pid_file}" ]]; do
+
+        if [[ ${TIMEOUT} -gt 0 ]]; then
+            let TIMEOUT-=1
+            sleep 1
+        else
+            echo -e "Surpassed timeout of ${ORIG_TIMEOUT} without seeing a pidfile"
+            echo -e "Dump of ${mysql_log_file}"
+            cat "${mysql_log_file}"
+            exit 1
+        fi
+    done
+}
+
+function update_db_root_pw {
     # update the root password given a set of mariadb datafiles
-    # ported from kolla_extend_start with major changes
 
     # because galera controller generates a new root password if one was
     # not sent via pre-existing secret, the root pw has to be updated if
@@ -63,24 +84,7 @@ function kolla_update_db_root_pw {
     echo -e "Running with --skip-grant-tables to reset root password"
     rm -fv ${CHANGE_PW_PIDFILE}  ${CHANGE_PW_LOGFILE}
     mysqld_safe --skip-grant-tables --wsrep-on=OFF --log-error=${CHANGE_PW_LOGFILE} --pid-file=${CHANGE_PW_PIDFILE} &
-
-    # Wait for the mariadb server to be "Ready" before running root update commands
-    # Querying the cluster status has to be executed after the existence of mysql.sock and mariadb.pid.
-    ORIG_TIMEOUT=${DB_MAX_TIMEOUT:-60}
-    TIMEOUT=${ORIG_TIMEOUT}
-    while [[ ! -S /var/lib/mysql/mysql.sock ]] || \
-            [[ ! -f "${CHANGE_PW_PIDFILE}" ]]; do
-
-        if [[ ${TIMEOUT} -gt 0 ]]; then
-            let TIMEOUT-=1
-            sleep 1
-        else
-            echo -e "Surpassed timeout of ${ORIG_TIMEOUT} without seeing a pidfile"
-            echo -e "Dump of ${CHANGE_PW_LOGFILE}"
-            cat ${CHANGE_PW_LOGFILE}
-            exit 1
-        fi
-    done
+    wait_for_mysqld_readiness "$CHANGE_PW_PIDFILE" "$CHANGE_PW_LOGFILE"
 
     echo -e "Refreshing root passwords"
     mysql -u root <<EOF
@@ -97,20 +101,42 @@ EOF
     mysqladmin -uroot -p"${DB_ROOT_PASSWORD}" shutdown
 }
 
+function setup_new_database {
+    echo -e "Creating the database on disk"
+    mysql_install_db --datadir=/var/lib/mysql/e --user=mysql --skip-test-db
+    mv /var/lib/mysql/e/* /var/lib/mysql
+    rm -rf /var/lib/mysql/e
 
-function kolla_set_all_configs {
-    # set up mounts, permissions, required files
+    echo -e "Running mysqld with --skip-grant-tables to set up new database"
+    SETUP_PIDFILE=/var/tmp/setup.pid
+    SETUP_LOGFILE=/var/tmp/setup.log
+    rm -fv ${SETUP_PIDFILE}  ${SETUP_LOGFILE}
+    mysqld_safe --skip-grant-tables --wsrep-on=OFF --log-error=${SETUP_LOGFILE} --pid-file=${SETUP_PIDFILE} &
+    wait_for_mysqld_readiness "$SETUP_PIDFILE" "$SETUP_LOGFILE"
 
-    # set up permissions of mounted directories before starting
-    # galera or the sidecar logging container
-    # NOTE: kolla_set_configs is explicitly allowed in sudoers and needs
-    # sudo to set up permissions
-    sudo -E kolla_set_configs
+    # This mimicks what mysql_secure_installation does, but it keeps
+    # 'root'@'%' because that is what is used to create/delete users
+    # linked to MariaDBAccount and MariaDBDatabases
+    echo -e "Refreshing root passwords"
+    mysql -u root <<EOF
+FLUSH PRIVILEGES;
+ALTER USER 'root'@'localhost' IDENTIFIED BY '$DB_ROOT_PASSWORD';
+CREATE USER IF NOT EXISTS 'root'@'%' IDENTIFIED BY '$DB_ROOT_PASSWORD';
+ALTER USER 'root'@'%' IDENTIFIED BY '$DB_ROOT_PASSWORD';
+GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;
+DELETE FROM mysql.user WHERE User='';
+FLUSH PRIVILEGES;
+EOF
 
-    # now that /var/local/ is owned by mysql, prepare space for invocations of
-    # mysql_root_auth.sh to place pw cache file. we do this by running the
-    # mysql_root_auth.sh which will also set up $DB_ROOT_PASSWORD for the
-    # remainder of this script.
+    # we definitely started this mysqld so we definitely stop it
+    # use credentials from the generated my.cnf credential file
+    mysqladmin -uroot shutdown
+}
+
+function setup_configs_and_credentials {
+    # Prepare space for invocations of mysql_root_auth.sh to place pw cache
+    # file. We do this by running the mysql_root_auth.sh which will also set
+    # up $DB_ROOT_PASSWORD for the remainder of this script.
     #
     # OSPRH-27031: The conditional is for backwards compatibility with old pods
     # where script is updated but mysql_root_auth.sh is not yet available; in those
@@ -132,10 +158,8 @@ function kolla_set_all_configs {
         export MYSQL_PWD="${DB_ROOT_PASSWORD}"
 
         PW_CACHE_DIR=/var/local/my.cnf
-
         mkdir -p ${PW_CACHE_DIR}
-        chown mysql:mysql ${PW_CACHE_DIR}
-        echo -e "Created ${PW_CACHE_DIR} pw cache directory and set ownership"
+        echo -e "Created ${PW_CACHE_DIR} pw cache directory"
     fi
 
     if [ -z "${DB_ROOT_PASSWORD}" ]; then
@@ -149,19 +173,14 @@ if [ -e /var/lib/mysql/mysql ]; then
     echo -e "Database already exists. Reuse it."
 
     # make sure the generated directory starts clean.
-    # kolla_set_configs requires a galera config file to be present, and
-    # we need to run it here to set up permissions. So create an empty
-    # placeholder file. The real config gets generated later in this script.
     rm -f /var/lib/config-data/generated/*.cnf
     touch /var/lib/config-data/generated/galera.cnf
 
-    kolla_set_all_configs
+    setup_configs_and_credentials
 
-    kolla_update_db_root_pw
+    update_db_root_pw
 else
     echo -e "Creating new mariadb database."
-    # we need the right perm on the persistent directory,
-    # so use Kolla to set it up before bootstrapping the DB
     cat <<EOF >/var/lib/config-data/generated/galera.cnf
 [client]
 !includedir /var/local/my.cnf/
@@ -171,13 +190,13 @@ bind_address=localhost
 wsrep_provider=none
 EOF
 
-    kolla_set_all_configs
-
-    kolla_extend_start
+    setup_configs_and_credentials
+    setup_new_database
 fi
 
-# Generate the mariadb configs from the templates, these will get
-# copied by `kolla_start` when the pod's main container will start
+# Generate the mariadb configs from the templates; they are written
+# to the config-data-generated EmptyDir which is also mounted at
+# /etc/my.cnf.d/ so the main container picks them up directly.
 if [ "$(sysctl -n crypto.fips_enabled)" == "1" ]; then
     echo FIPS enabled
     SSL_CIPHER='ECDHE-RSA-AES256-GCM-SHA384'

@@ -45,11 +45,11 @@ spec:
                   timeoutSeconds: 20
                   periodSeconds: 15
                   failureThreshold: 5
-                  initialDelaySeconds: 45
+                  initialDelaySeconds: 5
                 startupProbes:
                   timeoutSeconds: 300
                   failureThreshold: 10
-                  initialDelaySeconds: 60
+                  initialDelaySeconds: 10
                 readinessProbes:
                   timeoutSeconds: 10
                   periodSeconds: 5
@@ -67,11 +67,11 @@ spec:
                 timeoutSeconds: 20
                 periodSeconds: 15
                 failureThreshold: 5
-                initialDelaySeconds: 45
+                initialDelaySeconds: 5
               startupProbe:
                 timeoutSeconds: 300
                 failureThreshold: 10
-                initialDelaySeconds: 60
+                initialDelaySeconds: 10
               readinessProbe:
                 timeoutSeconds: 10
                 periodSeconds: 5
