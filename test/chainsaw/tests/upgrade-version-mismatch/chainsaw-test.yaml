@@ -1,0 +1,52 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: upgrade-version-mismatch
+spec:
+  description: |
+    Verify that requesting an upgrade to a MariaDB version that does not
+    match containerImage will be detected as an UpgradeVersionMismatch error.
+  steps:
+  - name: Deploy a healthy 1-node cluster
+    description: Establish a known-good baseline before requesting the upgrade.
+    bindings:
+    - name: replicas
+      value: 1
+    try:
+    - apply:
+        file: ../../common/galera.yaml
+    - assert:
+        file: ../../common/galera-assert.yaml
+
+  - name: Request an upgrade to a non-existent version
+    description: Bump spec.targetVersion to 19.999, a version no image will provide.
+    try:
+    - script:
+        content: |
+          oc patch -n "${NAMESPACE}" galera openstack --type=merge -p='{"spec":{"targetVersion":"19.999"}}'
+
+  - name: Assert the operator reports a version mismatch
+    description: |
+      The operator must probe the running pods and report
+      MariaDBServerUpgradeReady=False with reason UpgradeVersionMismatch rather
+      than silently claiming the upgrade succeeded.
+    try:
+    - assert:
+        file: version-mismatch-assert.yaml
+
+  - name: Assert status records the real running version
+    description: |
+      status.clusterProperties.TargetVersion must hold the version scanned from
+      the pods, not the one that was entered in the Spec
+    try:
+    - script:
+        content: |
+          set -eu
+          CR_VERSION=$(oc get -n "${NAMESPACE}" galera openstack -o jsonpath='{.status.clusterProperties.TargetVersion}')
+          RAW=$(oc exec -n "${NAMESPACE}" -c galera openstack-galera-0 -- /bin/sh -c 'mysqld --version')
+          POD_VERSION=$(printf '%s\n' "${RAW}" | grep -oE '[0-9]+\.[0-9]+' | head -n1)
+          echo "pod=${POD_VERSION} cr=${CR_VERSION} targetVersion=19.999"
+          [ -n "${CR_VERSION}" ] || { echo "FAIL: status.clusterProperties.TargetVersion is empty"; exit 1; }
+          [ "${CR_VERSION}" != "19.999" ] || { echo "FAIL: status recorded the bogus target 19.999"; exit 1; }
+          [ "${POD_VERSION}" = "${CR_VERSION}" ] || { echo "FAIL: pod ${POD_VERSION} != cr ${CR_VERSION}"; exit 1; }
+          echo "PASS: upgrade to 19.999 rejected as version mismatch; status records real running version ${CR_VERSION}"

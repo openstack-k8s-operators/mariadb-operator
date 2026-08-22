@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -87,6 +88,10 @@ var (
 	ErrOpenStackSecretNotFound = errors.New("OpenStack secret not found")
 	// ErrOpenStackSecretMissingField indicates that the OpenStack secret is missing a required field
 	ErrOpenStackSecretMissingField = errors.New("OpenStack secret missing required field")
+	// ErrNoReadyGaleraPods indicates no ready pods are available to probe
+	ErrNoReadyGaleraPods = errors.New("no ready galera pods available to probe server version")
+	// ErrServerVersionUnparseable indicates the server version output could not be parsed
+	ErrServerVersionUnparseable = errors.New("could not parse server version")
 )
 
 var allWatchFields = []string{
@@ -445,6 +450,53 @@ func retrieveSequenceNumber(ctx context.Context, helper *helper.Helper, config *
 	return
 }
 
+// serverVersionRe captures the leading major.minor.patch of a MariaDB version
+// string such as "mysqld  Ver 10.11.6-MariaDB for Linux" or a bare "10.11".
+var serverVersionRe = regexp.MustCompile(`(\d+)\.(\d+)(?:\.\d+)?`)
+
+// normalizeMajorMinor extracts the leading major.minor (e.g. "10.11") from a
+// MariaDB version string. Only major.minor is returned because spec.targetVersion
+// is documented as a major.minor value; the patch level is intentionally ignored
+// so that a 10.11.6 binary satisfies a "10.11" target. Returns "" if no version
+// number can be parsed, which lets the caller treat an unparseable spec (e.g.
+// "bananas") as a mismatch.
+func normalizeMajorMinor(version string) string {
+	m := serverVersionRe.FindStringSubmatch(version)
+	if m == nil {
+		return ""
+	}
+	return m[1] + "." + m[2]
+}
+
+// probeGaleraServerVersion execs `mysqld --version` in one ready galera pod and
+// returns the running server's major.minor version (e.g. "10.11"). It returns an
+// error when no ready pod is available or the version cannot be parsed, so the
+// caller requeues rather than advancing upgrade status on partial data. Probing
+// the running server (rather than trusting spec.targetVersion) is what lets the
+// operator detect a containerImage/targetVersion mismatch as an error instead of
+// recording a silent false success.
+func probeGaleraServerVersion(ctx context.Context, h *helper.Helper, config *rest.Config, instance *mariadbv1.Galera, pods []corev1.Pod) (string, error) {
+	ready := getReadyPods(pods)
+	if len(ready) == 0 {
+		return "", ErrNoReadyGaleraPods
+	}
+	pod := ready[0]
+	var actual string
+	err := mariadb.ExecInPod(ctx, h, config, instance.Namespace, pod.Name, "galera",
+		[]string{"/bin/bash", "-c", "mysqld --version"},
+		func(stdout *bytes.Buffer, _ *bytes.Buffer) error {
+			actual = normalizeMajorMinor(stdout.String())
+			if actual == "" {
+				return fmt.Errorf("%w: %q", ErrServerVersionUnparseable, strings.TrimSpace(stdout.String()))
+			}
+			return nil
+		})
+	if err != nil {
+		return "", err
+	}
+	return actual, nil
+}
+
 // clearPodAttributes clears information known by the operator about a pod
 func clearPodAttributes(ctx context.Context, instance *mariadbv1.Galera, podName string) {
 	delete(instance.Status.Attributes, podName)
@@ -590,6 +642,8 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		condition.UnknownCondition(condition.ServiceConfigReadyCondition, condition.InitReason, condition.ServiceConfigReadyInitMessage),
 		// cluster bootstrap
 		condition.UnknownCondition(condition.DeploymentReadyCondition, condition.InitReason, condition.DeploymentReadyInitMessage),
+		// major version upgrade (Spec.TargetVersion)
+		condition.UnknownCondition(mariadbv1.MariaDBServerUpgradeReadyCondition, condition.InitReason, mariadbv1.MariaDBServerUpgradeReadyInitMessage),
 		// service account, role, rolebinding
 		condition.UnknownCondition(condition.ServiceAccountReadyCondition, condition.InitReason, condition.ServiceAccountReadyInitMessage),
 		condition.UnknownCondition(condition.RoleReadyCondition, condition.InitReason, condition.RoleReadyInitMessage),
@@ -947,10 +1001,59 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	// build state of the restart hash. this is used to decide whether the
 	// statefulset must stop all its pods before applying a config update
 	clusterPropertiesEnv["GCommTLS"] = env.SetValue(strconv.FormatBool(instance.Spec.TLS.Enabled() && instance.Spec.TLS.CaBundleSecretName != ""))
+	if instance.Spec.TargetVersion != "" {
+		clusterPropertiesEnv["TargetVersion"] = env.SetValue(instance.Spec.TargetVersion)
+	}
 	clusterPropertiesHash, err := util.HashOfInputHashes(clusterPropertiesEnv)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+
+	// compare requested TargetVersion with what was last observed as the
+	// actual version of MariaDB running on a pod.  upgrade pending state
+	// is established when these are out of sync
+	upgradePending := instance.Spec.TargetVersion != "" &&
+		instance.Spec.TargetVersion != instance.Status.ClusterProperties["TargetVersion"]
+
+	// Load the existing StatefulSet, if any; Name is empty when it does not
+	// yet exist. Loading this up front where it first plays a role in some
+	// decisionmaking regarding upgrades, then later where we either update it
+	// or create a new one.
+	statefulset := appsv1.StatefulSet{}
+	if err := r.Get(ctx, client.ObjectKey{Name: mariadb.StatefulSetName(instance.Name), Namespace: instance.Namespace}, &statefulset); err != nil {
+		if !k8s_errors.IsNotFound(err) {
+			return ctrl.Result{}, err
+		}
+	}
+	statefulSetExists := statefulset.Name != ""
+
+	// indicates upgrade is pending but was blocked due to some nodes not being
+	// available.
+	upgradeBlocked := false
+
+	// if upgrade pending, and ClusterProperties hash indicates we have yet to
+	// initiate for this, first check that all nodes are running
+	// before allowing the upgrade to proceed.
+	if upgradePending && instance.Status.Hash["ClusterProperties"] != clusterPropertiesHash {
+		clusterFullyAvailable := statefulSetExists && instance.Spec.Replicas != nil &&
+			statefulset.Status.AvailableReplicas == *instance.Spec.Replicas
+
+		// if cluster is already-running, and some nodes not available, then
+		// block an upgrade.  if cluster is entirely stopped, or entirely
+		// running, then we can enter the upgrade
+		upgradeBlocked = statefulSetExists && !clusterFullyAvailable
+		if upgradeBlocked {
+			util.LogForObject(helper, fmt.Sprintf(
+				"Version upgrade to %s requested but cluster is not fully available (%d/%d ready); deferring upgrade until all nodes are online",
+				instance.Spec.TargetVersion, statefulset.Status.AvailableReplicas, *instance.Spec.Replicas), instance)
+			delete(clusterPropertiesEnv, "TargetVersion")
+			clusterPropertiesHash, err = util.HashOfInputHashes(clusterPropertiesEnv)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+	}
+
 	inputHashEnv["ClusterProperties"] = env.SetValue(clusterPropertiesHash)
 
 	//
@@ -964,12 +1067,19 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 
 	// Update ClusterProperties here, as from this point we are sure we can update
 	// both `ClusterProperties` and `StopRequired` in this reconcile loop.
+	//
+	// TargetVersion in ClusterProperties tracks the running version of mariadb
+	// in the current pods. Save it before wiping the map and
+	// restore it after; it is only advanced to Spec.TargetVersion once the
+	// cluster is running after the upgrade.
+	observedRunningVersion := instance.Status.ClusterProperties["TargetVersion"]
 	instance.Status.ClusterProperties = make(map[string]string)
 	for k, s := range clusterPropertiesEnv {
 		var envVar corev1.EnvVar
 		s(&envVar)
 		instance.Status.ClusterProperties[k] = envVar.Value
 	}
+	instance.Status.ClusterProperties["TargetVersion"] = observedRunningVersion
 
 	// check whether we need to stop the cluster after a cluster-wide change
 	if oldPropertiesHash, exists := instance.Status.Hash["ClusterProperties"]; exists {
@@ -978,6 +1088,26 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 			instance.Status.StopRequired = true
 			// Do not return here, let the return happen after the other
 			// config hashes get updated due to this hash change
+		}
+	}
+
+	// detect if Spec.ContainerImage was changed while we were already mid-upgrade.
+	// this could happen for example if user first updated TargetVersion, saved
+	// the CR, then came back and changed ContainerImage afterwards.   Re-set
+	// StopRequired if this happens because this otherwise can lead into a
+	// rolling upgrade scenario.
+	if upgradePending && !upgradeBlocked && !instance.Status.StopRequired {
+		if statefulSetExists {
+			for i := range statefulset.Spec.Template.Spec.Containers {
+				if statefulset.Spec.Template.Spec.Containers[i].Name == "galera" &&
+					statefulset.Spec.Template.Spec.Containers[i].Image != instance.Spec.ContainerImage {
+					util.LogForObject(helper, fmt.Sprintf(
+						"Container image changed (%s -> %s) while upgrade to %s is pending; forcing full cluster stop to avoid mixed MariaDB versions",
+						statefulset.Spec.Template.Spec.Containers[i].Image, instance.Spec.ContainerImage, instance.Spec.TargetVersion), instance)
+					instance.Status.StopRequired = true
+					break
+				}
+			}
 		}
 	}
 
@@ -1029,21 +1159,23 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		instance.Status.LastAppliedTopology = nil
 	}
 
-	stsSpec, err := mariadb.StatefulSet(instance, hashOfHashes, topology)
-	// an error is detected while creating the StatefulSet spec
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	commonstatefulset := commonstatefulset.NewStatefulSet(stsSpec, 5)
-	sfres, sferr := commonstatefulset.CreateOrPatch(ctx, helper)
-	if sferr != nil {
-		if k8s_errors.IsNotFound(sferr) {
-			return ctrl.Result{RequeueAfter: time.Duration(3) * time.Second}, nil
+	// if upgrade is not blocked, create or patch the statefulset with the new,
+	// desired spec.
+	if !upgradeBlocked {
+		stsSpec, err := mariadb.StatefulSet(instance, hashOfHashes, topology)
+		if err != nil {
+			return ctrl.Result{}, err
 		}
-		return sfres, sferr
+		commonsts := commonstatefulset.NewStatefulSet(stsSpec, 5)
+		sfres, sferr := commonsts.CreateOrPatch(ctx, helper)
+		if sferr != nil {
+			if k8s_errors.IsNotFound(sferr) {
+				return ctrl.Result{RequeueAfter: time.Duration(3) * time.Second}, nil
+			}
+			return sfres, sferr
+		}
+		statefulset = commonsts.GetStatefulSet()
 	}
-
-	statefulset := commonstatefulset.GetStatefulSet()
 
 	// If a full cluster restart was requested,
 	// check whether it is still in progress
@@ -1086,6 +1218,80 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	//     probe returns true (i.e. galera is running in the pod and clustered)
 	//   . Cluster is bootstrapped as soon as one pod is available
 	instance.Status.Bootstrapped = statefulset.Status.AvailableReplicas > 0
+
+	// Probe the running MariaDB version and record it in
+	// ClusterProperties["TargetVersion"] whenever the cluster is healthy.
+	// This serves two purposes:
+	//   - Auto-detect: populate the version on clusters that never set
+	//     Spec.TargetVersion, so the status always reflects reality.
+	//   - Upgrade verification: after an upgrade, confirm the running
+	//     version matches what was requested.
+	allReplicasReady := instance.Spec.Replicas != nil &&
+		statefulset.Status.AvailableReplicas == *instance.Spec.Replicas
+
+	var detectedVersion string
+	versionMismatch := false
+	if allReplicasReady && !instance.Status.StopRequired {
+		needsProbe := false
+		if instance.Status.ClusterProperties["TargetVersion"] == "" {
+			needsProbe = true
+		} else if instance.Spec.TargetVersion != "" &&
+			instance.Status.ClusterProperties["TargetVersion"] != instance.Spec.TargetVersion {
+			needsProbe = true
+		}
+		if needsProbe {
+			actual, probeErr := probeGaleraServerVersion(ctx, helper, r.config, instance, podList.Items)
+			if probeErr != nil {
+				if instance.Spec.TargetVersion != "" {
+					util.LogForObject(helper, fmt.Sprintf("Version upgrade to %s not yet verifiable (%v); will retry", instance.Spec.TargetVersion, probeErr), instance)
+				} else {
+					util.LogForObject(helper, fmt.Sprintf("Server version not yet available (%v); will retry", probeErr), instance)
+				}
+				return ctrl.Result{RequeueAfter: time.Duration(3) * time.Second}, nil
+			}
+
+			instance.Status.ClusterProperties["TargetVersion"] = actual
+			detectedVersion = actual
+			if instance.Spec.TargetVersion != "" &&
+				normalizeMajorMinor(instance.Spec.TargetVersion) != actual {
+				versionMismatch = true
+			} else if instance.Spec.TargetVersion != "" {
+				util.LogForObject(helper, fmt.Sprintf("Version upgrade to %s verified on all %d replicas", actual, *instance.Spec.Replicas), instance)
+			} else {
+				util.LogForObject(helper, fmt.Sprintf("Detected running MariaDB version %s", actual), instance)
+			}
+		}
+	}
+
+	// set appropriate conditions for the fully observed upgrade state
+	switch {
+	case upgradeBlocked:
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			mariadbv1.MariaDBServerUpgradeReadyCondition,
+			mariadbv1.MariaDBServerUpgradeBlockedReason,
+			condition.SeverityError,
+			mariadbv1.MariaDBServerUpgradeBlockedMessage,
+			instance.Spec.TargetVersion, statefulset.Status.AvailableReplicas, *instance.Spec.Replicas))
+	case versionMismatch:
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			mariadbv1.MariaDBServerUpgradeReadyCondition,
+			mariadbv1.MariaDBServerUpgradeVersionMismatchReason,
+			condition.SeverityError,
+			mariadbv1.MariaDBServerUpgradeVersionMismatchMessage,
+			detectedVersion, instance.Spec.TargetVersion))
+	case instance.Spec.TargetVersion != "" &&
+		instance.Status.ClusterProperties["TargetVersion"] != instance.Spec.TargetVersion:
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			mariadbv1.MariaDBServerUpgradeReadyCondition,
+			mariadbv1.MariaDBServerUpgradeInProgressReason,
+			condition.SeverityInfo,
+			mariadbv1.MariaDBServerUpgradeInProgressMessage,
+			instance.Spec.TargetVersion))
+	default:
+		instance.Status.Conditions.MarkTrue(
+			mariadbv1.MariaDBServerUpgradeReadyCondition,
+			mariadbv1.MariaDBServerUpgradeReadyMessage)
+	}
 
 	// Clear transient in-memory bootstrap tracker now that a pod is available
 	if instance.Status.Bootstrapped {

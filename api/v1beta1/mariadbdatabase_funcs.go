@@ -941,20 +941,22 @@ func ensureMariaDBAccount(ctx context.Context,
 		}
 	}
 
-	_, err = createOrPatchAccountAndSecret(ctx, helper, account, dbSecret, labels)
+	op, err := createOrPatchAccountAndSecret(ctx, helper, account, dbSecret, labels)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	util.LogForObject(
-		helper,
-		fmt.Sprintf(
-			"Successfully ensured MariaDBAccount %s exists; database username is %s",
-			accountName,
-			account.Spec.UserName,
-		),
-		account,
-	)
+	if op != controllerutil.OperationResultNone {
+		util.LogForObject(
+			helper,
+			fmt.Sprintf(
+				"Successfully ensured MariaDBAccount %s exists; database username is %s",
+				accountName,
+				account.Spec.UserName,
+			),
+			account,
+		)
+	}
 
 	return account, dbSecret, nil
 

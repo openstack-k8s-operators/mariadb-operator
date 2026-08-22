@@ -112,6 +112,10 @@ func getGaleraVolumes(g *mariadbv1.Galera) []corev1.Volume {
 							Key:  "mysql_root_auth.sh",
 							Path: "mysql_root_auth.sh",
 						},
+						{
+							Key:  "mysql_version_upgrade.sh",
+							Path: "mysql_version_upgrade.sh",
+						},
 					},
 				},
 			},
