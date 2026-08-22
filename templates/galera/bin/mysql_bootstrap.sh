@@ -103,9 +103,9 @@ function kolla_set_all_configs {
 
     # set up permissions of mounted directories before starting
     # galera or the sidecar logging container
-    # NOTE: kolla_set_configs is explicitly allowed in sudoers and needs
-    # sudo to set up permissions
-    sudo -E kolla_set_configs
+    # kolla_set_configs must run as root; required vars are preserved by
+    # sudoers env_keep.
+    sudo kolla_set_configs
 
     # now that /var/local/ is owned by mysql, prepare space for invocations of
     # mysql_root_auth.sh to place pw cache file. we do this by running the
