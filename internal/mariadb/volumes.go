@@ -4,6 +4,7 @@ import (
 	tls "github.com/openstack-k8s-operators/lib-common/modules/common/tls"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	resource "k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/utils/ptr"
 )
 
@@ -49,7 +50,14 @@ func getGaleraVolumes(g *mariadbv1.Galera) []corev1.Volume {
 		{
 			Name: "var-local",
 			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
+				EmptyDir: &corev1.EmptyDirVolumeSource{
+					// The root password cache is written here. Memory medium
+					// keeps it on tmpfs so the plaintext never reaches a disk.
+					// SizeLimit caps how much of the pod's memory a runaway
+					// write to /var/local can consume.
+					Medium:    corev1.StorageMediumMemory,
+					SizeLimit: ptr.To(resource.MustParse("1Mi")),
+				},
 			},
 		},
 		{
@@ -150,7 +158,14 @@ func getGaleraRootOnlyVolumes(g *mariadbv1.Galera) []corev1.Volume {
 		{
 			Name: "var-local",
 			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
+				EmptyDir: &corev1.EmptyDirVolumeSource{
+					// The root password cache is written here. Memory medium
+					// keeps it on tmpfs so the plaintext never reaches a disk.
+					// SizeLimit caps how much of the pod's memory a runaway
+					// write to /var/local can consume.
+					Medium:    corev1.StorageMediumMemory,
+					SizeLimit: ptr.To(resource.MustParse("1Mi")),
+				},
 			},
 		},
 	}
