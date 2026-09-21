@@ -447,9 +447,10 @@ func retrieveSequenceNumber(ctx context.Context, helper *helper.Helper, config *
 
 // clearPodAttributes clears information known by the operator about a pod
 func clearPodAttributes(ctx context.Context, instance *mariadbv1.Galera, podName string) {
+	attributes := instance.Status.Attributes[podName]
 	delete(instance.Status.Attributes, podName)
 	log := GetLog(ctx, "galera")
-	log.Info("Clear tracked attributes for pod", "pod", podName, "instance", instance)
+	log.Info("Clear tracked attributes for pod", "pod", podName, "attributes", attributes)
 	// If the pod was deemed safeToBootstrap, this state has to be reassessed
 	if instance.Status.SafeToBootstrap == podName {
 		instance.Status.SafeToBootstrap = ""
