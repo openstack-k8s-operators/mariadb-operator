@@ -55,9 +55,9 @@ spec:
     - name: db_name
       value: testdb_utf8
     - name: character_set
-      value: utf8
+      value: utf8mb3
     - name: collation
-      value: utf8_general_ci
+      value: utf8mb3_general_ci
     try:
     - script: *check_charset
     - script: *check_collation

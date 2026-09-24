@@ -32,7 +32,7 @@ const (
 	CustomServiceConfigFile = "zzz_galera_custom.cnf.in"
 
 	// GaleraContainerImage is the fall-back container image for Galera
-	GaleraContainerImage = "quay.io/podified-antelope-centos9/openstack-mariadb:current-podified"
+	GaleraContainerImage = "quay.io/openstack-s2i-containers/openstack-mariadb:master-latest"
 
 	storageRequestProdMin = "5Gi"
 
