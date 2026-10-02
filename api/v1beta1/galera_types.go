@@ -126,6 +126,33 @@ type GaleraOverrideSpec struct {
 	Probes probes.OverrideSpec `json:"probes,omitempty"`
 }
 
+// PodUnavailabilityReason describes why a Galera pod is considered unavailable
+// or excluded from operator decisions.
+type PodUnavailabilityReason string
+
+const (
+	// PodUnavailabilityReasonPVCStuck means the pod's PVC is bound to an
+	// unresponsive OCP worker node and cannot be recovered by normal scheduling.
+	PodUnavailabilityReasonPVCStuck PodUnavailabilityReason = "PVCStuckOnNode"
+)
+
+// UnavailablePodStatus describes why a specific pod is unavailable or excluded
+// from operator decisions. It is a generic, reusable structure that is not tied
+// to any single remediation mechanism.
+type UnavailablePodStatus struct {
+	// Reason describes why this pod is considered unavailable.
+	Reason PodUnavailabilityReason `json:"reason"`
+	// Node is the Kubernetes node name relevant to the unavailability condition
+	// (e.g. the node a stuck PVC is bound to). Empty when not applicable.
+	// +optional
+	Node string `json:"node,omitempty"`
+	// Remediation indicates that the operator has decided to actively remediate
+	// this pod. At most one pod in UnavailablePods has Remediation set to true
+	// at any time; others wait until the active remediation completes.
+	// +kubebuilder:default=false
+	Remediation bool `json:"remediation,omitempty"`
+}
+
 // GaleraAttributes holds startup information for a Galera host.
 // This struct is read-only from the operator's perspective — all fields
 // are pushed by the galera pods via the report_local_galera_state script.
@@ -178,6 +205,10 @@ type GaleraStatus struct {
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 	// LastAppliedTopology - the last applied Topology
 	LastAppliedTopology *topologyv1.TopoRef `json:"lastAppliedTopology,omitempty"`
+	// UnavailablePods tracks pods that are unavailable or excluded from operator
+	// decisions, keyed by pod name. Nil when all pods are healthy and managed.
+	// +kubebuilder:validation:Optional
+	UnavailablePods map[string]UnavailablePodStatus `json:"unavailablePods,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -205,6 +236,18 @@ type GaleraList struct {
 
 func init() {
 	SchemeBuilder.Register(&Galera{}, &GaleraList{})
+}
+
+// RemediationInProgress returns the name of the pod currently being remediated
+// and true if any pod in UnavailablePods has Remediation set to true.
+// Returns ("", false) when no remediation is active.
+func (s *GaleraStatus) RemediationInProgress() (string, bool) {
+	for podName, up := range s.UnavailablePods {
+		if up.Remediation {
+			return podName, true
+		}
+	}
+	return "", false
 }
 
 // IsReady - returns true if service is ready to serve requests
