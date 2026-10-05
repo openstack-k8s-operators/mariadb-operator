@@ -59,15 +59,19 @@ func (r *GaleraReconciler) EnsurePVCAvailability(
 	ctx context.Context,
 	instance *mariadbv1.Galera,
 	helper *helper.Helper,
+	availableReplicas int32,
 ) error {
 	if instance.Spec.Replicas == nil {
 		return nil
 	}
 
-	// If a previous remediation has been initiated and has succesfully
-	// unblock pod, clear the pod's status in the mariadb-operator to
-	// free up space for next remediations
-	if err := r.CheckForPendingPodRemediation(ctx, instance, helper); err != nil {
+	// Keep the remediation slot occupied until the replacement Galera member
+	// is ready and synced, then allow another PVC to be considered.
+	if err := r.CheckForResolvedPodRemediation(ctx, instance, helper); err != nil {
+		return err
+	}
+
+	if err := r.CheckForPendingPodRemediation(ctx, instance, helper, availableReplicas); err != nil {
 		return err
 	}
 
@@ -114,7 +118,7 @@ func (r *GaleraReconciler) EnsurePVCAvailability(
 
 	// At this point, all pods currently unavailable have been tagged,
 	// So check whether a remediation action must be initiated or tracked.
-	if err := r.CheckForPendingPodRemediation(ctx, instance, helper); err != nil {
+	if err := r.CheckForPendingPodRemediation(ctx, instance, helper, availableReplicas); err != nil {
 		return err
 	}
 
@@ -136,6 +140,7 @@ func (r *GaleraReconciler) CheckForPendingPodRemediation(
 	ctx context.Context,
 	instance *mariadbv1.Galera,
 	helper *helper.Helper,
+	availableReplicas int32,
 ) error {
 	log := helper.GetLogger()
 
@@ -161,6 +166,20 @@ func (r *GaleraReconciler) CheckForPendingPodRemediation(
 	if pvc.Annotations[remediationv1.SafeToDeleteAnnotation] == "true" {
 		return nil
 	}
+	if instance.Spec.Replicas == nil || *instance.Spec.Replicas == 0 {
+		return nil
+	}
+
+	requiredQuorum := *instance.Spec.Replicas/2 + 1
+	if availableReplicas < requiredQuorum {
+		// Deleting a stuck PVC without a surviving Galera majority can remove
+		// the recovery path for the data that remains in the cluster.
+		log.Info("Deferring PVC remediation until Galera quorum is available",
+			"pod", podName, "pvc", pvcName,
+			"availableReplicas", availableReplicas,
+			"requiredReplicas", requiredQuorum)
+		return nil
+	}
 
 	// Consent requires echoing the request ID back as consent ID so that
 	// PodRemediator's HasRemediationConsent check passes. Never grant consent
@@ -181,7 +200,10 @@ func (r *GaleraReconciler) CheckForPendingPodRemediation(
 	}
 	pvc.Annotations[remediationv1.SafeToDeleteAnnotation] = "true"
 	pvc.Annotations[remediationv1.ConsentIDAnnotation] = requestID
-	if err := r.Patch(ctx, pvc, client.MergeFrom(oldPVC)); err != nil {
+	// The resource-version check keeps this consent tied to the request ID read
+	// above; if PodRemediator changed the PVC meanwhile, the patch must be retried.
+	patch := client.MergeFromWithOptions(oldPVC, client.MergeFromWithOptimisticLock{})
+	if err := r.Patch(ctx, pvc, patch); err != nil {
 		log.Error(err, "Failed to set safe-to-delete on PVC", "pod", podName, "pvc", pvcName)
 		return err
 	}

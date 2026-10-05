@@ -285,7 +285,7 @@ func (r *GaleraRestoreReconciler) reconcileDelete(ctx context.Context, instance 
 		return ctrl.Result{}, err
 	}
 
-	if !k8s_errors.IsNotFound(err) && galeraBackup != nil {
+	if !k8s_errors.IsNotFound(err) {
 		if controllerutil.RemoveFinalizer(galeraBackup, helper.GetFinalizer()) {
 			err := r.Update(ctx, galeraBackup)
 			if err != nil {

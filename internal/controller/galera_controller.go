@@ -1192,7 +1192,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	// We detect this condition by looking for annotation set by the PodRemediator,
 	// and process with recovery if needed.
 	// TODO(dciabrin) check only when some replicas are not started/ready?
-	if err := r.EnsurePVCAvailability(ctx, instance, helper); err != nil {
+	if err := r.EnsurePVCAvailability(ctx, instance, helper, statefulset.Status.AvailableReplicas); err != nil {
 		log.Error(err, "PVC availability check failed; skipping this cycle")
 	}
 
