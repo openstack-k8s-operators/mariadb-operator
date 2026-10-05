@@ -88,6 +88,9 @@ func (r *GaleraReconciler) EnsurePVCAvailability(
 		// PodRemediator, recall its associated pod is "unavailable"
 		node, found := pvc.Annotations[remediationv1.PVCStuckOnNodeAnnotation]
 		if found {
+			if instance.Status.UnavailablePods == nil {
+				instance.Status.UnavailablePods = make(map[string]mariadbv1.UnavailablePodStatus)
+			}
 			pod := mariadb.PodNameFromPVC(pvcName)
 			desc := mariadbv1.UnavailablePodStatus{
 				Reason: mariadbv1.PodUnavailabilityReasonPVCStuck,
