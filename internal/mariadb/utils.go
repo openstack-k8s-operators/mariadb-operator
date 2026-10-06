@@ -1,10 +1,38 @@
 package mariadb
 
 import (
+	"fmt"
+	"strings"
+
 	common "github.com/openstack-k8s-operators/lib-common/modules/common"
 	labels "github.com/openstack-k8s-operators/lib-common/modules/common/labels"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+// pvcClaimPrefix is the VolumeClaimTemplate name used in the Galera StatefulSet.
+// StatefulSet PVCs are named "<claimPrefix>-<statefulset-name>-<ordinal>", so
+// stripping this prefix from a PVC name yields the pod name.
+const pvcClaimPrefix = "mysql-db-"
+
+// PodNameFromPVC derives the Galera pod name from a StatefulSet PVC name.
+// Returns "" when the PVC name does not follow the expected convention.
+func PodNameFromPVC(pvcName string) string {
+	name := strings.TrimPrefix(pvcName, pvcClaimPrefix)
+	if name == pvcName {
+		return ""
+	}
+	return name
+}
+
+// PVCName returns the expected PVC name for a given StatefulSet name and ordinal.
+func PVCName(stsName string, ordinal int32) string {
+	return fmt.Sprintf("%s%s-%d", pvcClaimPrefix, stsName, ordinal)
+}
+
+// PVCNameFromPod returns the PVC name for a given Galera pod name.
+func PVCNameFromPod(podName string) string {
+	return pvcClaimPrefix + podName
+}
 
 // GetLabels -
 func GetLabels(name string) map[string]string {
