@@ -5,11 +5,11 @@ go 1.26.3
 require (
 	github.com/go-logr/logr v1.4.4
 	github.com/google/uuid v1.6.0
-	github.com/onsi/ginkgo/v2 v2.33.0
+	github.com/onsi/ginkgo/v2 v2.33.1
 	github.com/onsi/gomega v1.44.0
-	github.com/openstack-k8s-operators/infra-operator/apis v0.6.1-0.20261008072659-d6ede618a4d5
-	github.com/openstack-k8s-operators/lib-common/modules/common v0.6.1-0.20261009105430-6790c2298bb5
-	github.com/openstack-k8s-operators/lib-common/modules/users v0.0.0-20261009105430-6790c2298bb5
+	github.com/openstack-k8s-operators/infra-operator/apis v0.6.1-0.20261012081708-7aa3021e95e4
+	github.com/openstack-k8s-operators/lib-common/modules/common v0.6.1-0.20261013151427-9b94821abb9f
+	github.com/openstack-k8s-operators/lib-common/modules/users v0.0.0-20261013151427-9b94821abb9f
 	github.com/openstack-k8s-operators/mariadb-operator/api v0.0.0-00010101000000-000000000000
 	go.uber.org/zap v1.28.0
 	k8s.io/api v0.33.13
