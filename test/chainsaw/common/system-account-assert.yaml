@@ -35,7 +35,9 @@ type: Opaque
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: systemuser-account-create-update
+  # Job is named for the MariaDBAccount, not for spec.userName; accounts
+  # sharing a userName across Galera instances each need their own Job
+  name: chainsawdb-some-system-db-account-account-create-update
 spec:
   template:
     spec: {}

@@ -46,10 +46,9 @@ func CreateOrUpdateDbAccountJob(galera *mariadbv1.Galera, account *mariadbv1.Mar
 	}
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			// provided db name is used as metadata name where underscore is a not allowed
-			// character. Lets replace all underscores with hypen. Underscores in the db name are
-			// possible.
-			Name:      strings.ReplaceAll(account.Spec.UserName, "_", "-") + "-account-create-update",
+			// create a name that is unique against MariaDBAccount name and
+			// also ensures underscores are converted to hyphens
+			Name:      strings.ReplaceAll(account.Name, "_", "-") + "-account-create-update",
 			Namespace: account.Namespace,
 			Labels:    labels,
 		},
@@ -107,7 +106,7 @@ func DeleteDbAccountJob(galera *mariadbv1.Galera, account *mariadbv1.MariaDBAcco
 	}
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      strings.ReplaceAll(account.Spec.UserName, "_", "") + "-account-delete",
+			Name:      strings.ReplaceAll(account.Name, "_", "") + "-account-delete",
 			Namespace: account.Namespace,
 			Labels:    labels,
 		},
