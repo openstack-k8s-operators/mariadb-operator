@@ -133,3 +133,7 @@ replace k8s.io/code-generator => k8s.io/code-generator v0.33.13 //allow-merging
 replace k8s.io/component-base => k8s.io/component-base v0.33.13 //allow-merging
 
 replace k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20250627150254-e9823e99808e //allow-merging
+
+replace github.com/openstack-k8s-operators/lib-common/modules/common => github.com/fmount/lib-common/modules/common v0.0.0-20260915123551-125459a512f8
+
+replace github.com/openstack-k8s-operators/lib-common/modules/test => github.com/fmount/lib-common/modules/test v0.0.0-20260915123551-125459a512f8
