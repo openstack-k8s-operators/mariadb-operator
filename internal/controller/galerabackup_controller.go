@@ -29,8 +29,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/openstack-k8s-operators/lib-common/modules/common"
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
@@ -427,11 +431,12 @@ func (r *GaleraBackupReconciler) generateConfigMaps(
 		},
 		// ConfigMap
 		{
-			Name:         cfgConfig,
-			Namespace:    instance.Namespace,
-			Type:         util.TemplateTypeConfig,
-			InstanceType: instance.Kind,
-			Labels:       map[string]string{},
+			Name:          cfgConfig,
+			Namespace:     instance.Namespace,
+			Type:          util.TemplateTypeConfig,
+			InstanceType:  instance.Kind,
+			Labels:        map[string]string{},
+			ConfigOptions: map[string]any{"TLSConfigOptions": mariadb.NewTLSConfigOptions},
 		},
 	}
 
@@ -448,6 +453,11 @@ func (r *GaleraBackupReconciler) generateConfigMaps(
 func (r *GaleraBackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&mariadbv1.GaleraBackup{}).
+		Watches(&corev1.ConfigMap{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				return tlsProfileRequests(ctx, r.Client, obj, &mariadbv1.GaleraBackupList{})
+			}),
+			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{})).
 		Complete(r)
 }
 

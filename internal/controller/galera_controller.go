@@ -782,7 +782,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		pdbSpec := pdb.MaxUnavailablePodDisruptionBudget(
 			instance.Name,
 			instance.Namespace,
-			intstr.FromInt(1),
+			intstr.FromInt32(1),
 			mariadb.LabelSelectors(instance, "galera"),
 		)
 		pdbInstance := pdb.NewPDB(pdbSpec, 5*time.Second)
@@ -1426,7 +1426,7 @@ func configMapNameForConfig(instance *mariadbv1.Galera) string {
 	return fmt.Sprintf("%s-config-data", instance.Name)
 }
 
-// generateConfigMaps returns the config map resource for a galera instance
+// generateConfigMaps returns the ConfigMap resource for a galera instance
 func (r *GaleraReconciler) generateConfigMaps(
 	ctx context.Context,
 	h *helper.Helper,
@@ -1435,6 +1435,7 @@ func (r *GaleraReconciler) generateConfigMaps(
 ) error {
 	log := GetLog(ctx, "galera")
 	templateParameters := map[string]any{
+		"TLSConfigOptions":   mariadb.NewTLSConfigOptions,
 		"logToDisk":          instance.Spec.LogToDisk,
 		"galeraInstanceName": instance.Name,
 	}
@@ -1524,6 +1525,11 @@ func (r *GaleraReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&rbacv1.Role{}).
 		Owns(&rbacv1.RoleBinding{}).
+		Watches(&corev1.ConfigMap{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				return tlsProfileRequests(ctx, r.Client, obj, &mariadbv1.GaleraList{})
+			}),
+			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{})).
 		Watches(
 			&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForSrc),
