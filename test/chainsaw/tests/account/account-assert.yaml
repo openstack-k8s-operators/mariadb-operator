@@ -23,3 +23,12 @@ status:
     reason: Ready
     status: "True"
     type: MariaDBServerReady
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  # Job is named for the MariaDBAccount, not for spec.userName; accounts
+  # sharing a userName across Galera instances each need their own Job
+  name: testdb-some-db-account-account-create-update
+status:
+  succeeded: 1
