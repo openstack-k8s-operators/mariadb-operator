@@ -79,24 +79,27 @@ func tlsVolumes(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera) []corev1.Volume 
 		volumes = append(volumes, svc.CreateVolume(GaleraCertPrefix))
 		if g.Spec.TLS.CaBundleSecretName != "" {
 			volumes = append(volumes, g.Spec.TLS.CreateVolume())
-			volumes = append(volumes, corev1.Volume{
-				Name: "config-data",
-				VolumeSource: corev1.VolumeSource{
-					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: b.Name + "-backup-config",
-						},
-						Items: []corev1.KeyToPath{{
-							Key:  "mysql_backup_tls.cnf",
-							Path: "mysql_backup_tls.cnf",
-						}, {
-							Key:  "garbd_backup_tls.cnf",
-							Path: "garbd_backup_tls.cnf",
-						}},
-					},
-				},
-			})
 		}
+		volumes = append(volumes, corev1.Volume{
+			Name: "config-data",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: b.Name + "-backup-config",
+					},
+					Items: []corev1.KeyToPath{{
+						Key:  mariadb.TLSProfileConfigFile,
+						Path: mariadb.TLSProfileConfigFile,
+					}, {
+						Key:  "mysql_backup_tls.cnf",
+						Path: "mysql_backup_tls.cnf",
+					}, {
+						Key:  "garbd_backup_tls.cnf",
+						Path: "garbd_backup_tls.cnf",
+					}},
+				},
+			},
+		})
 	}
 	return volumes
 }
@@ -131,12 +134,12 @@ func tlsVolumeMounts(g *mariadbv1.Galera) []corev1.VolumeMount {
 		mounts = append(mounts, svc.CreateVolumeMounts(GaleraCertPrefix)...)
 		if g.Spec.TLS.CaBundleSecretName != "" {
 			mounts = append(mounts, g.Spec.TLS.CreateVolumeMounts(nil)...)
-			mounts = append(mounts, corev1.VolumeMount{
-				MountPath: "/var/lib/config-data/default",
-				ReadOnly:  true,
-				Name:      "config-data",
-			})
 		}
+		mounts = append(mounts, corev1.VolumeMount{
+			MountPath: "/var/lib/config-data/default",
+			ReadOnly:  true,
+			Name:      "config-data",
+		})
 	}
 	return mounts
 }

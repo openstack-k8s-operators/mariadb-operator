@@ -108,6 +108,7 @@ func getGaleraInitContainers(g *mariadbv1.Galera) []corev1.Container {
 		initContainers = append(initContainers, corev1.Container{
 			Image:           g.Spec.ContainerImage,
 			Name:            "mysql-upgrade",
+			Env:             TLSProfileEnv(g),
 			Command:         []string{"bash", "/var/lib/operator-scripts/mysql_version_upgrade.sh"},
 			Resources:       g.Spec.Resources,
 			VolumeMounts:    getGaleraInitVolumeMounts(g),
@@ -118,6 +119,7 @@ func getGaleraInitContainers(g *mariadbv1.Galera) []corev1.Container {
 	initContainers = append(initContainers, corev1.Container{
 		Image:           g.Spec.ContainerImage,
 		Name:            "mysql-bootstrap",
+		Env:             TLSProfileEnv(g),
 		Command:         []string{"bash", "/var/lib/operator-scripts/mysql_bootstrap.sh"},
 		Resources:       g.Spec.Resources,
 		VolumeMounts:    getGaleraInitVolumeMounts(g),
@@ -169,10 +171,10 @@ func getGaleraContainers(g *mariadbv1.Galera, configHash string) ([]corev1.Conta
 		Image:   g.Spec.ContainerImage,
 		Name:    "galera",
 		Command: []string{"/usr/bin/dumb-init", "--", "/var/lib/operator-scripts/detect_gcomm_and_start.sh"},
-		Env: []corev1.EnvVar{{
+		Env: append(TLSProfileEnv(g), corev1.EnvVar{
 			Name:  "CR_CONFIG_HASH",
 			Value: configHash,
-		}},
+		}),
 		Ports: []corev1.ContainerPort{{
 			ContainerPort: 3306,
 			Name:          "mysql",

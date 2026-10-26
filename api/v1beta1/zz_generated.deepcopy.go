@@ -436,6 +436,11 @@ func (in *GaleraSpecCore) DeepCopyInto(out *GaleraSpecCore) {
 			}
 		}
 	}
+	if in.TLSGroups != nil {
+		in, out := &in.TLSGroups, &out.TLSGroups
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	in.TLS.DeepCopyInto(&out.TLS)
 	if in.TopologyRef != nil {
 		in, out := &in.TopologyRef, &out.TopologyRef

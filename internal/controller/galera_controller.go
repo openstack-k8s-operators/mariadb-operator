@@ -111,9 +111,10 @@ type bootstrapPodInfo struct {
 // GaleraReconciler reconciles a Galera object
 type GaleraReconciler struct {
 	client.Client
-	Kclient kubernetes.Interface
-	config  *rest.Config
-	Scheme  *runtime.Scheme
+	Kclient   kubernetes.Interface
+	config    *rest.Config
+	Scheme    *runtime.Scheme
+	apiReader client.Reader
 	// bootstrapping tracks the pod currently bootstrapping each Galera
 	// cluster. Keyed by types.NamespacedName. Entries are set when
 	// gcomm:// is injected and cleared when the cluster bootstraps,
@@ -782,7 +783,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		pdbSpec := pdb.MaxUnavailablePodDisruptionBudget(
 			instance.Name,
 			instance.Namespace,
-			intstr.FromInt(1),
+			intstr.FromInt32(1),
 			mariadb.LabelSelectors(instance, "galera"),
 		)
 		pdbInstance := pdb.NewPDB(pdbSpec, 5*time.Second)
@@ -1002,6 +1003,13 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	// build state of the restart hash. this is used to decide whether the
 	// statefulset must stop all its pods before applying a config update
 	clusterPropertiesEnv["GCommTLS"] = env.SetValue(strconv.FormatBool(instance.Spec.TLS.Enabled() && instance.Spec.TLS.CaBundleSecretName != ""))
+	policyHash, err := replicationTLSProfileHash(ctx, r.apiReader, instance)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if policyHash != "" {
+		clusterPropertiesEnv["TLSProfile"] = env.SetValue(policyHash)
+	}
 	if instance.Spec.TargetVersion != "" {
 		clusterPropertiesEnv["TargetVersion"] = env.SetValue(instance.Spec.TargetVersion)
 	}
@@ -1426,7 +1434,7 @@ func configMapNameForConfig(instance *mariadbv1.Galera) string {
 	return fmt.Sprintf("%s-config-data", instance.Name)
 }
 
-// generateConfigMaps returns the config map resource for a galera instance
+// generateConfigMaps returns the ConfigMap resource for a galera instance
 func (r *GaleraReconciler) generateConfigMaps(
 	ctx context.Context,
 	h *helper.Helper,
@@ -1435,8 +1443,13 @@ func (r *GaleraReconciler) generateConfigMaps(
 ) error {
 	log := GetLog(ctx, "galera")
 	templateParameters := map[string]any{
-		"logToDisk":          instance.Spec.LogToDisk,
-		"galeraInstanceName": instance.Name,
+		"TLSConfigOptions":    mariadb.NewTLSConfigOptions,
+		"logToDisk":           instance.Spec.LogToDisk,
+		"galeraInstanceName":  instance.Name,
+		"customServiceConfig": instance.Spec.CustomServiceConfig,
+	}
+	if len(instance.Spec.TLSGroups) > 0 {
+		templateParameters["TLSGroups"] = strings.Join(instance.Spec.TLSGroups, ":")
 	}
 	customData := make(map[string]string)
 	customData[mariadbv1.CustomServiceConfigFile] = instance.Spec.CustomServiceConfig
@@ -1453,13 +1466,14 @@ func (r *GaleraReconciler) generateConfigMaps(
 		},
 		// ConfigMap
 		{
-			Name:          configMapNameForConfig(instance),
-			Namespace:     instance.Namespace,
-			Type:          util.TemplateTypeConfig,
-			InstanceType:  instance.Kind,
-			CustomData:    customData,
-			ConfigOptions: templateParameters,
-			Labels:        map[string]string{},
+			Name:               configMapNameForConfig(instance),
+			Namespace:          instance.Namespace,
+			Type:               util.TemplateTypeConfig,
+			AdditionalTemplate: map[string]string{mariadb.TLSProfileConfigFile: "openssl-profile.cnf"},
+			InstanceType:       instance.Kind,
+			CustomData:         customData,
+			ConfigOptions:      templateParameters,
+			Labels:             map[string]string{},
 		},
 	}
 
@@ -1475,6 +1489,7 @@ func (r *GaleraReconciler) generateConfigMaps(
 // SetupWithManager sets up the controller with the Manager.
 func (r *GaleraReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.config = mgr.GetConfig()
+	r.apiReader = mgr.GetAPIReader()
 
 	// Various CR fields need to be indexed to filter watch events
 	// for the secret changes we want to be notified of
@@ -1524,6 +1539,11 @@ func (r *GaleraReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&rbacv1.Role{}).
 		Owns(&rbacv1.RoleBinding{}).
+		Watches(&corev1.ConfigMap{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				return tlsProfileRequests(ctx, r.Client, obj, &mariadbv1.GaleraList{})
+			}),
+			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{})).
 		Watches(
 			&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForSrc),

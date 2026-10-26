@@ -18,7 +18,10 @@ package functional_test
 
 import (
 	"context"
+	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -26,6 +29,7 @@ import (
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2" //revive:disable:dot-imports
 	. "github.com/onsi/gomega"    //revive:disable:dot-imports
+	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	"go.uber.org/zap/zapcore"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -74,11 +78,22 @@ var _ = BeforeSuite(func() {
 	}))
 
 	ctx, cancel = context.WithCancel(context.TODO())
+	templatesPath, err := filepath.Abs(filepath.Join("..", "..", "templates"))
+	Expect(err).NotTo(HaveOccurred())
+	previousTemplates := os.Getenv("OPERATOR_TEMPLATES")
+	Expect(os.Setenv("OPERATOR_TEMPLATES", templatesPath)).To(Succeed())
+	DeferCleanup(os.Setenv, "OPERATOR_TEMPLATES", previousTemplates)
+	mariadbv1.SetupDefaults()
+	// Resolve the dependency's CRD location through Go so replacements and
+	// alternative module-cache locations work in local runs and CI alike.
+	infraPath, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", "github.com/openstack-k8s-operators/infra-operator/apis").Output()
+	Expect(err).NotTo(HaveOccurred())
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{
 			filepath.Join("..", "..", "config", "crd", "bases"),
+			filepath.Join(strings.TrimSpace(string(infraPath)), "bases", "topology.openstack.org_topologies.yaml"),
 		},
 		// Increase this to 60 or 120 seconds for the single-core run
 		ControlPlaneStartTimeout: 120 * time.Second,
@@ -103,13 +118,13 @@ var _ = BeforeSuite(func() {
 	}
 
 	// cfg is defined in this file globally.
-	var err error
 	cfg, err = testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
 	err = mariadbv1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
+	Expect(topologyv1.AddToScheme(scheme.Scheme)).To(Succeed())
 	//+kubebuilder:scaffold:scheme
 
 	logger = ctrl.Log.WithName("---Test---")
@@ -156,6 +171,18 @@ var _ = BeforeSuite(func() {
 		Kclient: kclient,
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
+	err = (&mariadb_ctrl.GaleraBackupReconciler{
+		Client:  k8sManager.GetClient(),
+		Scheme:  k8sManager.GetScheme(),
+		Kclient: kclient,
+	}).SetupWithManager(k8sManager)
+	Expect(err).NotTo(HaveOccurred())
+	err = (&mariadb_ctrl.GaleraRestoreReconciler{
+		Client:  k8sManager.GetClient(),
+		Scheme:  k8sManager.GetScheme(),
+		Kclient: kclient,
+	}).SetupWithManager(k8sManager)
+	Expect(err).NotTo(HaveOccurred())
 
 	go func() {
 		defer GinkgoRecover()

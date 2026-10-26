@@ -1,2 +1,3 @@
+{{- $tls := call .TLSConfigOptions . -}}
 : ${GARBD_CIPHER=AES128-SHA256}
-GARBD_TLS_OPTS="socket.ssl_key=/etc/pki/tls/private/galera.key;socket.ssl_cert=/etc/pki/tls/certs/galera.crt;socket.ssl_cipher=${GARBD_CIPHER};socket.ssl_ca=/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"
+GARBD_TLS_OPTS="socket.ssl_key=/etc/pki/tls/private/galera.key;socket.ssl_cert=/etc/pki/tls/certs/galera.crt;socket.ssl_cipher={{ if $tls.CipherSuite }}{{ or $tls.LegacyCiphers "DEFAULT" }}{{ else }}${GARBD_CIPHER}{{ end }};socket.ssl_ca=/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"

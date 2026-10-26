@@ -239,7 +239,10 @@ func (r *GaleraRestoreReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
-	preparedRestorePod := backup.RestorePod(instance, galeraBackup, backupCronJob)
+	if err := r.Get(ctx, types.NamespacedName{Name: galera.Name, Namespace: instance.Namespace}, galera); err != nil {
+		return ctrl.Result{}, err
+	}
+	preparedRestorePod := backup.RestorePod(instance, galeraBackup, backupCronJob, galera)
 	restorePod := &corev1.Pod{}
 	err = r.Get(ctx, types.NamespacedName{Name: preparedRestorePod.Name, Namespace: preparedRestorePod.Namespace}, restorePod)
 	if err != nil && k8s_errors.IsNotFound(err) {

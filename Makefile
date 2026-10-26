@@ -132,7 +132,7 @@ test: manifests generate gowork fmt vet envtest ginkgo ## Run tests.
 	for mod in $(shell find . -name go.mod -exec dirname {} \;); do \
 		pushd ./$$mod ; \
 		if [ -f test/functional/suite_test.go ]; then \
-			KUBEBUILDER_ASSETS="$(shell $(ENVTEST) -v debug --bin-dir $(LOCALBIN) use $(ENVTEST_K8S_VERSION) -p path)" $(GINKGO) --trace --cover --coverprofile cover.out --covermode=atomic --coverpkg=../../pkg/mariadb,../../controllers,../../api/v1beta1 ${PROC_CMD} $(GINKGO_ARGS) ./test/... || exit 1; \
+			KUBEBUILDER_ASSETS="$(shell $(ENVTEST) -v debug --bin-dir $(LOCALBIN) use $(ENVTEST_K8S_VERSION) -p path)" $(GINKGO) --trace --cover --coverprofile functional-cover.out --covermode=atomic --coverpkg=../../internal/mariadb/...,../../internal/controller,../../api/v1beta1 ${PROC_CMD} $(GINKGO_ARGS) ./test/... || exit 1; \
 		fi; \
 		KUBEBUILDER_ASSETS="$(shell $(ENVTEST) --bin-dir $(LOCALBIN) use $(ENVTEST_K8S_VERSION) -p path)" go test -v ./... --cover --coverprofile cover.out --covermode=atomic || exit 1; \
 		popd ; \

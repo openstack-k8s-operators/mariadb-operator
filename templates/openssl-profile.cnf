@@ -1,0 +1,2 @@
+{{- $tls := call .TLSConfigOptions . -}}
+{{ $tls.OpenSSLConfig }}

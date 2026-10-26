@@ -35,7 +35,8 @@ const (
 )
 
 func CreateGaleraConfig(namespace string, spec map[string]any) client.Object {
-	name := uuid.New().String()
+	// Service names must start with a letter; bare UUIDs can start with digits.
+	name := "galera-" + uuid.New().String()
 
 	raw := map[string]any{
 		"apiVersion": "mariadb.openstack.org/v1beta1",

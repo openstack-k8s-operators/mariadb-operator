@@ -65,6 +65,10 @@ func getBackupPodTemplate(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera, config
 			Value: "true",
 		})
 	}
+	environ = append(environ, mariadb.TLSProfileEnv(g)...)
+	if g.Spec.TLS.Enabled() {
+		environ = append(environ, corev1.EnvVar{Name: "MYSQL_TLS", Value: "true"})
+	}
 
 	return &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
