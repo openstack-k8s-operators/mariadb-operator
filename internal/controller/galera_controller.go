@@ -1002,6 +1002,13 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	// build state of the restart hash. this is used to decide whether the
 	// statefulset must stop all its pods before applying a config update
 	clusterPropertiesEnv["GCommTLS"] = env.SetValue(strconv.FormatBool(instance.Spec.TLS.Enabled() && instance.Spec.TLS.CaBundleSecretName != ""))
+	policyHash, err := replicationTLSProfileHash(ctx, r.Client, instance)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if policyHash != "" {
+		clusterPropertiesEnv["TLSProfile"] = env.SetValue(policyHash)
+	}
 	if instance.Spec.TargetVersion != "" {
 		clusterPropertiesEnv["TargetVersion"] = env.SetValue(instance.Spec.TargetVersion)
 	}
@@ -1435,9 +1442,13 @@ func (r *GaleraReconciler) generateConfigMaps(
 ) error {
 	log := GetLog(ctx, "galera")
 	templateParameters := map[string]any{
-		"TLSConfigOptions":   mariadb.NewTLSConfigOptions,
-		"logToDisk":          instance.Spec.LogToDisk,
-		"galeraInstanceName": instance.Name,
+		"TLSConfigOptions":    mariadb.NewTLSConfigOptions,
+		"logToDisk":           instance.Spec.LogToDisk,
+		"galeraInstanceName":  instance.Name,
+		"customServiceConfig": instance.Spec.CustomServiceConfig,
+	}
+	if len(instance.Spec.TLSGroups) > 0 {
+		templateParameters["TLSGroups"] = strings.Join(instance.Spec.TLSGroups, ":")
 	}
 	customData := make(map[string]string)
 	customData[mariadbv1.CustomServiceConfigFile] = instance.Spec.CustomServiceConfig
@@ -1454,13 +1465,14 @@ func (r *GaleraReconciler) generateConfigMaps(
 		},
 		// ConfigMap
 		{
-			Name:          configMapNameForConfig(instance),
-			Namespace:     instance.Namespace,
-			Type:          util.TemplateTypeConfig,
-			InstanceType:  instance.Kind,
-			CustomData:    customData,
-			ConfigOptions: templateParameters,
-			Labels:        map[string]string{},
+			Name:               configMapNameForConfig(instance),
+			Namespace:          instance.Namespace,
+			Type:               util.TemplateTypeConfig,
+			AdditionalTemplate: map[string]string{mariadb.TLSProfileConfigFile: "openssl-profile.cnf"},
+			InstanceType:       instance.Kind,
+			CustomData:         customData,
+			ConfigOptions:      templateParameters,
+			Labels:             map[string]string{},
 		},
 	}
 

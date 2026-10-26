@@ -25,6 +25,7 @@ func getGaleraVolumes(g *mariadbv1.Galera) []corev1.Volume {
 	}
 
 	if g.Spec.TLS.Enabled() {
+		configTemplates = append(configTemplates, corev1.KeyToPath{Key: TLSProfileConfigFile, Path: TLSProfileConfigFile})
 		if g.Spec.TLS.CaBundleSecretName != "" {
 			configTemplates = append(configTemplates, corev1.KeyToPath{
 				Key:  "galera_tls.cnf.in",

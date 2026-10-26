@@ -1,17 +1,19 @@
-{{- $tls := call .TLSConfigOptions (or (index . "SSLProtocol") "") (or (index . "SSLCipherSuite") "") -}}
+{{- $tls := call .TLSConfigOptions . -}}
 [mysqld]
 ssl
 ssl-cert = /etc/pki/tls/certs/galera.crt
 ssl-key = /etc/pki/tls/private/galera.key
 ssl-ca = /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
+{{ if or $tls.CipherSuite (not $tls.Configured) -}}
 ssl-cipher = {{ or $tls.CipherSuite "!SSLv2:kEECDH:kRSA:kEDH:kPSK:+3DES:!aNULL:!eNULL:!MD5:!EXP:!RC4:!SEED:!IDEA:!DES:!SSLv3:!TLSv1" }}
-{{ if $tls.Protocol -}}
+{{ end -}}
+{{ if or $tls.Protocol $tls.MinVersion -}}
 tls-version = {{ $tls.Versions }}
 {{ end -}}
 wsrep_provider_options = pc.wait_prim_timeout=PT5S;gcache.recover=no;gmcast.listen_addr=tcp://{ PODIP }:4567;socket.ssl_key=/etc/pki/tls/private/galera.key;socket.ssl_cert=/etc/pki/tls/certs/galera.crt;socket.ssl_cipher={{ if $tls.CipherSuite }}{{ or $tls.LegacyCiphers "DEFAULT" }}{{ else }}{ SSL_CIPHER }{{ end }};socket.ssl_ca=/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem;
 
 [sst]
-sockopt = cipher={{ if $tls.CipherSuite }}{{ or $tls.LegacyCiphers "DEFAULT" }}{{ else }}!SSLv2:kEECDH:kRSA:kEDH:kPSK:+3DES:!aNULL:!eNULL:!MD5:!EXP:!RC4:!SEED:!IDEA:!DES:!SSLv3:!TLSv1{{ end }}{{ if $tls.Protocol }},{{ $tls.SocketOptions }}{{ end }}
+sockopt = cipher={{ if $tls.CipherSuite }}{{ or $tls.LegacyCiphers "DEFAULT" }}{{ else }}!SSLv2:kEECDH:kRSA:kEDH:kPSK:+3DES:!aNULL:!eNULL:!MD5:!EXP:!RC4:!SEED:!IDEA:!DES:!SSLv3:!TLSv1{{ end }}{{ if or $tls.Protocol $tls.MinVersion }},{{ $tls.SocketOptions }}{{ end }}{{ if $tls.Groups }},openssl-groups={{ $tls.Groups }}{{ end }}
 tcert = /etc/pki/tls/certs/galera.crt
 tkey = /etc/pki/tls/private/galera.key
 tca = /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem

@@ -177,6 +177,12 @@ var _ = BeforeSuite(func() {
 		Kclient: kclient,
 	}).SetupWithManager(k8sManager)
 	Expect(err).NotTo(HaveOccurred())
+	err = (&mariadb_ctrl.GaleraRestoreReconciler{
+		Client:  k8sManager.GetClient(),
+		Scheme:  k8sManager.GetScheme(),
+		Kclient: kclient,
+	}).SetupWithManager(k8sManager)
+	Expect(err).NotTo(HaveOccurred())
 
 	go func() {
 		defer GinkgoRecover()

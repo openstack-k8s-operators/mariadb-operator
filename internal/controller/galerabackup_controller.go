@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -267,7 +268,7 @@ func (r *GaleraBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	inputHashEnv := make(map[string]env.Setter)
 
 	// Generate and hash config maps
-	err = r.generateConfigMaps(ctx, helper, instance, &inputHashEnv)
+	err = r.generateConfigMaps(ctx, helper, instance, galera, &inputHashEnv)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.ServiceConfigReadyCondition,
@@ -415,11 +416,19 @@ func (r *GaleraBackupReconciler) generateConfigMaps(
 	ctx context.Context,
 	h *helper.Helper,
 	instance *mariadbv1.GaleraBackup,
+	galera *mariadbv1.Galera,
 	envVars *map[string]env.Setter,
 ) error {
 	log := GetLog(ctx, "galera")
 	cfgScripts := fmt.Sprintf("%s-backup-scripts", instance.Name)
 	cfgConfig := fmt.Sprintf("%s-backup-config", instance.Name)
+	options := map[string]any{
+		"TLSConfigOptions":    mariadb.NewTLSConfigOptions,
+		"customServiceConfig": galera.Spec.CustomServiceConfig,
+	}
+	if len(galera.Spec.TLSGroups) > 0 {
+		options["TLSGroups"] = strings.Join(galera.Spec.TLSGroups, ":")
+	}
 	cms := []util.Template{
 		// ScriptsConfigMap
 		{
@@ -431,12 +440,13 @@ func (r *GaleraBackupReconciler) generateConfigMaps(
 		},
 		// ConfigMap
 		{
-			Name:          cfgConfig,
-			Namespace:     instance.Namespace,
-			Type:          util.TemplateTypeConfig,
-			InstanceType:  instance.Kind,
-			Labels:        map[string]string{},
-			ConfigOptions: map[string]any{"TLSConfigOptions": mariadb.NewTLSConfigOptions},
+			Name:               cfgConfig,
+			Namespace:          instance.Namespace,
+			Type:               util.TemplateTypeConfig,
+			InstanceType:       instance.Kind,
+			Labels:             map[string]string{},
+			ConfigOptions:      options,
+			AdditionalTemplate: map[string]string{mariadb.TLSProfileConfigFile: "openssl-profile.cnf"},
 		},
 	}
 
@@ -453,6 +463,11 @@ func (r *GaleraBackupReconciler) generateConfigMaps(
 func (r *GaleraBackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&mariadbv1.GaleraBackup{}).
+		Watches(&mariadbv1.Galera{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				return galeraBackupRequests(ctx, r.Client, obj)
+			}),
+			builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(&corev1.ConfigMap{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
 				return tlsProfileRequests(ctx, r.Client, obj, &mariadbv1.GaleraBackupList{})

@@ -327,6 +327,17 @@ spec:
                     description: SecretName - holding the cert, key for the service
                     type: string
                 type: object
+              tlsGroups:
+                description: |-
+                  TLS key-exchange groups in preference order. When omitted, inherit
+                  TLSGroups from the OpenStack TLS profile or the container defaults.
+                  Groups must be supported by the container's OpenSSL and socat must
+                  support the openssl-groups option for encrypted state transfers.
+                items:
+                  type: string
+                minItems: 1
+                type: array
+                x-kubernetes-list-type: atomic
               topologyRef:
                 description: |-
                   TopologyRef to apply the Topology defined by the associated CR referenced

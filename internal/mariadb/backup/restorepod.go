@@ -5,18 +5,14 @@ import (
 	"github.com/openstack-k8s-operators/lib-common/modules/common/pod"
 	"github.com/openstack-k8s-operators/lib-common/modules/users"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
+	"github.com/openstack-k8s-operators/mariadb-operator/internal/mariadb"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // RestorePod returns a Pod object for a galera restore CR
-func RestorePod(restoreCR *mariadbv1.GaleraRestore, backupCR *mariadbv1.GaleraBackup, backupCronJob *batchv1.CronJob) *corev1.Pod {
-	galeraCR := &mariadbv1.Galera{ObjectMeta: metav1.ObjectMeta{
-		Name:      backupCR.Spec.DatabaseInstance,
-		Namespace: backupCR.Namespace,
-	}}
-
+func RestorePod(restoreCR *mariadbv1.GaleraRestore, backupCR *mariadbv1.GaleraBackup, backupCronJob *batchv1.CronJob, galeraCR *mariadbv1.Galera) *corev1.Pod {
 	ls := RestorePodLabels(restoreCR)
 	prefixName := RestorePodName(restoreCR)
 
@@ -24,6 +20,7 @@ func RestorePod(restoreCR *mariadbv1.GaleraRestore, backupCR *mariadbv1.GaleraBa
 		Name:  "DB",
 		Value: backupCR.Spec.DatabaseInstance,
 	}}
+	environ = append(environ, mariadb.TLSProfileEnv(galeraCR)...)
 
 	// The restore pod uses the same container image as the configured backup CR,
 	// so it can run the same mysql CLI version. It uses RestoreVolumes/RestoreVolumeMounts

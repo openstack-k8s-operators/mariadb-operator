@@ -89,6 +89,14 @@ type GaleraSpecCore struct {
 	// customizations occur after all other configuration is applied.
 	CustomServiceConfig string `json:"customServiceConfig,omitempty"`
 	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MinItems=1
+	// +listType=atomic
+	// TLS key-exchange groups in preference order. When omitted, inherit
+	// TLSGroups from the OpenStack TLS profile or the container defaults.
+	// Groups must be supported by the container's OpenSSL and socat must
+	// support the openssl-groups option for encrypted state transfers.
+	TLSGroups []string `json:"tlsGroups,omitempty"`
+	// +kubebuilder:validation:Optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec
 	// TLS settings for MySQL service and internal Galera replication
 	TLS tls.SimpleService `json:"tls,omitempty"`

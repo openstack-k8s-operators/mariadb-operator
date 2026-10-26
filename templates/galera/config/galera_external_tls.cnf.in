@@ -1,10 +1,12 @@
-{{- $tls := call .TLSConfigOptions (or (index . "SSLProtocol") "") (or (index . "SSLCipherSuite") "") -}}
+{{- $tls := call .TLSConfigOptions . -}}
 [mysqld]
 ssl
 ssl-cert = /etc/pki/tls/certs/galera.crt
 ssl-key = /etc/pki/tls/private/galera.key
+{{ if or $tls.CipherSuite (not $tls.Configured) -}}
 ssl-cipher = {{ or $tls.CipherSuite "!SSLv2:kEECDH:kRSA:kEDH:kPSK:+3DES:!aNULL:!eNULL:!MD5:!EXP:!RC4:!SEED:!IDEA:!DES:!SSLv3:!TLSv1" }}
-{{ if $tls.Protocol -}}
+{{ end -}}
+{{ if or $tls.Protocol $tls.MinVersion -}}
 tls-version = {{ $tls.Versions }}
 {{ end -}}
 

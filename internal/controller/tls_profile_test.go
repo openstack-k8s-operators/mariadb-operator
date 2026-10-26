@@ -13,6 +13,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -31,6 +32,54 @@ func tlsProfileTestClient(t *testing.T, objects ...client.Object) client.WithWat
 		t.Fatal(err)
 	}
 	return fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+}
+
+func TestReplicationTLSProfileHash(t *testing.T) {
+	ctx := context.Background()
+	c := tlsProfileTestClient(t)
+	galera := &mariadbv1.Galera{ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: "test"}}
+	for _, enabled := range []bool{false, true} {
+		if enabled {
+			galera.Spec.TLS.SecretName = ptr.To("cert")
+		}
+		if hash, err := replicationTLSProfileHash(ctx, c, galera); hash != "" || err != nil {
+			t.Fatalf("TLS without encrypted replication should not require a cluster restart: %q, %v", hash, err)
+		}
+	}
+	galera.Spec.TLS.CaBundleSecretName = "ca"
+	if _, err := replicationTLSProfileHash(ctx, c, galera); err == nil {
+		t.Fatal("expected missing configuration to be reported")
+	}
+	config := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "db-config-data", Namespace: "test"},
+		Data:       map[string]string{"openssl-profile.cnf": ".include /etc/pki/tls/openssl.cnf\n"},
+	}
+	if err := c.Create(ctx, config); err != nil {
+		t.Fatal(err)
+	}
+	if hash, err := replicationTLSProfileHash(ctx, c, galera); hash != "" || err != nil {
+		t.Fatalf("system defaults should not add a profile restart requirement: %q, %v", hash, err)
+	}
+	var previous string
+	for _, group := range []string{"X25519MLKEM768", "X25519"} {
+		policy := "[crypto_policy]\nGroups = " + group + "\n"
+		config.Data["openssl-profile.cnf"] = policy
+		if err := c.Update(ctx, config); err != nil {
+			t.Fatal(err)
+		}
+		hash, err := replicationTLSProfileHash(ctx, c, galera)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want, err := util.ObjectHash(policy)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if hash != want || hash == previous {
+			t.Fatalf("group-only changes must update the replication restart hash: %q", hash)
+		}
+		previous = hash
+	}
 }
 
 func TestTLSProfileRequests(t *testing.T) {
@@ -142,5 +191,31 @@ func TestTLSProfileRequestsMalformedList(t *testing.T) {
 				t.Fatalf("metadata failure was not logged: %s", logged)
 			}
 		})
+	}
+}
+
+func TestGaleraBackupRequests(t *testing.T) {
+	c := tlsProfileTestClient(t,
+		&mariadbv1.GaleraBackup{ObjectMeta: metav1.ObjectMeta{Name: "matching", Namespace: "test"}, Spec: mariadbv1.GaleraBackupSpec{DatabaseInstance: "db"}},
+		&mariadbv1.GaleraBackup{ObjectMeta: metav1.ObjectMeta{Name: "different-db", Namespace: "test"}, Spec: mariadbv1.GaleraBackupSpec{DatabaseInstance: "other"}},
+		&mariadbv1.GaleraBackup{ObjectMeta: metav1.ObjectMeta{Name: "different-namespace", Namespace: "other"}, Spec: mariadbv1.GaleraBackupSpec{DatabaseInstance: "db"}},
+	)
+	source := &mariadbv1.Galera{ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: "test"}}
+	requests := galeraBackupRequests(context.Background(), c, source)
+	if len(requests) != 1 || requests[0].Name != "matching" || requests[0].Namespace != "test" {
+		t.Fatalf("expected only the referencing backup, got %v", requests)
+	}
+	c = interceptor.NewClient(c, interceptor.Funcs{
+		List: func(context.Context, client.WithWatch, client.ObjectList, ...client.ListOption) error {
+			return errTLSProfileList
+		},
+	})
+	var logged string
+	ctx := log.IntoContext(context.Background(), funcr.New(func(_, message string) { logged = message }, funcr.Options{}))
+	if requests := galeraBackupRequests(ctx, c, source); len(requests) != 0 {
+		t.Fatalf("expected no backups on list error, got %v", requests)
+	}
+	if !strings.Contains(logged, "Unable to list Galera backup consumers") {
+		t.Fatalf("list failure was not logged: %s", logged)
 	}
 }

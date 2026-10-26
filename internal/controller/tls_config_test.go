@@ -40,6 +40,7 @@ func TestTLSProfileConfigMaps(t *testing.T) {
 		{"cipher only", map[string]string{"SSLCipherSuite": "ECDHE-RSA-AES256-GCM-SHA384"}},
 		{"protocol only", map[string]string{"SSLProtocol": "-all +TLSv1.3"}},
 		{"modern", map[string]string{"SSLCipherSuite": "TLS_AES_256_GCM_SHA384", "SSLProtocol": "-all +TLSv1.3"}},
+		{"PQC", map[string]string{"SSLCipherSuite": "TLS_AES_256_GCM_SHA384", "SSLProtocol": "-all +TLSv1.3", "TLSGroups": "X25519MLKEM768:X25519"}},
 		{"mixed", map[string]string{"SSLCipherSuite": "TLS_AES_256_GCM_SHA384:ECDHE-RSA-AES256-GCM-SHA384", "SSLProtocol": "all -SSLv2 -SSLv3 -TLSv1 -TLSv1.1"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -51,7 +52,7 @@ func TestTLSProfileConfigMaps(t *testing.T) {
 				}
 			}
 			galera := &mariadbv1.Galera{TypeMeta: metav1.TypeMeta{Kind: "Galera"}, ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: "test", UID: "db"}}
-			galera.Spec.CustomServiceConfig = "[mysqld]\nssl-cipher = custom\ntls-version = TLSv1.2\n"
+			galera.Spec.CustomServiceConfig = "[mysqld]\nmax_connections = 123\n"
 			backup := &mariadbv1.GaleraBackup{TypeMeta: metav1.TypeMeta{Kind: "GaleraBackup"}, ObjectMeta: metav1.ObjectMeta{Name: "backup", Namespace: "test", UID: "backup"}}
 			for _, owner := range []client.Object{galera, backup} {
 				h, err := helper.NewHelper(owner, c, nil, c.Scheme(), logr.Discard())
@@ -62,7 +63,7 @@ func TestTLSProfileConfigMaps(t *testing.T) {
 				if owner == galera {
 					err = (&GaleraReconciler{}).generateConfigMaps(ctx, h, galera, &hashes)
 				} else {
-					err = (&GaleraBackupReconciler{}).generateConfigMaps(ctx, h, backup, &hashes)
+					err = (&GaleraBackupReconciler{}).generateConfigMaps(ctx, h, backup, galera, &hashes)
 				}
 				if err != nil {
 					t.Fatal(err)
@@ -75,6 +76,18 @@ func TestTLSProfileConfigMaps(t *testing.T) {
 				cm := &corev1.ConfigMap{}
 				if err := c.Get(ctx, client.ObjectKey{Name: name, Namespace: "test"}, cm); err != nil {
 					t.Fatal(err)
+				}
+				if groups := tc.data["TLSGroups"]; groups != "" {
+					if !strings.Contains(cm.Data["openssl-profile.cnf"], "Groups = "+groups+"\n") {
+						t.Error("profile key-exchange groups missing from the OpenSSL configuration")
+					}
+					file := "galera_tls.cnf.in"
+					if name == "backup-backup-config" {
+						file = "mysql_backup_tls.cnf"
+					}
+					if !strings.Contains(cm.Data[file], ",openssl-groups="+groups+"\n") {
+						t.Error("profile key-exchange groups missing from SST options")
+					}
 				}
 				for file, rendered := range cm.Data {
 					if file == mariadbv1.CustomServiceConfigFile {
@@ -113,7 +126,7 @@ func TestTLSProfileConfigMaps(t *testing.T) {
 							if tc.name == "mixed" {
 								minVersion = "TLS1.2"
 							}
-							want = "min-proto-version=" + minVersion + ",max-proto-version=TLS1.3\n"
+							want = "min-proto-version=" + minVersion + ",max-proto-version=TLS1.3"
 							if !strings.Contains(rendered, want) {
 								t.Errorf("%s missing SST protocol bounds %q", file, want)
 							}
