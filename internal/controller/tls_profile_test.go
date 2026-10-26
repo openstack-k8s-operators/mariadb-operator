@@ -37,17 +37,18 @@ func tlsProfileTestClient(t *testing.T, objects ...client.Object) client.WithWat
 func TestReplicationTLSProfileHash(t *testing.T) {
 	ctx := context.Background()
 	c := tlsProfileTestClient(t)
+	reader := struct{ client.Reader }{Reader: c}
 	galera := &mariadbv1.Galera{ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: "test"}}
 	for _, enabled := range []bool{false, true} {
 		if enabled {
 			galera.Spec.TLS.SecretName = ptr.To("cert")
 		}
-		if hash, err := replicationTLSProfileHash(ctx, c, galera); hash != "" || err != nil {
+		if hash, err := replicationTLSProfileHash(ctx, reader, galera); hash != "" || err != nil {
 			t.Fatalf("TLS without encrypted replication should not require a cluster restart: %q, %v", hash, err)
 		}
 	}
 	galera.Spec.TLS.CaBundleSecretName = "ca"
-	if _, err := replicationTLSProfileHash(ctx, c, galera); err == nil {
+	if _, err := replicationTLSProfileHash(ctx, reader, galera); err == nil {
 		t.Fatal("expected missing configuration to be reported")
 	}
 	config := &corev1.ConfigMap{
@@ -57,7 +58,7 @@ func TestReplicationTLSProfileHash(t *testing.T) {
 	if err := c.Create(ctx, config); err != nil {
 		t.Fatal(err)
 	}
-	if hash, err := replicationTLSProfileHash(ctx, c, galera); hash != "" || err != nil {
+	if hash, err := replicationTLSProfileHash(ctx, reader, galera); hash != "" || err != nil {
 		t.Fatalf("system defaults should not add a profile restart requirement: %q, %v", hash, err)
 	}
 	var previous string
@@ -67,7 +68,7 @@ func TestReplicationTLSProfileHash(t *testing.T) {
 		if err := c.Update(ctx, config); err != nil {
 			t.Fatal(err)
 		}
-		hash, err := replicationTLSProfileHash(ctx, c, galera)
+		hash, err := replicationTLSProfileHash(ctx, reader, galera)
 		if err != nil {
 			t.Fatal(err)
 		}

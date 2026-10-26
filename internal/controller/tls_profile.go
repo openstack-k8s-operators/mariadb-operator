@@ -17,12 +17,12 @@ import (
 
 // Replication peers with disjoint TLS policies require a coordinated restart.
 // SQL-only TLS can continue using the StatefulSet's normal rolling updates.
-func replicationTLSProfileHash(ctx context.Context, c client.Client, instance *mariadbv1.Galera) (string, error) {
+func replicationTLSProfileHash(ctx context.Context, reader client.Reader, instance *mariadbv1.Galera) (string, error) {
 	if !instance.Spec.TLS.Enabled() || instance.Spec.TLS.CaBundleSecretName == "" {
 		return "", nil
 	}
 	config := &corev1.ConfigMap{}
-	if err := c.Get(ctx, client.ObjectKey{Name: configMapNameForConfig(instance), Namespace: instance.Namespace}, config); err != nil {
+	if err := reader.Get(ctx, client.ObjectKey{Name: configMapNameForConfig(instance), Namespace: instance.Namespace}, config); err != nil {
 		return "", err
 	}
 	policy := config.Data[mariadb.TLSProfileConfigFile]

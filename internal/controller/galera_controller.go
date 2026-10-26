@@ -111,9 +111,10 @@ type bootstrapPodInfo struct {
 // GaleraReconciler reconciles a Galera object
 type GaleraReconciler struct {
 	client.Client
-	Kclient kubernetes.Interface
-	config  *rest.Config
-	Scheme  *runtime.Scheme
+	Kclient   kubernetes.Interface
+	config    *rest.Config
+	Scheme    *runtime.Scheme
+	apiReader client.Reader
 	// bootstrapping tracks the pod currently bootstrapping each Galera
 	// cluster. Keyed by types.NamespacedName. Entries are set when
 	// gcomm:// is injected and cleared when the cluster bootstraps,
@@ -1002,7 +1003,7 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	// build state of the restart hash. this is used to decide whether the
 	// statefulset must stop all its pods before applying a config update
 	clusterPropertiesEnv["GCommTLS"] = env.SetValue(strconv.FormatBool(instance.Spec.TLS.Enabled() && instance.Spec.TLS.CaBundleSecretName != ""))
-	policyHash, err := replicationTLSProfileHash(ctx, r.Client, instance)
+	policyHash, err := replicationTLSProfileHash(ctx, r.apiReader, instance)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -1488,6 +1489,7 @@ func (r *GaleraReconciler) generateConfigMaps(
 // SetupWithManager sets up the controller with the Manager.
 func (r *GaleraReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.config = mgr.GetConfig()
+	r.apiReader = mgr.GetAPIReader()
 
 	// Various CR fields need to be indexed to filter watch events
 	// for the secret changes we want to be notified of
