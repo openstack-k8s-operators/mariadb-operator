@@ -5,6 +5,7 @@ import (
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	mariadb "github.com/openstack-k8s-operators/mariadb-operator/internal/mariadb"
 	corev1 "k8s.io/api/core/v1"
+	resource "k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/utils/ptr"
 )
 
@@ -19,7 +20,14 @@ func baseVolumes(b *mariadbv1.GaleraBackup, g *mariadbv1.Galera) []corev1.Volume
 	return []corev1.Volume{{
 		Name: "var-local",
 		VolumeSource: corev1.VolumeSource{
-			EmptyDir: &corev1.EmptyDirVolumeSource{},
+			EmptyDir: &corev1.EmptyDirVolumeSource{
+				// The root password cache is written here. Memory medium
+				// keeps it on tmpfs so the plaintext never reaches a disk.
+				// SizeLimit caps how much of the pod's memory a runaway
+				// write to /var/local can consume.
+				Medium:    corev1.StorageMediumMemory,
+				SizeLimit: ptr.To(resource.MustParse("1Mi")),
+			},
 		},
 	}, {
 		Name: "operator-scripts",
