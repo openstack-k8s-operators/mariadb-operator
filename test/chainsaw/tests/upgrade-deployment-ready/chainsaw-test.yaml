@@ -1,0 +1,98 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: upgrade-deployment-ready
+spec:
+  description: |
+    Verify that DeploymentReady is never True while a major version upgrade
+    requested via spec.targetVersion is in progress.
+
+    Galera.IsReady() returns DeploymentReady, and openstack-operator gates its
+    minor update on ObservedGeneration == Generation && IsReady(). The
+    upgrade fully stops the cluster and restarts it through mysql-upgrade; if
+    DeploymentReady is True during that time, consumers proceed against a
+    stopped or not yet verified database (OSPRH-40775).
+
+    A 3-node cluster is used so that the restart phase, where pods become
+    available one by one before the version can be verified on all of them,
+    is long enough to be observed.
+  steps:
+  - name: Deploy a healthy 3-node cluster
+    description: |
+      No spec.targetVersion is set; DeploymentReady must be True as usual.
+    bindings:
+    - name: replicas
+      value: 3
+    try:
+    - apply:
+        file: ../../common/galera.yaml
+    - assert:
+        file: ../../common/galera-assert.yaml
+
+  - name: Watch DeploymentReady through an upgrade request
+    description: |
+      Bump spec.targetVersion to 19.999, a version no image provides. The
+      operator performs the full stop, restarts the pods through
+      mysql-upgrade, probes the running version and settles in
+      UpgradeVersionMismatch. Sample the Galera status throughout, and fail if
+      any sample that a consumer would act on (observedGeneration ==
+      generation) has DeploymentReady=True while MariaDBServerUpgradeReady is
+      UpgradeInProgress.
+    timeouts:
+      exec: 600s
+    try:
+    - script:
+        content: |
+          set -eu
+          JSONPATH='{.metadata.generation}|{.status.observedGeneration}|{.status.conditions[?(@.type=="DeploymentReady")].status}|{.status.conditions[?(@.type=="MariaDBServerUpgradeReady")].reason}'
+          oc patch -n "${NAMESPACE}" galera openstack --type=merge -p='{"spec":{"targetVersion":"19.999"}}'
+          violations=0
+          inprogress=0
+          settled=0
+          for i in $(seq 1 540); do
+            S=$(oc get -n "${NAMESPACE}" galera openstack -o jsonpath="${JSONPATH}")
+            IFS='|' read -r GEN OBS DEPLOY REASON <<EOF
+          ${S}
+          EOF
+            if [ "${GEN}" = "${OBS}" ] && [ "${REASON}" = "UpgradeInProgress" ]; then
+              inprogress=$((inprogress + 1))
+              if [ "${DEPLOY}" = "True" ]; then
+                echo "VIOLATION $(date +%T) generation=${GEN} DeploymentReady=True MariaDBServerUpgradeReady=${REASON}"
+                violations=$((violations + 1))
+              fi
+            fi
+            if [ "${GEN}" = "${OBS}" ] && [ "${REASON}" = "UpgradeVersionMismatch" ]; then
+              settled=1
+              break
+            fi
+            sleep 1
+          done
+          echo "samples in UpgradeInProgress: ${inprogress}"
+          [ "${settled}" -eq 1 ] || { echo "FAIL: Galera never settled in UpgradeVersionMismatch"; exit 1; }
+          [ "${inprogress}" -gt 0 ] || { echo "FAIL: never observed UpgradeInProgress; the test did not exercise the upgrade"; exit 1; }
+          [ "${violations}" -eq 0 ] || { echo "FAIL: ${violations} samples had DeploymentReady=True during UpgradeInProgress"; exit 1; }
+          echo "PASS: DeploymentReady was never True while the upgrade to 19.999 was in progress"
+
+  - name: Assert the mismatch state keeps DeploymentReady True
+    description: |
+      UpgradeVersionMismatch is reported via MariaDBServerUpgradeReady and
+      Ready; the cluster keeps serving, so DeploymentReady is True.
+    try:
+    - assert:
+        file: version-mismatch-assert.yaml
+
+  - name: Clear targetVersion and confirm the cluster is ready again
+    description: |
+      With spec.targetVersion empty no upgrade is requested, so the cluster
+      must return to fully Ready.
+    bindings:
+    - name: replicas
+      value: 3
+    timeouts:
+      assert: 600s
+    try:
+    - script:
+        content: |
+          oc patch -n "${NAMESPACE}" galera openstack --type=merge -p='{"spec":{"targetVersion":null}}'
+    - assert:
+        file: ../../common/galera-assert.yaml
