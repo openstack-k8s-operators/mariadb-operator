@@ -76,6 +76,10 @@ var _ = BeforeSuite(func() {
 	ctx, cancel = context.WithCancel(context.TODO())
 
 	By("bootstrapping test environment")
+	apiServer := &envtest.APIServer{}
+	apiServer.Configure().
+		Set("service-cluster-ip-range", "10.0.0.0/12"). // 65k+ IPs
+		Set("disable-admission-plugins", "ResourceQuota,ServiceAccount,NamespaceLifecycle")
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{
 			filepath.Join("..", "..", "config", "crd", "bases"),
@@ -93,12 +97,7 @@ var _ = BeforeSuite(func() {
 			LocalServingHost: "127.0.0.1",
 		},
 		ControlPlane: envtest.ControlPlane{
-			APIServer: &envtest.APIServer{
-				Args: []string{
-					"--service-cluster-ip-range=10.0.0.0/12", // 65k+ IPs
-					"--disable-admission-plugins=ResourceQuota,ServiceAccount,NamespaceLifecycle",
-				},
-			},
+			APIServer: apiServer,
 		},
 	}
 
