@@ -1375,8 +1375,27 @@ func (r *GaleraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	}
 
 	if instance.Status.Bootstrapped {
-		// Sync Ready condition
-		instance.Status.Conditions.MarkTrue(condition.DeploymentReadyCondition, condition.DeploymentReadyMessage)
+		// Sync Ready condition.  DeploymentReady is what Galera.IsReady()
+		// reports to consumers such as openstack-operator.  While a
+		// Spec.TargetVersion upgrade is in progress the cluster is fully
+		// stopped and then restarted through mysql-upgrade; until the new
+		// version is verified on all replicas, report the upgrade instead of
+		// ready, even if some pods are already serving.
+		//
+		// UpgradeBlocked and UpgradeVersionMismatch are deliberately not
+		// included: in those states the cluster keeps serving as it was, and
+		// the problem is reported via MariaDBServerUpgradeReady and Ready.
+		if upgradeCond := instance.Status.Conditions.Get(mariadbv1.MariaDBServerUpgradeReadyCondition); upgradeCond != nil &&
+			upgradeCond.Status != corev1.ConditionTrue &&
+			upgradeCond.Reason == mariadbv1.MariaDBServerUpgradeInProgressReason {
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.DeploymentReadyCondition,
+				upgradeCond.Reason,
+				upgradeCond.Severity,
+				"%s", upgradeCond.Message))
+		} else {
+			instance.Status.Conditions.MarkTrue(condition.DeploymentReadyCondition, condition.DeploymentReadyMessage)
+		}
 
 		// All pods that are 'Ready' have their local galera running and connected.
 		// We can clear their attributes from our status as these are now outdated.

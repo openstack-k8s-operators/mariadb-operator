@@ -17,6 +17,13 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// galeraTerminationGracePeriodSeconds is how long a stopping pod has to shut
+// down mysqld before it is killed.  A major version upgrade cannot proceed from
+// data files left by an unclean shutdown, as the new version will not apply the
+// old version's redo log.  This is an upper limit; a normal shutdown does not
+// take any longer because of it.
+const galeraTerminationGracePeriodSeconds int64 = 120
+
 // StatefulSet returns a StatefulSet object for the galera cluster
 func StatefulSet(g *mariadbv1.Galera, configHash string, topology *topologyv1.Topology) (*appsv1.StatefulSet, error) {
 	ls := StatefulSetLabels(g)
@@ -53,11 +60,12 @@ func StatefulSet(g *mariadbv1.Galera, configHash string, topology *topologyv1.To
 					Labels: ls,
 				},
 				Spec: corev1.PodSpec{
-					ServiceAccountName: g.RbacResourceName(),
-					SecurityContext:    pod.RestrictivePodSecurityContext(users.MysqlUID, users.MysqlGID),
-					InitContainers:     getGaleraInitContainers(g),
-					Containers:         containers,
-					Volumes:            getGaleraVolumes(g),
+					ServiceAccountName:            g.RbacResourceName(),
+					TerminationGracePeriodSeconds: ptr.To(galeraTerminationGracePeriodSeconds),
+					SecurityContext:               pod.RestrictivePodSecurityContext(users.MysqlUID, users.MysqlGID),
+					InitContainers:                getGaleraInitContainers(g),
+					Containers:                    containers,
+					Volumes:                       getGaleraVolumes(g),
 				},
 			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{

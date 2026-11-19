@@ -94,6 +94,7 @@ spec:
           protocol: TCP
       serviceAccount: galera-openstack
       serviceAccountName: galera-openstack
+      terminationGracePeriodSeconds: 120
 status:
   availableReplicas: ($replicas)
   readyReplicas: ($replicas)
