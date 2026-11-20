@@ -25,6 +25,16 @@ spec:
             test -f /var/local/my.cnf/mysql_pw_cache.cnf
           '
 
+  - name: verify pw cache is on tmpfs
+    description: Verify /var/local is memory-backed so the root password never reaches a disk
+    try:
+    - script:
+        content: |
+          oc exec -n ${NAMESPACE} -c galera openstack-galera-0 -- /bin/sh -c '
+            fstype=$(findmnt -no FSTYPE /var/local)
+            test "$fstype" = "tmpfs"
+          '
+
   - name: verify mysql_pw_cache.cnf format
     description: Verify mysql_pw_cache.cnf has proper MySQL client format
     try:
