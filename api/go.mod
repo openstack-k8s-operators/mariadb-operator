@@ -6,8 +6,8 @@ require (
 	github.com/go-logr/logr v1.4.4
 	github.com/onsi/ginkgo/v2 v2.34.0
 	github.com/onsi/gomega v1.44.0
-	github.com/openstack-k8s-operators/infra-operator/apis v0.6.1-0.20261109081745-7cc41680ceea
-	github.com/openstack-k8s-operators/lib-common/modules/common v0.6.1-0.20261113070841-a8a07362403d
+	github.com/openstack-k8s-operators/infra-operator/apis v0.6.1-0.20261118064743-77184024dab3
+	github.com/openstack-k8s-operators/lib-common/modules/common v0.6.1-0.20261120143354-e8b5bd7909b0
 	k8s.io/api v0.33.13
 	k8s.io/apimachinery v0.33.13
 	k8s.io/utils v0.0.0-20250820121507-0af2bda4dd1d
