@@ -1,0 +1,21 @@
+# Each of the three galera pods must still be one of the pods recorded before
+# the wait, i.e. none of them was replaced. Asserting the pods by name rather
+# than by label makes every one of them count: a label selector is satisfied
+# by any single matching pod.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: openstack-galera-0
+  (contains($pods, uid)): true
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: openstack-galera-1
+  (contains($pods, uid)): true
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: openstack-galera-2
+  (contains($pods, uid)): true

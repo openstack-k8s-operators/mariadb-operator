@@ -1,0 +1,103 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: upgrade-new-cluster-no-restart
+spec:
+  description: |
+    Verify that a new cluster created with spec.targetVersion already set
+    does not restart its pods once it is up (OSPRH-41036).
+
+    A new cluster has no verified version in status, so it starts with the
+    mysql-upgrade init container, which is a no-op on a fresh datadir. The
+    operator used to remove that init container as soon as the version was
+    verified, which changed the pod template and rolled every pod right after
+    the cluster became ready, while services were running their first db-sync
+    migrations. The init container now stays for as long as targetVersion is
+    set, so the StatefulSet must stay at generation 1 and no pod may be
+    replaced.
+  steps:
+  - name: Create a 3-node cluster with targetVersion set from the start
+    description: |
+      targetVersion has to match the image, so ask the image which MariaDB
+      version it runs and request that one.
+
+      status.clusterProperties.TargetVersion holds the version the operator
+      probed from the running pods. It reaching spec.targetVersion is the
+      moment at which the init container used to be removed.
+    bindings:
+    - name: replicas
+      value: 3
+    timeouts:
+      exec: 330s
+      assert: 600s
+    try:
+    - script:
+        content: ../../common/mariadb-version-from-image.sh
+        outputs:
+        - name: version
+          value: ($stdout)
+    - apply:
+        resource:
+          apiVersion: mariadb.openstack.org/v1beta1
+          kind: Galera
+          metadata:
+            name: openstack
+          spec:
+            replicas: 3
+            secret: osp-secret
+            storageClass: local-storage
+            storageRequest: 500M
+            targetVersion: ($version)
+    - assert:
+        file: ../../common/galera-assert.yaml
+    - assert:
+        resource:
+          apiVersion: mariadb.openstack.org/v1beta1
+          kind: Galera
+          metadata:
+            name: openstack
+          status:
+            clusterProperties:
+              TargetVersion: ($version)
+
+  - name: Verify the pods are not restarted after the version is verified
+    description: |
+      Record which pods are running, wait, and then require the cluster to be
+      unchanged: the StatefulSet still at generation 1 with the mysql-upgrade
+      init container in place, and the same three pods still ready. Removing
+      the init container bumped the generation within seconds of the version
+      being verified, so a minute is a generous window.
+    try:
+    - script:
+        content: |
+          oc get pods -n "${NAMESPACE}" -l galera/name=openstack \
+            -o jsonpath='{range .items[*]}{.metadata.uid} {end}'
+        outputs:
+        - name: pods
+          value: ($stdout)
+    - sleep:
+        duration: 60s
+    - assert:
+        resource:
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: openstack-galera
+            # any generation but the first means the pod template was updated
+            # after the cluster came up, which rolls every pod
+            generation: 1
+          spec:
+            template:
+              spec:
+                (initContainers[?name == 'mysql-upgrade'] | length(@)): 1
+          status:
+            readyReplicas: 3
+            (currentRevision == updateRevision): true
+    - assert:
+        file: pods-unchanged-assert.yaml
+    catch:
+    - describe:
+        apiVersion: apps/v1
+        kind: StatefulSet
+        name: openstack-galera
+    - events: {}

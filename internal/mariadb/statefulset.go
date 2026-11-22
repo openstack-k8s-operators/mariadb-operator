@@ -112,7 +112,13 @@ func StatefulSet(g *mariadbv1.Galera, configHash string, topology *topologyv1.To
 func getGaleraInitContainers(g *mariadbv1.Galera) []corev1.Container {
 	var initContainers []corev1.Container
 
-	if g.Spec.TargetVersion != "" && g.Spec.TargetVersion != g.Status.ClusterProperties["TargetVersion"] {
+	// Keep mysql-upgrade for as long as TargetVersion is set, rather than
+	// removing it once the upgrade is verified.  Removing it changes the pod
+	// template, which rolls every pod of the cluster right after it becomes
+	// ready: on a new cluster as well as after an upgrade, and just as services
+	// start their db-sync migrations.  The script is a no-op unless the data
+	// files are from a different major.minor version than the server.
+	if g.Spec.TargetVersion != "" {
 		initContainers = append(initContainers, corev1.Container{
 			Image:           g.Spec.ContainerImage,
 			Name:            "mysql-upgrade",

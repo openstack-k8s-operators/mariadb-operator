@@ -5,23 +5,24 @@
 # upgrade has NOT yet succeeded on every replica.
 set -euo pipefail
 
-# Run mariadb-upgrade if the data files are from a different MariaDB version
-# than the current binary. This init container script runs before
+# Run mariadb-upgrade if the data files are from a different MariaDB major
+# version than the current binary. This init container script runs before
 # mysql_bootstrap.sh so the system tables are upgraded before the cluster forms.
 #
-# The check is intentionally based on mysql_upgrade_info rather than comparing
-# version strings from spec, so the script is idempotent: it exits immediately
-# on a node that has already been upgraded or was freshly initialized.
+# The operator keeps this init container in place for as long as
+# spec.targetVersion is set, so the script runs on every pod start. The check
+# is intentionally based on mysql_upgrade_info rather than comparing version
+# strings from spec, so the script is idempotent: it exits immediately on a
+# node that has already been upgraded or was freshly initialized.
 
-# Extract the leading X.Y.Z numeric version from a MariaDB version string,
+# Extract the leading X.Y (major.minor) version from a MariaDB version string,
 # tolerating any prefix (e.g. "mysqld  Ver 10.5.22-MariaDB for Linux ...")
 # and any suffix (e.g. "-MariaDB", "-log", or distro packaging strings).
-# mysql_upgrade_info stores the raw server version whose exact suffix varies
-# by build, so comparing raw strings could report "versions differ" even when
-# they are the same X.Y.Z and re-run the upgrade on every pod start. Comparing
-# the normalized numeric version avoids that.
+# Only major.minor is compared, so mariadb-upgrade runs on a major version
+# upgrade (e.g. 10.5 -> 10.11) and not on a patch-level image update
+# (e.g. 10.11.18 -> 10.11.20), matching spec.targetVersion's granularity.
 version_num() {
-    printf '%s\n' "$1" | grep -oP '\d+\.\d+\.\d+' | head -1 || true
+    printf '%s\n' "$1" | grep -oP '\d+\.\d+' | head -1 || true
 }
 
 DATA_VERSION=$(version_num "$(cat /var/lib/mysql/mysql_upgrade_info 2>/dev/null || true)")
