@@ -43,6 +43,43 @@ if [[ "$DATA_VERSION" = "$BINARY_VERSION" ]]; then
     exit 0
 fi
 
+# The data files need upgrading. Only do that if the upgrade was requested,
+# i.e. spec.targetVersion on the Galera CR is the version this image runs.
+#
+# A major version upgrade has to be requested by changing spec.targetVersion
+# together with the image. Changing targetVersion makes the operator stop the
+# whole cluster first, so that every node is upgraded while none is running,
+# and the cluster never runs two MariaDB versions at once.
+#
+# If only the image changed, the StatefulSet does an ordinary rolling update
+# instead: pods restart one at a time, and the others keep running the old
+# version. Upgrading this node now would make it join a cluster of
+# old-version nodes. So refuse to start instead. This pod stays down, the
+# rolling update stops here, and the remaining nodes keep serving on the old
+# image. Setting spec.targetVersion to match the image starts a proper upgrade.
+#
+# targetVersion is read from the API rather than passed in the pod spec, as a
+# change to the pod spec would restart the pods by itself.
+APISERVER=https://kubernetes.default.svc
+SERVICEACCOUNT=/var/run/secrets/kubernetes.io/serviceaccount
+GALERA_CR=$(curl -s \
+    --cacert "${SERVICEACCOUNT}/ca.crt" \
+    --header "Authorization: Bearer $(cat ${SERVICEACCOUNT}/token)" \
+    "${APISERVER}/apis/mariadb.openstack.org/v1beta1/namespaces/$(cat ${SERVICEACCOUNT}/namespace)/galeras/{{.galeraInstanceName}}" || true)
+# note jq is not installed in the galera image, using python instead
+REQUESTED_VERSION=$(version_num "$(printf '%s' "${GALERA_CR}" | python3 -c "import json, sys; print(json.load(sys.stdin)['spec'].get('targetVersion', ''))" 2>/dev/null || true)")
+
+if [[ -z "$REQUESTED_VERSION" ]]; then
+    echo "Data files are at MariaDB $DATA_VERSION and this image runs $BINARY_VERSION, but spec.targetVersion could not be read from the Galera CR; not upgrading. Will retry." >&2
+    exit 1
+fi
+
+if [[ "$REQUESTED_VERSION" != "$BINARY_VERSION" ]]; then
+    echo "Refusing to upgrade data files from MariaDB $DATA_VERSION to $BINARY_VERSION: spec.targetVersion is $REQUESTED_VERSION." >&2
+    echo "This image runs MariaDB $BINARY_VERSION, which was not requested. To upgrade, set spec.targetVersion to $BINARY_VERSION; the operator then stops the whole cluster and upgrades every node together. Otherwise, go back to an image that runs MariaDB $DATA_VERSION." >&2
+    exit 1
+fi
+
 echo "Upgrading data files: $DATA_VERSION -> $BINARY_VERSION"
 
 UPGRADE_PIDFILE=/var/tmp/upgrade.pid
