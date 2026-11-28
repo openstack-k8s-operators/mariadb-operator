@@ -1,0 +1,146 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: upgrade-refuse-unrequested
+spec:
+  description: |
+    Verify that mysql-upgrade refuses to upgrade data files to a MariaDB
+    version that spec.targetVersion did not request, and that it upgrades
+    them once targetVersion matches the image (OSPRH-41036).
+
+    A major version upgrade must be requested by changing targetVersion
+    together with the image, so that the operator stops the whole cluster
+    before any node is upgraded. If only the image changes, pods restart one
+    at a time, and an upgraded node would join a cluster still running the
+    old version. mysql-upgrade prevents that by refusing to start the node.
+
+    CI has only one MariaDB image, so the test reproduces what such a node
+    sees: data files from an older version (by rewriting
+    mysql_upgrade_info), an image running a newer one, and a targetVersion
+    that asks for the older one.
+  steps:
+  - name: Start from an empty datadir
+    description: |
+      The test leaves data files behind that claim to be from MariaDB 10.5,
+      and a StatefulSet does not delete the volumes it claimed, so those
+      files outlive the Galera CR. The test therefore runs on a Galera CR of
+      its own, which no other test deploys on, and empties that PVC's datadir
+      first so that every run starts the same way.
+    timeouts:
+      exec: 330s
+    try:
+    - script:
+        content: ../../common/galera-wipe-datadir.sh mysql-db-upgrade-refuse-galera-0
+
+  - name: Deploy a healthy 1-node cluster
+    description: |
+      No targetVersion is set yet, so the data files are initialized at the
+      version the image runs and the pod has no mysql-upgrade init container.
+    timeouts:
+      assert: 600s
+    try:
+    - apply:
+        file: galera.yaml
+    - assert:
+        file: galera-assert.yaml
+
+  - name: Make the data files look older and request the older version
+    description: |
+      Rewrite mysql_upgrade_info to claim the data files are at MariaDB 10.5,
+      then request 10.5. The operator stops the cluster and restarts the pod,
+      and mysql-upgrade sees 10.5 data files, a newer image, and a
+      targetVersion that does not ask for the newer version.
+    try:
+    - script:
+        content: |
+          oc exec -n "${NAMESPACE}" -c galera upgrade-refuse-galera-0 -- \
+            /bin/sh -c 'echo "10.5.99-MariaDB" > /var/lib/mysql/mysql_upgrade_info'
+    - patch:
+        resource:
+          apiVersion: mariadb.openstack.org/v1beta1
+          kind: Galera
+          metadata:
+            name: upgrade-refuse
+          spec:
+            targetVersion: "10.5"
+
+  - name: Verify mysql-upgrade refuses to upgrade
+    description: |
+      The init container exits non-zero, so the pod never starts and a
+      rolling update would stop at this node. Waiting for the kubelet to back
+      off between restarts also means the logs below are the ones of the
+      attempt that just failed.
+    timeouts:
+      assert: 600s
+    try:
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: upgrade-refuse-galera-0
+          status:
+            (initContainerStatuses[?name == 'mysql-upgrade'] | [0]):
+              state:
+                waiting:
+                  reason: CrashLoopBackOff
+              lastState:
+                terminated:
+                  exitCode: 1
+    - script:
+        content: |
+          oc logs -n "${NAMESPACE}" upgrade-refuse-galera-0 -c mysql-upgrade |
+            grep 'Refusing to upgrade data files from MariaDB 10.5'
+    catch:
+    - podLogs:
+        name: upgrade-refuse-galera-0
+        container: mysql-upgrade
+        tail: 100
+
+  - name: Request the image's version and verify the node upgrades
+    description: |
+      Setting targetVersion to the version the image runs makes this a
+      requested upgrade: mysql-upgrade runs mariadb-upgrade on the data files
+      and the cluster becomes ready again.
+
+      status still holds the version the operator probed before the test
+      asked for 10.5: the refused pod never started, so it was never probed
+      again.
+    timeouts:
+      assert: 600s
+    try:
+    - script:
+        content: |
+          set -eu
+          VERSION=$(oc get -n "${NAMESPACE}" galera upgrade-refuse \
+            -o jsonpath='{.status.clusterProperties.TargetVersion}')
+          test -n "${VERSION}"
+          printf '%s' "${VERSION}"
+        outputs:
+        - name: version
+          value: ($stdout)
+    - patch:
+        resource:
+          apiVersion: mariadb.openstack.org/v1beta1
+          kind: Galera
+          metadata:
+            name: upgrade-refuse
+          spec:
+            targetVersion: ($version)
+    - assert:
+        file: galera-assert.yaml
+    - script:
+        env:
+        - name: VERSION
+          value: ($version)
+        content: |
+          set -eu
+          oc logs -n "${NAMESPACE}" upgrade-refuse-galera-0 -c mysql-upgrade |
+            grep "Upgrading data files: 10.5 -> ${VERSION}"
+          oc exec -n "${NAMESPACE}" -c galera upgrade-refuse-galera-0 -- \
+            cat /var/lib/mysql/mysql_upgrade_info | grep "^${VERSION}\."
+    catch:
+    - podLogs:
+        name: upgrade-refuse-galera-0
+        container: mysql-upgrade
+        tail: 100

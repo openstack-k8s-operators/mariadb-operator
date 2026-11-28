@@ -1,0 +1,11 @@
+# A Galera CR of this test's own, so that the data files it deliberately
+# breaks live on a PVC no other test deploys on.
+apiVersion: mariadb.openstack.org/v1beta1
+kind: Galera
+metadata:
+  name: upgrade-refuse
+spec:
+  replicas: 1
+  secret: osp-secret
+  storageClass: local-storage
+  storageRequest: 500M

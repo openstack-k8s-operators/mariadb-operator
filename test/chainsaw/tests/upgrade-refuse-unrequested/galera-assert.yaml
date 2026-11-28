@@ -1,0 +1,22 @@
+# The cluster is up and the operator sees no version upgrade pending. The
+# other galera tests assert the full set of conditions; this one only needs
+# the cluster to be serving.
+apiVersion: mariadb.openstack.org/v1beta1
+kind: Galera
+metadata:
+  name: upgrade-refuse
+status:
+  bootstrapped: true
+  (conditions[?type == 'Ready']):
+  - status: "True"
+    reason: Ready
+  (conditions[?type == 'MariaDBServerUpgradeReady']):
+  - status: "True"
+    reason: Ready
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: upgrade-refuse-galera
+status:
+  readyReplicas: 1
